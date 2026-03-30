@@ -341,7 +341,256 @@ describe("covenant", () => {
     }
   });
 
-  it("cancels a job", async () => {
-    // TODO: Implement test
+  // ─── cancel_job tests ───
+
+  it("poster cancels an open job — receives full refund", async () => {
+    const sh = new Uint8Array(32);
+    sh[0] = 0xca; sh[1] = 0x01;
+
+    const [jobPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("job"), poster.publicKey.toBuffer(), Buffer.from(sh)],
+      program.programId,
+    );
+    const escrowTa = Keypair.generate();
+    const now = Math.floor(Date.now() / 1000);
+
+    const posterBefore = await getAccount(provider.connection, posterTokenAccount);
+    const balBefore = Number(posterBefore.amount);
+
+    await program.methods
+      .createJob(depositAmount, Array.from(sh), new anchor.BN(now + 3600))
+      .accounts({
+        poster: poster.publicKey,
+        jobEscrow: jobPda,
+        escrowTokenAccount: escrowTa.publicKey,
+        posterTokenAccount,
+        tokenMint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([escrowTa])
+      .rpc();
+
+    // taker_reputation PDA (for default taker = Pubkey::default)
+    const defaultTaker = new PublicKey(new Uint8Array(32));
+    const [repPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("reputation"), defaultTaker.toBuffer()],
+      program.programId,
+    );
+
+    await program.methods
+      .cancelJob()
+      .accounts({
+        signer: poster.publicKey,
+        jobEscrow: jobPda,
+        poster: poster.publicKey,
+        escrowTokenAccount: escrowTa.publicKey,
+        posterTokenAccount,
+        takerReputation: repPda,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    const posterAfter = await getAccount(provider.connection, posterTokenAccount);
+    const balAfter = Number(posterAfter.amount);
+    assert.equal(balAfter, balBefore, "Poster must be fully refunded");
+
+    // Job PDA should be closed
+    const info = await provider.connection.getAccountInfo(jobPda);
+    assert.isNull(info, "Job PDA should no longer exist");
+  });
+
+  it("non-poster cannot cancel an open job", async () => {
+    const sh = new Uint8Array(32);
+    sh[0] = 0xca; sh[1] = 0x02;
+
+    const [jobPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("job"), poster.publicKey.toBuffer(), Buffer.from(sh)],
+      program.programId,
+    );
+    const escrowTa = Keypair.generate();
+    const now = Math.floor(Date.now() / 1000);
+
+    await program.methods
+      .createJob(depositAmount, Array.from(sh), new anchor.BN(now + 3600))
+      .accounts({
+        poster: poster.publicKey,
+        jobEscrow: jobPda,
+        escrowTokenAccount: escrowTa.publicKey,
+        posterTokenAccount,
+        tokenMint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([escrowTa])
+      .rpc();
+
+    const rando = Keypair.generate();
+    const sig = await provider.connection.requestAirdrop(
+      rando.publicKey,
+      2 * anchor.web3.LAMPORTS_PER_SOL,
+    );
+    await provider.connection.confirmTransaction(sig);
+
+    const defaultTaker = new PublicKey(new Uint8Array(32));
+    const [repPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("reputation"), defaultTaker.toBuffer()],
+      program.programId,
+    );
+
+    try {
+      await program.methods
+        .cancelJob()
+        .accounts({
+          signer: rando.publicKey,
+          jobEscrow: jobPda,
+          poster: poster.publicKey,
+          escrowTokenAccount: escrowTa.publicKey,
+          posterTokenAccount,
+          takerReputation: repPda,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([rando])
+        .rpc();
+      assert.fail("Should have thrown Unauthorized");
+    } catch (err: any) {
+      assert.include(err.toString(), "Unauthorized");
+    }
+  });
+
+  it("taker cannot cancel an accepted job before deadline", async () => {
+    const sh = new Uint8Array(32);
+    sh[0] = 0xca; sh[1] = 0x03;
+
+    const [jobPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("job"), poster.publicKey.toBuffer(), Buffer.from(sh)],
+      program.programId,
+    );
+    const escrowTa = Keypair.generate();
+    const now = Math.floor(Date.now() / 1000);
+
+    await program.methods
+      .createJob(depositAmount, Array.from(sh), new anchor.BN(now + 60))
+      .accounts({
+        poster: poster.publicKey,
+        jobEscrow: jobPda,
+        escrowTokenAccount: escrowTa.publicKey,
+        posterTokenAccount,
+        tokenMint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([escrowTa])
+      .rpc();
+
+    await program.methods
+      .acceptJob(Array.from(sh))
+      .accounts({
+        taker: taker.publicKey,
+        jobEscrow: jobPda,
+        poster: poster.publicKey,
+      })
+      .signers([taker])
+      .rpc();
+
+    const [repPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("reputation"), taker.publicKey.toBuffer()],
+      program.programId,
+    );
+
+    try {
+      await program.methods
+        .cancelJob()
+        .accounts({
+          signer: poster.publicKey,
+          jobEscrow: jobPda,
+          poster: poster.publicKey,
+          escrowTokenAccount: escrowTa.publicKey,
+          posterTokenAccount,
+          takerReputation: repPda,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      assert.fail("Should have thrown DeadlineNotExpired");
+    } catch (err: any) {
+      assert.include(err.toString(), "DeadlineNotExpired");
+    }
+  });
+
+  it("cancel after deadline increments taker jobs_failed", async () => {
+    const sh = new Uint8Array(32);
+    sh[0] = 0xca; sh[1] = 0x04;
+
+    const [jobPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("job"), poster.publicKey.toBuffer(), Buffer.from(sh)],
+      program.programId,
+    );
+    const escrowTa = Keypair.generate();
+    const now = Math.floor(Date.now() / 1000);
+
+    const posterBefore = await getAccount(provider.connection, posterTokenAccount);
+    const balBefore = Number(posterBefore.amount);
+
+    // Deadline = 1 second from now
+    await program.methods
+      .createJob(depositAmount, Array.from(sh), new anchor.BN(now + 1))
+      .accounts({
+        poster: poster.publicKey,
+        jobEscrow: jobPda,
+        escrowTokenAccount: escrowTa.publicKey,
+        posterTokenAccount,
+        tokenMint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([escrowTa])
+      .rpc();
+
+    await program.methods
+      .acceptJob(Array.from(sh))
+      .accounts({
+        taker: taker.publicKey,
+        jobEscrow: jobPda,
+        poster: poster.publicKey,
+      })
+      .signers([taker])
+      .rpc();
+
+    // Wait for deadline to pass
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    const [repPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("reputation"), taker.publicKey.toBuffer()],
+      program.programId,
+    );
+
+    await program.methods
+      .cancelJob()
+      .accounts({
+        signer: poster.publicKey,
+        jobEscrow: jobPda,
+        poster: poster.publicKey,
+        escrowTokenAccount: escrowTa.publicKey,
+        posterTokenAccount,
+        takerReputation: repPda,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Poster refunded
+    const posterAfter = await getAccount(provider.connection, posterTokenAccount);
+    assert.equal(Number(posterAfter.amount), balBefore, "Poster must be refunded");
+
+    // Taker reputation: jobs_failed == 1
+    const rep = await program.account.agentReputation.fetch(repPda);
+    assert.equal(rep.jobsFailed, 1, "taker jobs_failed must be 1");
   });
 });

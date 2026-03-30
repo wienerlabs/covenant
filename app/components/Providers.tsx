@@ -1,28 +1,40 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import {
-  ConnectionProvider,
-  WalletProvider,
-} from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
+import { AppProvider } from "@solana/connector/react";
+import { getDefaultConfig } from "@solana/connector/headless";
 import { DEVNET_ENDPOINT } from "@/lib/constants";
-
-import "@solana/wallet-adapter-react-ui/styles.css";
+import ProfileGate from "./ProfileGate";
 
 interface ProvidersProps {
   children: ReactNode;
 }
 
 export default function Providers({ children }: ProvidersProps) {
-  const endpoint = DEVNET_ENDPOINT;
-  const wallets = useMemo(() => [], []);
+  const connectorConfig = useMemo(
+    () =>
+      getDefaultConfig({
+        appName: "COVENANT",
+        appUrl: typeof window !== "undefined" ? window.location.origin : "https://covenant.dev",
+        autoConnect: false,
+        enableMobile: true,
+        clusters: [
+          {
+            id: "solana:devnet" as const,
+            label: "Devnet",
+            url: DEVNET_ENDPOINT,
+          },
+        ],
+        wallets: {
+          featured: ["Phantom", "Solflare"],
+        },
+      }),
+    []
+  );
 
   return (
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>{children}</WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+    <AppProvider connectorConfig={connectorConfig}>
+      <ProfileGate>{children}</ProfileGate>
+    </AppProvider>
   );
 }

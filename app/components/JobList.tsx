@@ -3,24 +3,86 @@
 import { useState, useCallback } from "react";
 import JobCard from "./JobCard";
 import AsciiAnimation from "./AsciiAnimation";
+import SubmitWorkModal from "./SubmitWorkModal";
 import useJobList from "@/hooks/useJobList";
+import type { JobData } from "@/hooks/useJobList";
 
 interface JobListProps {
-  filter: "all" | "mine";
+  filter: "all" | "mine" | "open";
   walletPubkey?: string;
+  variant?: "light" | "dark";
 }
 
-export default function JobList({ filter, walletPubkey }: JobListProps) {
-  const { jobs, loading, refresh } = useJobList({ filter, walletPubkey });
+export default function JobList({ filter, walletPubkey, variant = "light" }: JobListProps) {
+  const isDark = variant === "dark";
+  const { jobs, loading, refetch } = useJobList({ filter, walletPubkey });
   const [refreshHover, setRefreshHover] = useState(false);
+  const [activeSubmitJob, setActiveSubmitJob] = useState<JobData | null>(null);
 
-  const handleAccept = useCallback((jobPda: string) => {
-    console.log("Accept job:", jobPda);
-  }, []);
+  const handleAccept = useCallback(
+    async (jobId: string) => {
+      if (!walletPubkey) {
+        alert("Connect your wallet to accept a job.");
+        return;
+      }
+      try {
+        const response = await fetch(`/api/jobs/${jobId}/accept`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ takerWallet: walletPubkey }),
+        });
+        if (!response.ok) {
+          const data = await response.json();
+          alert(data.error || "Failed to accept job");
+          return;
+        }
+        refetch();
+      } catch {
+        alert("Failed to accept job");
+      }
+    },
+    [walletPubkey, refetch]
+  );
 
-  const handleOpenWork = useCallback((jobPda: string) => {
-    console.log("Open work:", jobPda);
-  }, []);
+  const handleCancel = useCallback(
+    async (jobId: string) => {
+      if (!walletPubkey) {
+        alert("Connect your wallet to cancel a job.");
+        return;
+      }
+      try {
+        const response = await fetch(`/api/jobs/${jobId}/cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signerWallet: walletPubkey }),
+        });
+        if (!response.ok) {
+          const data = await response.json();
+          alert(data.error || "Failed to cancel job");
+          return;
+        }
+        refetch();
+      } catch {
+        alert("Failed to cancel job");
+      }
+    },
+    [walletPubkey, refetch]
+  );
+
+  const handleOpenWork = useCallback(
+    (jobId: string) => {
+      const job = jobs.find((j) => j.id === jobId);
+      if (job) {
+        setActiveSubmitJob(job);
+      }
+    },
+    [jobs]
+  );
+
+  const handleSubmitSuccess = useCallback(() => {
+    setActiveSubmitJob(null);
+    refetch();
+  }, [refetch]);
 
   return (
     <div>
@@ -42,16 +104,16 @@ export default function JobList({ filter, walletPubkey }: JobListProps) {
               margin: 0,
             }}
           >
-            Open Positions
+            <span style={{ color: isDark ? "#ffffff" : "#000000" }}>Open Positions</span>
           </h2>
           {!loading && (
-            <span style={{ fontSize: "11px", color: "#555555" }}>
+            <span style={{ fontSize: "11px", color: isDark ? "rgba(255,255,255,0.4)" : "#555555" }}>
               ({jobs.length})
             </span>
           )}
         </div>
         <button
-          onClick={refresh}
+          onClick={refetch}
           onMouseEnter={() => setRefreshHover(true)}
           onMouseLeave={() => setRefreshHover(false)}
           style={{
@@ -61,9 +123,14 @@ export default function JobList({ filter, walletPubkey }: JobListProps) {
             letterSpacing: "0.05em",
             padding: "4px 12px",
             cursor: "pointer",
-            border: "1px solid #000000",
-            backgroundColor: refreshHover ? "#000000" : "#ffffff",
-            color: refreshHover ? "#ffffff" : "#000000",
+            borderRadius: "6px",
+            border: isDark ? "1px solid rgba(255,255,255,0.25)" : "1px solid #000000",
+            backgroundColor: isDark
+              ? (refreshHover ? "rgba(255,255,255,0.15)" : "transparent")
+              : (refreshHover ? "#000000" : "#ffffff"),
+            color: isDark
+              ? "#ffffff"
+              : (refreshHover ? "#ffffff" : "#000000"),
             transition: "all 0.15s ease",
           }}
         >
@@ -77,7 +144,9 @@ export default function JobList({ filter, walletPubkey }: JobListProps) {
             <div
               key={i}
               style={{
-                border: "1px solid #000000",
+                border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #000000",
+                borderRadius: "10px",
+                backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "transparent",
                 padding: "20px",
                 height: "140px",
                 position: "relative",
@@ -157,17 +226,28 @@ export default function JobList({ filter, walletPubkey }: JobListProps) {
 
       {!loading && jobs.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {jobs.map((entry) => (
+          {jobs.map((job) => (
             <JobCard
-              key={entry.jobPda}
-              job={entry.job}
-              jobPda={entry.jobPda}
+              key={job.id}
+              job={job}
               onAccept={handleAccept}
               onOpenWork={handleOpenWork}
+              onCancel={handleCancel}
               connectedWallet={walletPubkey}
+              variant={variant}
             />
           ))}
         </div>
+      )}
+
+      {activeSubmitJob && (
+        <SubmitWorkModal
+          jobId={activeSubmitJob.id}
+          minWords={activeSubmitJob.minWords}
+          takerWallet={walletPubkey || ""}
+          onClose={() => setActiveSubmitJob(null)}
+          onSuccess={handleSubmitSuccess}
+        />
       )}
     </div>
   );

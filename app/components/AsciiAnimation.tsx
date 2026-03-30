@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-type Scene = "escrow" | "proof" | "handshake" | "idle";
+type Scene = "escrow" | "proof" | "handshake" | "idle" | "mint";
 
 interface AsciiAnimationProps {
   scene: Scene;
   width?: string;
   height?: string;
+  variant?: "light" | "dark";
 }
 
 const idleFrames: string[] = [
@@ -54,17 +55,30 @@ const handshakeFrames: string[] = [
   `           ┌─┐ ◊ ┌─┐\n           │◉│◊◊◊│◉│\n           ├─╞═══╡─┤\n          ╱│ │ ✓ │ │╲\n           │ │   │ │\n        ═══════════════\n           COVENANT ✓`,
 ];
 
+const mintFrames: string[] = [
+  `   ·  .  · . ·  .  ·\n     .   ·    . ·\n   ·    .  · .    ·\n      · .    . ·\n   .    ·  . ·    .\n     ·   .    · .\n   ·  .  · . ·  .  ·`,
+  `   .  · .  ◇  . ·  .\n     ·   . ◇  . ·\n   .   ◇  .  ·  ◇  .\n      · .  ◇ . ·\n   ·  ◇  .  · .  ◇\n     .   ·  ◇ . ·\n   ·  . ◇  . ·  .  ·`,
+  `         ╱ ╲\n   .   ╱     ╲   .\n     ╱    ·    ╲\n   ◇╱     ·     ╲◇\n     ╲    ·    ╱\n   .   ╲     ╱   .\n         ╲ ╱`,
+  `         ╱ ╲\n   ✧   ╱     ╲   ✧\n     ╱  ╱   ╲  ╲\n   ◇   ╱  ·  ╲   ◇\n     ╲  ╲   ╱  ╱\n   ✧   ╲     ╱   ✧\n         ╲ ╱`,
+  `       ✧ ╱ ╲ ✧\n     ╱     ╲\n   ╱  ╱ ◆ ◆ ╲  ╲\n  ◇  ╱ ◆ ◆ ◆ ╲  ◇\n   ╲  ╲ ◆ ◆ ╱  ╱\n     ╲     ╱\n       ✧ ╲ ╱ ✧`,
+  `     ✦ ✧ ╱ ╲ ✧ ✦\n     ╱  ◆ ◆ ◆  ╲\n   ╱ ◆ ◆ ◆ ◆ ◆ ╲\n  ★  ◆ ◆ ◆ ◆ ◆  ★\n   ╲ ◆ ◆ ◆ ◆ ◆ ╱\n     ╲  ◆ ◆ ◆  ╱\n     ✦ ✧ ╲ ╱ ✧ ✦`,
+  `   ─ ✦ ✧ ╱ ╲ ✧ ✦ ─\n     ╱  ◆ ◆ ◆  ╲\n  ─╱ ◆ ◆ ◆ ◆ ◆ ╲─\n  ★  ◆ ◆ ✦ ◆ ◆  ★\n  ─╲ ◆ ◆ ◆ ◆ ◆ ╱─\n     ╲  ◆ ◆ ◆  ╱\n   ─ ✦ ✧ ╲ ╱ ✧ ✦ ─`,
+  `  ── ✦ ✧ ╱ ╲ ✧ ✦ ──\n     ╱  ◆ ◆ ◆  ╲\n ──╱ ◆ ◆ ◆ ◆ ◆ ╲──\n  ★  ◆  MINT  ◆  ★\n ──╲ ◆ ◆ ◆ ◆ ◆ ╱──\n     ╲  ◆ ◆ ◆  ╱\n  ── ✦ ✧ ╲ ╱ ✧ ✦ ──`,
+];
+
 const scenes: Record<Scene, string[]> = {
   idle: idleFrames,
   escrow: escrowFrames,
   proof: proofFrames,
   handshake: handshakeFrames,
+  mint: mintFrames,
 };
 
 export default function AsciiAnimation({
   scene,
   width = "280px",
   height = "130px",
+  variant = "light",
 }: AsciiAnimationProps) {
   const [frameIndex, setFrameIndex] = useState(0);
   const frames = scenes[scene];
@@ -85,9 +99,14 @@ export default function AsciiAnimation({
       style={{
         width,
         height,
-        border: "1px solid #000000",
+        border: variant === "dark"
+          ? "1px solid rgba(255,255,255,0.2)"
+          : "1px solid #000000",
         borderRadius: "8px",
-        backgroundColor: "#fafafa",
+        backgroundColor: variant === "dark"
+          ? "rgba(0,0,0,0.35)"
+          : "#fafafa",
+        backdropFilter: variant === "dark" ? "blur(12px)" : "none",
         padding: "12px",
         fontFamily: "inherit",
         fontSize: "10px",
@@ -97,7 +116,9 @@ export default function AsciiAnimation({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        color: "#333",
+        color: variant === "dark"
+          ? "rgba(255,255,255,0.75)"
+          : "#333",
       }}
     >
       {frames[frameIndex]}

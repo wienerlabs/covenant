@@ -1,38 +1,55 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 interface ReputationData {
-  completed: number;
-  failed: number;
+  jobsCompleted: number;
+  jobsFailed: number;
   totalEarned: number;
+  firstJobAt: string | null;
 }
 
-export default function useReputation(walletPubkey?: string) {
+export default function useReputation(wallet?: string | null) {
   const [reputation, setReputation] = useState<ReputationData>({
-    completed: 0,
-    failed: 0,
+    jobsCompleted: 0,
+    jobsFailed: 0,
     totalEarned: 0,
+    firstJobAt: null,
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setLoading(true);
-    setTimeout(() => {
-      if (walletPubkey) {
+  const fetchReputation = useCallback(async () => {
+    if (!wallet) {
+      setReputation({
+        jobsCompleted: 0,
+        jobsFailed: 0,
+        totalEarned: 0,
+        firstJobAt: null,
+      });
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/reputation/${wallet}`);
+      if (response.ok) {
+        const data = await response.json();
         setReputation({
-          completed: 12,
-          failed: 1,
-          totalEarned: 4850.0,
-        });
-      } else {
-        setReputation({
-          completed: 0,
-          failed: 0,
-          totalEarned: 0,
+          jobsCompleted: data.jobsCompleted ?? 0,
+          jobsFailed: data.jobsFailed ?? 0,
+          totalEarned: data.totalEarned ?? 0,
+          firstJobAt: data.firstJobAt ?? null,
         });
       }
+    } catch (err) {
+      console.error("Failed to fetch reputation:", err);
+    } finally {
       setLoading(false);
-    }, 600);
-  }, [walletPubkey]);
+    }
+  }, [wallet]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchReputation();
+  }, [fetchReputation]);
 
   return { reputation, loading };
 }

@@ -10,3 +10,4 @@ app/.next
 sdk/dist
 circuits/word_count/target
 circuits/word_count/script/target
+sdk/bin

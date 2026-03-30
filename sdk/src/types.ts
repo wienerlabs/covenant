@@ -25,3 +25,8 @@ export interface AgentReputationAccount {
   totalEarned: BN;
   firstJobAt: BN;
 }
+
+export interface ProofResult {
+  proof: Uint8Array;
+  publicValues: Uint8Array;
+}

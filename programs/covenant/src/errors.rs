@@ -14,4 +14,6 @@ pub enum CovError {
     InvalidProof,
     #[msg("Signer is not authorized for this operation")]
     Unauthorized,
+    #[msg("Payment amount must be greater than zero")]
+    InvalidAmount,
 }

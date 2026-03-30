@@ -43,7 +43,7 @@ pub struct CreateJob<'info> {
 pub fn handler(ctx: Context<CreateJob>, amount: u64, spec_hash: [u8; 32], deadline: i64) -> Result<()> {
     let clock = Clock::get()?;
     require!(deadline > clock.unix_timestamp, CovError::DeadlineExpired);
-    require!(amount > 0, CovError::InvalidStatus);
+    require!(amount > 0, CovError::InvalidAmount);
 
     // Transfer USDC from poster to escrow token account
     let transfer_ctx = CpiContext::new(

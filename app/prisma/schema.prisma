@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Job {
+  id            String   @id @default(cuid())
+  pda           String?  @unique
+  posterWallet  String
+  takerWallet   String?
+  amount        Float
+  paymentToken  String   @default("USDC") // "USDC" or "SOL"
+  specHash      String
+  specJson      Json
+  status        String   @default("Open") // Open, Accepted, Completed, Cancelled
+  minWords      Int
+  category      String   @default("text_writing")
+  language      String   @default("en")
+  deadline      DateTime
+  txHash        String?  // Solana transaction signature for creation
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  submissions   Submission[]
+}
+
+model Reputation {
+  id            String   @id @default(cuid())
+  walletAddress String   @unique
+  jobsCompleted Int      @default(0)
+  jobsFailed    Int      @default(0)
+  totalEarned   Float    @default(0)
+  firstJobAt    DateTime?
+  updatedAt     DateTime @updatedAt
+}
+
+model Profile {
+  id            String   @id @default(cuid())
+  walletAddress String   @unique
+  displayName   String
+  bio           String   @default("")
+  role          String   @default("both") // "poster", "taker", "both"
+  avatarSeed    String   // random seed for pixel avatar generation
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Submission {
+  id            String   @id @default(cuid())
+  jobId         String
+  takerWallet   String
+  textHash      String
+  wordCount     Int
+  proofHex      String?
+  verified      Boolean  @default(false)
+  txHash        String?  // Solana transaction signature for submission
+  submittedAt   DateTime @default(now())
+
+  job           Job      @relation(fields: [jobId], references: [id])
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  txHash    String   @unique
+  type      String   // "create_job", "accept_job", "submit_completion", "cancel_job"
+  jobId     String?
+  wallet    String
+  amount    Float?
+  status    String   @default("confirmed") // confirmed, failed
+  createdAt DateTime @default(now())
+}

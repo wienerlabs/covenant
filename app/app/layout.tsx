@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono } from "next/font/google";
-import Providers from "@/components/Providers";
+import { Pixelify_Sans } from "next/font/google";
+import dynamic from "next/dynamic";
 import "./globals.css";
 
-const ibmPlexMono = IBM_Plex_Mono({
+// CRITICAL: dynamic import with ssr:false — wallet adapter uses window/document
+// which break during SSR. Without this, the modal opens but cannot connect.
+const Providers = dynamic(() => import("@/components/Providers"), {
+  ssr: false,
+});
+
+const pixelifySans = Pixelify_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-ibm-plex-mono",
+  variable: "--font-pixelify",
 });
 
 export const metadata: Metadata = {
@@ -20,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={ibmPlexMono.className}>
+    <html lang="en" className={`${pixelifySans.variable} ${pixelifySans.className}`}>
       <body>
         <Providers>{children}</Providers>
       </body>

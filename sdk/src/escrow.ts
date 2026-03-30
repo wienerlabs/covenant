@@ -142,7 +142,7 @@ export class CovenantSDK {
     escrowTokenAccount: PublicKey,
   ): Promise<{ txSig: string }> {
     // Generate ZK proof
-    const proofBytes = await generateWordCountProof(outputText, minWords);
+    const { proof } = await generateWordCountProof(outputText, minWords);
 
     // Compute text hash (must match what the circuit commits)
     const textHash = createHash("sha256").update(outputText).digest();
@@ -151,7 +151,7 @@ export class CovenantSDK {
 
     const txSig = await (this.program.methods as any)
       .submitCompletion(
-        Buffer.from(proofBytes),
+        Buffer.from(proof),
         minWords,
         Array.from(new Uint8Array(textHash)),
       )

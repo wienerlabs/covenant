@@ -9,7 +9,7 @@ pub use instructions::accept_job::*;
 pub use instructions::submit_completion::*;
 pub use instructions::cancel_job::*;
 
-declare_id!("9xRCMLZxk7ahcKJ8auFboQjuzp3XxfkYVKEmTDoAnU2E");
+declare_id!("HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo");
 
 #[program]
 pub mod covenant {

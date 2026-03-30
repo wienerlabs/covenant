@@ -1,59 +1,58 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import AsciiAnimation from "./AsciiAnimation";
+import { useState } from "react";
 
 interface SubmitWorkModalProps {
-  jobPda: string;
+  jobId: string;
   minWords: number;
+  takerWallet: string;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-type ProofState = "idle" | "generating" | "ready" | "error";
-
 export default function SubmitWorkModal({
-  jobPda,
+  jobId,
   minWords,
+  takerWallet,
   onClose,
   onSuccess,
 }: SubmitWorkModalProps) {
   const [text, setText] = useState("");
-  const [proofState, setProofState] = useState<ProofState>("idle");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
   const meetsMinWords = wordCount >= minWords;
   const progress = Math.min((wordCount / minWords) * 100, 100);
 
-  const generateProof = useCallback(() => {
+  const handleSubmit = async () => {
     if (!meetsMinWords) return;
-    setProofState("generating");
-    setTimeout(() => {
-      if (Math.random() > 0.1) {
-        setProofState("ready");
-      } else {
-        setProofState("error");
-      }
-    }, 2000);
-  }, [meetsMinWords]);
 
-  useEffect(() => {
-    if (meetsMinWords && proofState === "idle") {
-      generateProof();
-    }
-    if (!meetsMinWords && proofState !== "idle") {
-      setProofState("idle");
-    }
-  }, [meetsMinWords, proofState, generateProof]);
-
-  const handleSubmit = () => {
-    if (proofState !== "ready") return;
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          takerWallet,
+          text,
+          wordCount,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to submit work");
+      }
+
       onSuccess();
-    }, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit work");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const labelStyle: React.CSSProperties = {
@@ -143,7 +142,7 @@ export default function SubmitWorkModal({
               Job
             </span>
             <span style={{ fontSize: "12px" }}>
-              {jobPda.slice(0, 8)}...{jobPda.slice(-4)}
+              {jobId.slice(0, 8)}...{jobId.slice(-4)}
             </span>
           </div>
           <div>
@@ -227,112 +226,58 @@ export default function SubmitWorkModal({
             </div>
           </div>
 
-          {/* ZK Proof section */}
-          <div
-            style={{
-              border: "1px solid #000000",
-              borderRadius: "8px",
-              padding: "16px",
-              marginBottom: "20px",
-            }}
-          >
+          {/* Error display */}
+          {error && (
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "12px",
+                border: "1px solid #000000",
+                borderRadius: "6px",
+                padding: "8px 12px",
+                fontSize: "12px",
+                color: "#000000",
+                marginBottom: "16px",
+                backgroundColor: "#fff0f0",
               }}
             >
-              <span style={labelStyle}>ZK Proof Status</span>
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  color:
-                    proofState === "ready"
-                      ? "#000000"
-                      : proofState === "error"
-                        ? "#999999"
-                        : "#555555",
-                }}
-              >
-                {proofState === "idle" && "AWAITING CONTENT"}
-                {proofState === "generating" && "GENERATING..."}
-                {proofState === "ready" && "\u2713 PROOF READY"}
-                {proofState === "error" && "ERROR - RETRY"}
-              </span>
+              {error}
             </div>
-
-            {proofState === "generating" && (
-              <AsciiAnimation scene="proof" width="100%" height="80px" />
-            )}
-
-            {proofState === "error" && (
-              <button
-                onClick={generateProof}
-                style={{
-                  fontFamily: "inherit",
-                  fontSize: "11px",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  padding: "6px 16px",
-                  cursor: "pointer",
-                  border: "1px solid #000000",
-                  borderRadius: "6px",
-                  backgroundColor: "#ffffff",
-                  color: "#000000",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "#000000";
-                  e.currentTarget.style.color = "#ffffff";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "#ffffff";
-                  e.currentTarget.style.color = "#000000";
-                }}
-              >
-                Retry Proof Generation
-              </button>
-            )}
-          </div>
+          )}
 
           {/* Submit button */}
           <button
             onClick={handleSubmit}
-            disabled={proofState !== "ready" || isSubmitting}
+            disabled={!meetsMinWords || isSubmitting}
             style={{
               fontFamily: "inherit",
               fontSize: "13px",
               textTransform: "uppercase",
               letterSpacing: "0.05em",
               padding: "8px 20px",
-              cursor: proofState === "ready" && !isSubmitting ? "pointer" : "not-allowed",
+              cursor: meetsMinWords && !isSubmitting ? "pointer" : "not-allowed",
               border: "1px solid #000000",
               borderRadius: "6px",
               backgroundColor:
-                proofState === "ready" && !isSubmitting ? "#000000" : "#cccccc",
-              color: proofState === "ready" && !isSubmitting ? "#ffffff" : "#999999",
+                meetsMinWords && !isSubmitting ? "#000000" : "#cccccc",
+              color: meetsMinWords && !isSubmitting ? "#ffffff" : "#999999",
               width: "100%",
               transition: "all 0.15s ease",
               borderColor:
-                proofState === "ready" && !isSubmitting ? "#000000" : "#cccccc",
+                meetsMinWords && !isSubmitting ? "#000000" : "#cccccc",
             }}
             onMouseEnter={(e) => {
-              if (proofState === "ready" && !isSubmitting) {
+              if (meetsMinWords && !isSubmitting) {
                 e.currentTarget.style.backgroundColor = "#ffffff";
                 e.currentTarget.style.color = "#000000";
               }
             }}
             onMouseLeave={(e) => {
-              if (proofState === "ready" && !isSubmitting) {
+              if (meetsMinWords && !isSubmitting) {
                 e.currentTarget.style.backgroundColor = "#000000";
                 e.currentTarget.style.color = "#ffffff";
               }
             }}
           >
-            {isSubmitting ? "Submitting..." : "Submit Work + Proof"}
+            {isSubmitting ? "Submitting..." : "Submit Work"}
           </button>
         </div>
       </div>

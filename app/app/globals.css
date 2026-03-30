@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -14,7 +12,7 @@ body {
   margin: 0;
   padding: 0;
   background-color: #ffffff;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-pixelify), 'Pixelify Sans', sans-serif;
   color: #000000;
   font-size: 13px;
   line-height: 1.5;
@@ -27,64 +25,10 @@ body {
   color: #ffffff;
 }
 
-/* Wallet adapter button overrides */
-.wallet-adapter-button {
-  font-family: 'IBM Plex Mono', monospace !important;
-  font-size: 13px !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
-  border-radius: 6px !important;
-  height: auto !important;
-  padding: 8px 20px !important;
-  line-height: 1.4 !important;
-}
-
-.wallet-adapter-button-trigger {
-  background-color: #ffffff !important;
-  color: #000000 !important;
-  border: 1px solid #000000 !important;
-}
-
-.wallet-adapter-button-trigger:hover {
-  background-color: #000000 !important;
-  color: #ffffff !important;
-}
-
-.wallet-adapter-modal-wrapper {
-  font-family: 'IBM Plex Mono', monospace !important;
-  border-radius: 12px !important;
-  border: 1px solid #000000 !important;
-  box-shadow: none !important;
-}
-
-.wallet-adapter-modal-button-close {
-  border-radius: 6px !important;
-}
-
-.wallet-adapter-modal-list li {
-  border-radius: 6px !important;
-}
-
-.wallet-adapter-modal-title {
-  font-family: 'IBM Plex Mono', monospace !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
-}
-
-.wallet-adapter-dropdown {
-  border-radius: 6px !important;
-}
-
-.wallet-adapter-dropdown-list {
-  border-radius: 8px !important;
-  border: 1px solid #000000 !important;
-  box-shadow: none !important;
-  font-family: 'IBM Plex Mono', monospace !important;
-}
-
-.wallet-adapter-dropdown-list-item {
-  border-radius: 4px !important;
-  font-family: 'IBM Plex Mono', monospace !important;
+/* Pulse animation for wallet connecting state */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 /* Shimmer animation for loading skeletons */
