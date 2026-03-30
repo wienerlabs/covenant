@@ -1,0 +1,15 @@
+{
+  "name": "@covenant/sdk",
+  "version": "0.1.0",
+  "license": "ISC",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.30.1",
+    "@solana/web3.js": "^1.95.0",
+    "@solana/spl-token": "^0.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

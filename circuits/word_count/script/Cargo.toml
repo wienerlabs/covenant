@@ -1,0 +1,13 @@
+[package]
+name = "word-count-script"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sp1-sdk = "6.0.2"
+sha2 = "0.10"
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+
+[build-dependencies]
+sp1-build = "6.0.2"

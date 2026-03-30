@@ -1,0 +1,101 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #ffffff;
+  font-family: 'IBM Plex Mono', monospace;
+  color: #000000;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+/* Wallet adapter button overrides */
+.wallet-adapter-button {
+  font-family: 'IBM Plex Mono', monospace !important;
+  font-size: 13px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  border-radius: 6px !important;
+  height: auto !important;
+  padding: 8px 20px !important;
+  line-height: 1.4 !important;
+}
+
+.wallet-adapter-button-trigger {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border: 1px solid #000000 !important;
+}
+
+.wallet-adapter-button-trigger:hover {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+.wallet-adapter-modal-wrapper {
+  font-family: 'IBM Plex Mono', monospace !important;
+  border-radius: 12px !important;
+  border: 1px solid #000000 !important;
+  box-shadow: none !important;
+}
+
+.wallet-adapter-modal-button-close {
+  border-radius: 6px !important;
+}
+
+.wallet-adapter-modal-list li {
+  border-radius: 6px !important;
+}
+
+.wallet-adapter-modal-title {
+  font-family: 'IBM Plex Mono', monospace !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.wallet-adapter-dropdown {
+  border-radius: 6px !important;
+}
+
+.wallet-adapter-dropdown-list {
+  border-radius: 8px !important;
+  border: 1px solid #000000 !important;
+  box-shadow: none !important;
+  font-family: 'IBM Plex Mono', monospace !important;
+}
+
+.wallet-adapter-dropdown-list-item {
+  border-radius: 4px !important;
+  font-family: 'IBM Plex Mono', monospace !important;
+}
+
+/* Shimmer animation for loading skeletons */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 4px;
+}

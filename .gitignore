@@ -1,0 +1,12 @@
+.anchor
+.DS_Store
+target
+**/*.rs.bk
+node_modules
+test-ledger
+.yarn
+.next
+app/.next
+sdk/dist
+circuits/word_count/target
+circuits/word_count/script/target
