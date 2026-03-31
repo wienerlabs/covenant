@@ -19,9 +19,10 @@ POSTER                          TAKER
 
 ---
 
-## Live Demo
+## Live
 
-- **Program ID:** `HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo` ([Solana Explorer](https://explorer.solana.com/address/HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo?cluster=devnet))
+- **App:** [covenant-omega.vercel.app](https://covenant-omega.vercel.app)
+- **Program ID:** [`HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo`](https://explorer.solana.com/address/HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo?cluster=devnet)
 - **Network:** Solana Devnet
 - **USDC Mint:** `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`
 - **Database:** Neon PostgreSQL
@@ -57,14 +58,24 @@ Word count proof: proves text T has ≥ N words without revealing T.
 - Circuit: SHA-256 binding + word count threshold assertion
 - Vkey hash: `0x002b54c2ee0f83205f876710bd9bc4cabf71fb0a73d872fb8769dea99e133b9f`
 
+### x402 Payment Protocol
+
+HTTP 402 micropayment integration — agents pay SOL for API access, escrow services, and proof verification:
+
+- Omega → Alpha: 0.001 SOL (API access fee)
+- Alpha → Protocol: 0.002 SOL (escrow service fee)
+- Omega → Protocol: 0.001 SOL (proof verification fee)
+
+All x402 payments are real Solana devnet transactions.
+
 ### Frontend (Next.js 14)
 
 | Page | URL | Description |
 |---|---|---|
-| Landing | `/` | Video background, stats, activity feed, topographic blob |
+| Landing | `/` | Video background, stats, activity feed, topographic metaballs |
 | Post a Job | `/poster` | Create jobs with 6 categories, USDC/SOL payment |
-| Find Work | `/taker` | Browse jobs, accept, submit work |
-| Agent Arena | `/arena` | Two AI agents (Claude Haiku) autonomously create and complete jobs |
+| Find Work | `/taker` | Browse/search/filter jobs, accept, submit work |
+| Agent Arena | `/arena` | Two AI agents autonomously create/complete jobs with x402 payments |
 | Leaderboard | `/leaderboard` | Top workers and posters ranking |
 | ZK Proof | `/proof` | Circuit specification + live word count verifier |
 | Architecture | `/architecture` | Interactive system diagram |
@@ -75,22 +86,25 @@ Word count proof: proves text T has ≥ N words without revealing T.
 
 Two autonomous AI agents powered by Claude Haiku (`claude-haiku-4-5-20251001`):
 
-- **Agent Alpha** (Poster) — Generates job specifications using AI, creates real escrow jobs
-- **Agent Omega** (Taker) — Evaluates jobs, accepts, generates deliverables, submits with ZK proof verification
+- **Agent Alpha** (Poster) — Generates job specs via AI, creates real escrow jobs, pays x402 fees
+- **Agent Omega** (Taker) — Evaluates jobs, accepts, generates deliverables, submits with ZK proof, pays x402 fees
 
 Every action produces a real Solana devnet transaction. The arena shows:
 - Real-time event streaming (SSE)
 - Job details with category, amount, spec hash
 - ZK proof visualization (private/public inputs, verification status)
 - Deliverable output preview with word count
+- x402 payment flow diagram with animated arrows
+- Cost breakdown (Haiku API, x402 fees, Solana TX fees, escrow)
 - Transaction summary with Solana Explorer links
 - Pixel agent avatars with animation states (idle/thinking/working/celebrating)
+- Notification feed with real-time updates
 
 ### Database (Neon PostgreSQL)
 
-6 tables: Job, Profile, Reputation, Submission, Transaction + Prisma ORM.
+6 models: Job, Profile, Reputation, Submission, Transaction + Prisma ORM.
 
-All data is real — no mocks. Every API call writes to PostgreSQL, every job action sends a Solana marker transaction.
+All data is real — zero mocks. Every API call writes to PostgreSQL, every job action sends a Solana devnet transaction.
 
 ### Job Categories
 
@@ -103,22 +117,14 @@ All data is real — no mocks. Every API call writes to PostgreSQL, every job ac
 | BUG | Bug Bounty | Security testing, bug finding |
 | DSN | Design | UI/UX design, logos |
 
-### Payment Tokens
+### Features
 
-- **USDC** — SPL token on Solana (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`)
-- **SOL** — Native Solana token
-
----
-
-## Prerequisites
-
-| Tool | Version | Install |
-|---|---|---|
-| Rust | 1.84+ | `rustup install stable` |
-| Solana CLI | 3.0+ | [solana.com/docs](https://docs.solanalabs.com/cli/install) |
-| Anchor CLI | 0.32.1 via avm | `avm use 0.32.1` |
-| Node.js | 20+ | [nodejs.org](https://nodejs.org) |
-| SP1 | 6.0.2 | `curl -L https://sp1up.dev \| bash && sp1up` |
+- **Wallet persistence** — ConnectorKit autoConnect, stays connected across pages
+- **Job search & filtering** — Category, price range, keyword search with debounce
+- **Notification feed** — Real-time bell icon in NavBar with unread badge
+- **USDC + SOL payments** — Dual token support with logos
+- **Pixel avatars** — Deterministic 5x5 mirrored grid, 10-color palette
+- **Profile system** — Mandatory profile creation on first connect
 
 ---
 
@@ -134,7 +140,7 @@ cd app && yarn install && cd ..
 
 # Set up environment
 cp app/.env.example app/.env
-# Edit app/.env with your Neon DB URL and API keys
+# Edit app/.env with your credentials
 
 # Push DB schema
 cd app && npx prisma db push && cd ..
@@ -150,17 +156,24 @@ cd app && yarn dev
 # Open http://localhost:3000
 ```
 
+## Deploy to Vercel
+
+1. Import `wienerlabs/covenant` on Vercel
+2. Set **Root Directory** to `app`
+3. Add all 7 environment variables (see below)
+4. Deploy
+
 ## Environment Variables
 
-```env
-DATABASE_URL="postgresql://..."          # Neon PostgreSQL connection string
-DEPLOYER_KEYPAIR=[...]                   # Solana deployer keypair (JSON array)
-ANTHROPIC_API_KEY=sk-ant-...             # Claude API key for Agent Arena
-AGENT_ALPHA_WALLET=...                   # Agent Alpha's Solana wallet
-AGENT_OMEGA_WALLET=...                   # Agent Omega's Solana wallet
-AGENT_ALPHA_KEYPAIR=[...]                # Agent Alpha's keypair
-AGENT_OMEGA_KEYPAIR=[...]                # Agent Omega's keypair
-```
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | Neon PostgreSQL connection string |
+| `DEPLOYER_KEYPAIR` | Solana deployer keypair (JSON byte array) |
+| `ANTHROPIC_API_KEY` | Claude API key for Agent Arena |
+| `AGENT_ALPHA_KEYPAIR` | Agent Alpha's Solana keypair (JSON byte array) |
+| `AGENT_OMEGA_KEYPAIR` | Agent Omega's Solana keypair (JSON byte array) |
+| `AGENT_ALPHA_WALLET` | Agent Alpha's public key (Base58) |
+| `AGENT_OMEGA_WALLET` | Agent Omega's public key (Base58) |
 
 ---
 
@@ -192,10 +205,12 @@ AGENT_OMEGA_KEYPAIR=[...]                # Agent Omega's keypair
 |---|---|
 | Blockchain | Solana (Devnet), Anchor 0.30.1 |
 | ZK Proofs | SP1 zkVM 6.0.2, Groth16 (sp1-solana 0.1.0) |
-| Frontend | Next.js 14, TypeScript, Tailwind |
+| Payments | x402 Protocol (HTTP 402 micropayments) |
+| Frontend | Next.js 14, TypeScript, Tailwind CSS |
 | Database | Neon PostgreSQL, Prisma ORM |
 | AI Agents | Claude Haiku 4.5 (Anthropic API) |
 | Wallet | ConnectorKit (Solana Foundation) |
+| Hosting | Vercel |
 | Design | Pixelify Sans, glass-morphism, pixel avatars |
 
 ---
