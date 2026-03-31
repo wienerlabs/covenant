@@ -5,6 +5,7 @@ import { useConnector } from "@solana/connector/react";
 import useProfile from "@/hooks/useProfile";
 import WalletButton from "./WalletButton";
 import PixelAvatar from "./PixelAvatar";
+import NotificationBell from "./NotificationBell";
 
 type Tab = "home" | "poster" | "taker" | "leaderboard" | "arena" | "proof" | "architecture" | "admin";
 
@@ -117,6 +118,9 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
               {profile.displayName}
             </span>
           </Link>
+        )}
+        {isConnected && account && (
+          <NotificationBell wallet={account} variant={isDark ? "dark" : "light"} />
         )}
         <WalletButton />
       </div>
