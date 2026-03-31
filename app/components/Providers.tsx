@@ -16,7 +16,7 @@ export default function Providers({ children }: ProvidersProps) {
       getDefaultConfig({
         appName: "COVENANT",
         appUrl: typeof window !== "undefined" ? window.location.origin : "https://covenant.dev",
-        autoConnect: false,
+        autoConnect: true,
         enableMobile: true,
         clusters: [
           {
