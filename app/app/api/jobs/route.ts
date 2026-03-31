@@ -10,10 +10,34 @@ export async function GET(request: NextRequest) {
     const poster = searchParams.get("poster");
     const taker = searchParams.get("taker");
 
+    const category = searchParams.get("category");
+    const minAmount = searchParams.get("minAmount");
+    const maxAmount = searchParams.get("maxAmount");
+    const search = searchParams.get("search");
+
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (poster) where.posterWallet = poster;
     if (taker) where.takerWallet = taker;
+    if (category) where.category = category;
+
+    // Price range filtering
+    if (minAmount || maxAmount) {
+      const amountFilter: Record<string, number> = {};
+      if (minAmount) amountFilter.gte = parseFloat(minAmount);
+      if (maxAmount) amountFilter.lte = parseFloat(maxAmount);
+      where.amount = amountFilter;
+    }
+
+    // Search in specJson title/description via raw query fallback,
+    // or use Prisma string_contains on the JSON cast
+    if (search) {
+      where.OR = [
+        { specJson: { path: ["title"], string_contains: search } },
+        { specJson: { path: ["description"], string_contains: search } },
+        { category: { contains: search, mode: "insensitive" } },
+      ];
+    }
 
     const jobs = await prisma.job.findMany({
       where,

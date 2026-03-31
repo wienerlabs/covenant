@@ -21,9 +21,13 @@ export interface JobData {
 interface UseJobListOptions {
   filter: "all" | "mine" | "open";
   walletPubkey?: string | null;
+  category?: string;
+  search?: string;
+  minAmount?: number;
+  maxAmount?: number;
 }
 
-export default function useJobList({ filter, walletPubkey }: UseJobListOptions) {
+export default function useJobList({ filter, walletPubkey, category, search, minAmount, maxAmount }: UseJobListOptions) {
   const [jobs, setJobs] = useState<JobData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +43,11 @@ export default function useJobList({ filter, walletPubkey }: UseJobListOptions) 
       } else if (filter === "mine" && walletPubkey) {
         params.set("poster", walletPubkey);
       }
+
+      if (category) params.set("category", category);
+      if (search) params.set("search", search);
+      if (minAmount !== undefined && minAmount > 0) params.set("minAmount", String(minAmount));
+      if (maxAmount !== undefined && maxAmount > 0) params.set("maxAmount", String(maxAmount));
 
       const url = `/api/jobs${params.toString() ? `?${params.toString()}` : ""}`;
       const response = await fetch(url);
@@ -73,7 +82,7 @@ export default function useJobList({ filter, walletPubkey }: UseJobListOptions) 
     } finally {
       setLoading(false);
     }
-  }, [filter, walletPubkey]);
+  }, [filter, walletPubkey, category, search, minAmount, maxAmount]);
 
   const refetch = useCallback(() => {
     setLoading(true);

@@ -11,11 +11,15 @@ interface JobListProps {
   filter: "all" | "mine" | "open";
   walletPubkey?: string;
   variant?: "light" | "dark";
+  category?: string;
+  search?: string;
+  minAmount?: number;
+  maxAmount?: number;
 }
 
-export default function JobList({ filter, walletPubkey, variant = "light" }: JobListProps) {
+export default function JobList({ filter, walletPubkey, variant = "light", category, search, minAmount, maxAmount }: JobListProps) {
   const isDark = variant === "dark";
-  const { jobs, loading, refetch } = useJobList({ filter, walletPubkey });
+  const { jobs, loading, refetch } = useJobList({ filter, walletPubkey, category, search, minAmount, maxAmount });
   const [refreshHover, setRefreshHover] = useState(false);
   const [activeSubmitJob, setActiveSubmitJob] = useState<JobData | null>(null);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useConnector } from "@solana/connector/react";
 import NavBar from "@/components/NavBar";
 import JobList from "@/components/JobList";
@@ -8,6 +8,7 @@ import ReputationBadge from "@/components/ReputationBadge";
 import AsciiAnimation from "@/components/AsciiAnimation";
 import useProtocolStats from "@/hooks/useProtocolStats";
 import { USDC_LOGO_URL } from "@/lib/constants";
+import { JOB_CATEGORIES } from "@/lib/categories";
 
 export default function TakerPage() {
   const { account } = useConnector();
@@ -16,6 +17,28 @@ export default function TakerPage() {
   const [activeFilter, setActiveFilter] = useState<"all" | "mine">("all");
   const [allHover, setAllHover] = useState(false);
   const [mineHover, setMineHover] = useState(false);
+
+  // Search & filter state
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [minPrice, setMinPrice] = useState<string>("");
+  const [maxPrice, setMaxPrice] = useState<string>("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchInput(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(value);
+    }, 500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   const filterBtnStyle = (
     isActive: boolean,
@@ -99,7 +122,110 @@ export default function TakerPage() {
             </button>
           </div>
 
-          <JobList filter={activeFilter} walletPubkey={walletPubkey} variant="dark" />
+          {/* Search & Filter Bar */}
+          <div
+            style={{
+              display: "flex",
+              gap: "12px",
+              marginBottom: "20px",
+              padding: "12px 16px",
+              borderRadius: "10px",
+              border: "1px solid rgba(255,255,255,0.12)",
+              backgroundColor: "rgba(255,255,255,0.05)",
+              backdropFilter: "blur(12px)",
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <input
+              type="text"
+              placeholder="Search jobs..."
+              value={searchInput}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              style={{
+                flex: "1 1 160px",
+                minWidth: "120px",
+                padding: "6px 10px",
+                fontSize: "11px",
+                fontFamily: "inherit",
+                borderRadius: "6px",
+                border: "1px solid rgba(255,255,255,0.2)",
+                backgroundColor: "rgba(255,255,255,0.08)",
+                color: "#ffffff",
+                outline: "none",
+              }}
+            />
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              style={{
+                padding: "6px 10px",
+                fontSize: "11px",
+                fontFamily: "inherit",
+                borderRadius: "6px",
+                border: "1px solid rgba(255,255,255,0.2)",
+                backgroundColor: "rgba(255,255,255,0.08)",
+                color: "#ffffff",
+                outline: "none",
+                cursor: "pointer",
+              }}
+            >
+              <option value="" style={{ backgroundColor: "#1a1a1a" }}>All Categories</option>
+              {JOB_CATEGORIES.map((cat) => (
+                <option key={cat.id} value={cat.id} style={{ backgroundColor: "#1a1a1a" }}>
+                  {cat.label}
+                </option>
+              ))}
+            </select>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <img src={USDC_LOGO_URL} alt="USDC" width={14} height={14} style={{ borderRadius: "50%" }} />
+              <input
+                type="number"
+                placeholder="Min"
+                value={minPrice}
+                onChange={(e) => setMinPrice(e.target.value)}
+                style={{
+                  width: "60px",
+                  padding: "6px 8px",
+                  fontSize: "11px",
+                  fontFamily: "inherit",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  backgroundColor: "rgba(255,255,255,0.08)",
+                  color: "#ffffff",
+                  outline: "none",
+                }}
+              />
+              <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "11px" }}>-</span>
+              <input
+                type="number"
+                placeholder="Max"
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+                style={{
+                  width: "60px",
+                  padding: "6px 8px",
+                  fontSize: "11px",
+                  fontFamily: "inherit",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  backgroundColor: "rgba(255,255,255,0.08)",
+                  color: "#ffffff",
+                  outline: "none",
+                }}
+              />
+            </div>
+          </div>
+
+          <JobList
+            filter={activeFilter}
+            walletPubkey={walletPubkey}
+            variant="dark"
+            category={selectedCategory || undefined}
+            search={debouncedSearch || undefined}
+            minAmount={minPrice ? parseFloat(minPrice) : undefined}
+            maxAmount={maxPrice ? parseFloat(maxPrice) : undefined}
+          />
         </div>
 
         {/* Right column - sticky sidebar */}
