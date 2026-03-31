@@ -164,6 +164,7 @@ export default function LandingPage() {
           }}
         >
           <div
+            className="hero-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
@@ -176,6 +177,7 @@ export default function LandingPage() {
             {/* Left column */}
             <div>
               <h1
+                className="hero-title"
                 style={{
                   fontSize: "56px",
                   fontWeight: 700,
@@ -276,6 +278,7 @@ export default function LandingPage() {
 
             {/* Right column */}
             <div
+              className="hero-right"
               style={{
                 display: "flex",
                 flexDirection: "column",
@@ -374,6 +377,7 @@ export default function LandingPage() {
 
         {/* Stats bar */}
         <div
+          className="stats-bar"
           style={{
             backgroundColor: "rgba(255,255,255,0.07)",
             backdropFilter: "blur(16px)",

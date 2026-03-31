@@ -77,7 +77,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         Covenant
       </Link>
 
-      <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
+      <div className="nav-tabs" style={{ display: "flex", gap: "20px", alignItems: "center" }}>
         {visibleTabs.map((tab) => (
           <Link key={tab.id} href={tab.href} style={tabStyle(tab.id)}>
             {tab.label}

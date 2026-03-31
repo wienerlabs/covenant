@@ -43,3 +43,11 @@ body {
   animation: shimmer 1.5s infinite linear;
   border-radius: 4px;
 }
+
+@media (max-width: 768px) {
+  .hero-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
+  .hero-title { font-size: 36px !important; }
+  .hero-right { display: none !important; }
+  .stats-bar { flex-wrap: wrap !important; gap: 16px !important; }
+  .nav-tabs { display: none !important; }
+}
