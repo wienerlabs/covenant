@@ -1,9 +1,17 @@
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
+import { sendX402Payment, getAgentKeypair } from "@/lib/x402";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
+import { Keypair } from "@solana/web3.js";
+
+function getDeployerWallet(): string {
+  const raw = process.env.DEPLOYER_KEYPAIR;
+  if (!raw) throw new Error("DEPLOYER_KEYPAIR env var not set");
+  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(raw))).publicKey.toBase58();
+}
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 
@@ -121,6 +129,34 @@ export async function POST() {
           minWords: jobSpec.minWords,
           description: jobSpec.description,
         });
+
+        // ===== x402 PAYMENT: Omega pays Alpha for API access =====
+        try {
+          const x402Access = await sendX402Payment(
+            getAgentKeypair("omega"),
+            AGENT_ALPHA.wallet,
+            0.001,
+            "x402: access job spec API"
+          );
+          send("x402_payment", `x402: Omega \u2192 Alpha (0.001 SOL) \u2014 API access fee`, {
+            from: x402Access.from,
+            to: x402Access.to,
+            amount: x402Access.amount,
+            memo: "access job spec API",
+            txHash: x402Access.txHash,
+          });
+          await prisma.transaction.create({
+            data: {
+              txHash: x402Access.txHash,
+              type: "x402_payment",
+              wallet: x402Access.from,
+              amount: x402Access.amount,
+              status: "confirmed",
+            },
+          });
+        } catch (err) {
+          console.error("[arena] x402 access fee failed:", err);
+        }
 
         // ===== STEP 2: ALPHA CREATES JOB =====
         const deadline = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
@@ -245,6 +281,35 @@ export async function POST() {
           txHash: acceptTxHash,
         });
 
+        // ===== x402 PAYMENT: Alpha pays protocol for escrow service =====
+        try {
+          const deployerWallet = getDeployerWallet();
+          const x402Escrow = await sendX402Payment(
+            getAgentKeypair("alpha"),
+            deployerWallet,
+            0.002,
+            "x402: escrow service fee"
+          );
+          send("x402_payment", `x402: Alpha \u2192 Protocol (0.002 SOL) \u2014 escrow service fee`, {
+            from: x402Escrow.from,
+            to: x402Escrow.to,
+            amount: x402Escrow.amount,
+            memo: "escrow service fee",
+            txHash: x402Escrow.txHash,
+          });
+          await prisma.transaction.create({
+            data: {
+              txHash: x402Escrow.txHash,
+              type: "x402_payment",
+              wallet: x402Escrow.from,
+              amount: x402Escrow.amount,
+              status: "confirmed",
+            },
+          });
+        } catch (err) {
+          console.error("[arena] x402 escrow fee failed:", err);
+        }
+
         // ===== STEP 5: OMEGA WORKS =====
         send("omega_working", "Agent Omega generating deliverable...");
 
@@ -318,6 +383,35 @@ export async function POST() {
 
           return [sub];
         });
+
+        // ===== x402 PAYMENT: Omega pays protocol for proof verification =====
+        try {
+          const deployerWallet = getDeployerWallet();
+          const x402Verify = await sendX402Payment(
+            getAgentKeypair("omega"),
+            deployerWallet,
+            0.001,
+            "x402: proof verification fee"
+          );
+          send("x402_payment", `x402: Omega \u2192 Protocol (0.001 SOL) \u2014 verification fee`, {
+            from: x402Verify.from,
+            to: x402Verify.to,
+            amount: x402Verify.amount,
+            memo: "proof verification fee",
+            txHash: x402Verify.txHash,
+          });
+          await prisma.transaction.create({
+            data: {
+              txHash: x402Verify.txHash,
+              type: "x402_payment",
+              wallet: x402Verify.from,
+              amount: x402Verify.amount,
+              status: "confirmed",
+            },
+          });
+        } catch (err) {
+          console.error("[arena] x402 verification fee failed:", err);
+        }
 
         let submitTxHash: string | null = null;
         try {

@@ -69,6 +69,7 @@ export default function ArenaPage() {
   const [deliverablePreview, setDeliverablePreview] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<"idle" | "created" | "accepted" | "completed">("idle");
   const [transactions, setTransactions] = useState<{label: string; txHash: string}[]>([]);
+  const [x402Payments, setX402Payments] = useState<{from: string; to: string; amount: number; memo: string; txHash: string}[]>([]);
   const logPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -158,6 +159,31 @@ export default function ArenaPage() {
           }
         }
         break;
+      case "x402_payment":
+        if (event.data) {
+          setX402Payments((prev) => [...prev, {
+            from: String(event.data!.from || ""),
+            to: String(event.data!.to || ""),
+            amount: Number(event.data!.amount || 0),
+            memo: String(event.data!.memo || ""),
+            txHash: String(event.data!.txHash || ""),
+          }]);
+          if (typeof event.data.txHash === "string") {
+            setTransactions((prev) => [...prev, { label: `x402: ${String(event.data!.memo || "")}`, txHash: event.data!.txHash as string }]);
+          }
+          // Determine which agent is paying and flash working state
+          const fromAddr = String(event.data.from || "");
+          if (fromAddr === AGENT_OMEGA_CONFIG.wallet) {
+            setOmegaState("working");
+            setOmegaActions((prev) => [...prev, `x402 payment: ${event.data!.memo}`]);
+            setTimeout(() => setOmegaState("idle"), 800);
+          } else if (fromAddr === AGENT_ALPHA_CONFIG.wallet) {
+            setAlphaState("working");
+            setAlphaActions((prev) => [...prev, `x402 payment: ${event.data!.memo}`]);
+            setTimeout(() => setAlphaState("idle"), 800);
+          }
+        }
+        break;
       case "complete":
         setAlphaState("celebrating");
         setOmegaState("celebrating");
@@ -189,6 +215,7 @@ export default function ArenaPage() {
     setDeliverablePreview(null);
     setJobStatus("idle");
     setTransactions([]);
+    setX402Payments([]);
     setRound((prev) => prev + 1);
 
     try {
@@ -267,6 +294,7 @@ export default function ArenaPage() {
   }
 
   function getEventDotColor(step: string): string {
+    if (step === "x402_payment") return "#f59e0b";
     if (step.includes("error")) return "#ff5f57";
     if (step === "complete" || step.includes("completed") || step.includes("accepted")) return "#28c840";
     if (step.includes("created")) return "#febc2e";
@@ -276,6 +304,7 @@ export default function ArenaPage() {
   }
 
   function getEventTextColor(step: string): string {
+    if (step === "x402_payment") return "#f59e0b";
     if (step.includes("error")) return "#fca5a5";
     if (step === "complete" || step.includes("completed")) return "#86efac";
     if (step.includes("accepted") || step.includes("created")) return "#fde68a";
@@ -653,6 +682,185 @@ export default function ArenaPage() {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* x402 Payment Protocol */}
+          {jobStatus !== "idle" && (
+            <div
+              style={{
+                backgroundColor: "rgba(0,0,0,0.4)",
+                border: "1px solid rgba(245,158,11,0.2)",
+                borderRadius: "10px",
+                padding: "20px",
+                backdropFilter: "blur(12px)",
+                marginBottom: "24px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  color: "#f59e0b",
+                  marginBottom: "20px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "8px",
+                    fontWeight: 700,
+                    padding: "2px 6px",
+                    borderRadius: "3px",
+                    backgroundColor: "#f59e0b20",
+                    border: "1px solid #f59e0b40",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  402
+                </span>
+                x402 Payment Protocol
+              </div>
+
+              {x402Payments.length === 0 ? (
+                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "20px 0" }}>
+                  Awaiting x402 micropayments...
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                  {/* Payment flow diagram */}
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", gap: "0", position: "relative" }}>
+                    {/* OMEGA box */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", width: "140px", flexShrink: 0 }}>
+                      <div
+                        style={{
+                          border: "1px solid #10B98150",
+                          borderRadius: "8px",
+                          padding: "12px 16px",
+                          backgroundColor: "#10B98110",
+                          textAlign: "center",
+                          width: "100%",
+                        }}
+                      >
+                        <div style={{ fontSize: "12px", fontWeight: 700, color: "#10B981", marginBottom: "2px" }}>OMEGA</div>
+                        <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Taker</div>
+                      </div>
+                    </div>
+
+                    {/* Center column: arrows to Alpha and Protocol */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1, minWidth: "120px", gap: "16px", paddingTop: "8px" }}>
+                      {/* Arrow Omega -> Alpha (access fee) */}
+                      {x402Payments.some((p) => p.memo === "access job spec API") && (() => {
+                        const payment = x402Payments.find((p) => p.memo === "access job spec API")!;
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", animation: "fadeIn 0.5s ease-in" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <img src={SOL_LOGO_URL} alt="SOL" width={12} height={12} style={{ borderRadius: "50%" }} />
+                              <span style={{ fontSize: "11px", fontWeight: 600, color: "#f59e0b" }}>{payment.amount} SOL</span>
+                            </div>
+                            <div style={{ width: "100%", height: "2px", background: "linear-gradient(90deg, #10B981, #f59e0b, #3B82F6)", borderRadius: "1px", boxShadow: "0 0 8px #f59e0b40" }} />
+                            <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)" }}>API Access Fee</div>
+                            <a
+                              href={`https://explorer.solana.com/tx/${payment.txHash}?cluster=devnet`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ fontSize: "8px", color: "#f59e0b", textDecoration: "none", opacity: 0.6 }}
+                            >
+                              {payment.txHash.slice(0, 8)}...
+                            </a>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* ALPHA box */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", width: "140px", flexShrink: 0 }}>
+                      <div
+                        style={{
+                          border: "1px solid #3B82F650",
+                          borderRadius: "8px",
+                          padding: "12px 16px",
+                          backgroundColor: "#3B82F610",
+                          textAlign: "center",
+                          width: "100%",
+                        }}
+                      >
+                        <div style={{ fontSize: "12px", fontWeight: 700, color: "#3B82F6", marginBottom: "2px" }}>ALPHA</div>
+                        <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Poster</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottom row: arrows to Protocol */}
+                  <div style={{ display: "flex", justifyContent: "center", gap: "40px" }}>
+                    {/* Omega -> Protocol (verification) */}
+                    {x402Payments.some((p) => p.memo === "proof verification fee") && (() => {
+                      const payment = x402Payments.find((p) => p.memo === "proof verification fee")!;
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", animation: "fadeIn 0.5s ease-in" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                            <img src={SOL_LOGO_URL} alt="SOL" width={12} height={12} style={{ borderRadius: "50%" }} />
+                            <span style={{ fontSize: "11px", fontWeight: 600, color: "#f59e0b" }}>{payment.amount} SOL</span>
+                          </div>
+                          <div style={{ width: "60px", height: "2px", background: "linear-gradient(180deg, #10B981, #f59e0b)", borderRadius: "1px", boxShadow: "0 0 8px #f59e0b40" }} />
+                          <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)" }}>Verification</div>
+                          <a
+                            href={`https://explorer.solana.com/tx/${payment.txHash}?cluster=devnet`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: "8px", color: "#f59e0b", textDecoration: "none", opacity: 0.6 }}
+                          >
+                            {payment.txHash.slice(0, 8)}...
+                          </a>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Alpha -> Protocol (escrow) */}
+                    {x402Payments.some((p) => p.memo === "escrow service fee") && (() => {
+                      const payment = x402Payments.find((p) => p.memo === "escrow service fee")!;
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", animation: "fadeIn 0.5s ease-in" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                            <img src={SOL_LOGO_URL} alt="SOL" width={12} height={12} style={{ borderRadius: "50%" }} />
+                            <span style={{ fontSize: "11px", fontWeight: 600, color: "#f59e0b" }}>{payment.amount} SOL</span>
+                          </div>
+                          <div style={{ width: "60px", height: "2px", background: "linear-gradient(180deg, #3B82F6, #f59e0b)", borderRadius: "1px", boxShadow: "0 0 8px #f59e0b40" }} />
+                          <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)" }}>Escrow Fee</div>
+                          <a
+                            href={`https://explorer.solana.com/tx/${payment.txHash}?cluster=devnet`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: "8px", color: "#f59e0b", textDecoration: "none", opacity: 0.6 }}
+                          >
+                            {payment.txHash.slice(0, 8)}...
+                          </a>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Protocol Escrow box */}
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <div
+                      style={{
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        borderRadius: "8px",
+                        padding: "12px 24px",
+                        backgroundColor: "rgba(255,255,255,0.05)",
+                        textAlign: "center",
+                        minWidth: "200px",
+                      }}
+                    >
+                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#ffffff", marginBottom: "2px" }}>PROTOCOL ESCROW</div>
+                      <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Deployer</div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1127,6 +1335,48 @@ export default function ArenaPage() {
                           [{String(event.data.categoryTag)}] {String(event.data.amount)} USDC / {String(event.data.minWords)} words min
                         </div>
                       )}
+                      {event.step === "x402_payment" && event.data && (
+                        <div
+                          style={{
+                            paddingLeft: "32px",
+                            fontSize: "10px",
+                            color: "#f59e0b",
+                            marginTop: "2px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "8px",
+                              fontWeight: 700,
+                              padding: "1px 4px",
+                              borderRadius: "3px",
+                              backgroundColor: "#f59e0b20",
+                              border: "1px solid #f59e0b40",
+                              color: "#f59e0b",
+                              letterSpacing: "0.04em",
+                            }}
+                          >
+                            402
+                          </span>
+                          <img src={SOL_LOGO_URL} alt="SOL" width={12} height={12} style={{ borderRadius: "50%" }} />
+                          <span>{String(event.data.amount)} SOL</span>
+                          <span style={{ color: "rgba(255,255,255,0.3)" }}>&mdash;</span>
+                          <span style={{ color: "rgba(255,255,255,0.5)" }}>{String(event.data.memo)}</span>
+                          {typeof event.data.txHash === "string" && (
+                            <a
+                              href={`https://explorer.solana.com/tx/${String(event.data.txHash)}?cluster=devnet`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ fontSize: "9px", color: "#f59e0b", textDecoration: "none", opacity: 0.7 }}
+                            >
+                              [{String(event.data.txHash).slice(0, 8)}...]
+                            </a>
+                          )}
+                        </div>
+                      )}
                       {event.step === "omega_completed" && event.data && (
                         <div
                           style={{
@@ -1231,6 +1481,99 @@ export default function ArenaPage() {
               >
                 <span>Total: {transactions.length} on-chain transaction{transactions.length !== 1 ? "s" : ""}</span>
                 <span>Network: Solana Devnet</span>
+              </div>
+            </div>
+          )}
+
+          {/* Cost Breakdown */}
+          {done && x402Payments.length > 0 && (
+            <div
+              style={{
+                backgroundColor: "rgba(0,0,0,0.4)",
+                border: "1px solid rgba(245,158,11,0.15)",
+                borderRadius: "10px",
+                padding: "20px",
+                backdropFilter: "blur(12px)",
+                marginTop: "24px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  color: "rgba(255,255,255,0.4)",
+                  marginBottom: "16px",
+                }}
+              >
+                Cost Breakdown
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
+                {/* Haiku API Alpha */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)" }}>Haiku API (Alpha)</span>
+                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)", fontFamily: "monospace" }}>~$0.003</span>
+                </div>
+                {/* Haiku API Omega x2 */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)" }}>Haiku API (Omega x2)</span>
+                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)", fontFamily: "monospace" }}>~$0.006</span>
+                </div>
+                {/* x402 fees */}
+                {x402Payments.map((p, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <span style={{ fontSize: "12px", color: "#f59e0b", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ fontSize: "8px", fontWeight: 700, padding: "1px 4px", borderRadius: "3px", backgroundColor: "#f59e0b20", border: "1px solid #f59e0b40" }}>402</span>
+                      {p.memo.replace("x402: ", "")}
+                    </span>
+                    <span style={{ fontSize: "12px", color: "#f59e0b", fontFamily: "monospace", display: "flex", alignItems: "center", gap: "4px" }}>
+                      <img src={SOL_LOGO_URL} alt="SOL" width={12} height={12} style={{ borderRadius: "50%" }} />
+                      {p.amount} SOL
+                    </span>
+                  </div>
+                ))}
+                {/* Solana TX fees */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)" }}>Solana TX Fees (x{transactions.length})</span>
+                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)", fontFamily: "monospace", display: "flex", alignItems: "center", gap: "4px" }}>
+                    <img src={SOL_LOGO_URL} alt="SOL" width={12} height={12} style={{ borderRadius: "50%" }} />
+                    ~{(transactions.length * 0.001).toFixed(3)} SOL
+                  </span>
+                </div>
+                {/* Job Escrow */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)" }}>Job Escrow Amount</span>
+                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)", fontFamily: "monospace", display: "flex", alignItems: "center", gap: "4px" }}>
+                    <img src={USDC_LOGO_URL} alt="USDC" width={12} height={12} style={{ borderRadius: "50%" }} />
+                    {String(specData?.amount || "—")} USDC
+                  </span>
+                </div>
+              </div>
+              {/* Totals */}
+              <div
+                style={{
+                  marginTop: "12px",
+                  paddingTop: "12px",
+                  borderTop: "1px solid rgba(255,255,255,0.12)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>Total Protocol Cost</span>
+                  <span style={{ fontSize: "13px", fontWeight: 700, color: "#f59e0b", fontFamily: "monospace", display: "flex", alignItems: "center", gap: "4px" }}>
+                    <img src={SOL_LOGO_URL} alt="SOL" width={14} height={14} style={{ borderRadius: "50%" }} />
+                    {(x402Payments.reduce((sum, p) => sum + p.amount, 0) + transactions.length * 0.001).toFixed(3)} SOL
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>Total Job Value</span>
+                  <span style={{ fontSize: "13px", fontWeight: 700, color: "#ffffff", fontFamily: "monospace", display: "flex", alignItems: "center", gap: "4px" }}>
+                    <img src={USDC_LOGO_URL} alt="USDC" width={14} height={14} style={{ borderRadius: "50%" }} />
+                    {String(specData?.amount || "—")} USDC
+                  </span>
+                </div>
               </div>
             </div>
           )}
