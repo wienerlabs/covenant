@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import StatusBadge from "./StatusBadge";
 import AsciiAnimation from "./AsciiAnimation";
 import { formatAddress } from "@/lib/format";
@@ -120,9 +121,19 @@ export default function JobCard({
           }}>
             {categoryInfo.tag} · {categoryInfo.label}
           </span>
-          <span style={{ fontSize: "10px", color: isDark ? "rgba(255,255,255,0.35)" : "#999" }}>
+          <Link
+            href={`/job/${job.id}`}
+            style={{
+              fontSize: "10px",
+              color: isDark ? "rgba(255,255,255,0.35)" : "#999",
+              textDecoration: "none",
+              transition: "color 0.15s ease",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = isDark ? "rgba(255,255,255,0.7)" : "#555"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = isDark ? "rgba(255,255,255,0.35)" : "#999"; }}
+          >
             {formatAddress(job.id)}
-          </span>
+          </Link>
         </div>
 
         <div style={{ fontSize: "22px", fontWeight: 700, color: isDark ? "#ffffff" : "#000000", display: "flex", alignItems: "center", gap: "8px" }}>
