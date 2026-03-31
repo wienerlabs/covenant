@@ -16,8 +16,21 @@ const pixelifySans = Pixelify_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "COVENANT",
+  title: "COVENANT — Trustless Work Delivery on Solana",
   description: "Trustless job escrow on Solana.",
+  openGraph: {
+    title: "COVENANT — Trustless Work Delivery on Solana",
+    description: "Lock payment on-chain. Prove work with zero-knowledge proofs. Get paid automatically.",
+    url: "https://covenant-omega.vercel.app",
+    siteName: "COVENANT",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "COVENANT — Trustless Work Delivery on Solana",
+    description: "Lock payment on-chain. Prove work with zero-knowledge proofs. Get paid automatically.",
+    site: "@covenant_sol",
+  },
 };
 
 export default function RootLayout({
