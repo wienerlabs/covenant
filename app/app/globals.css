@@ -44,6 +44,10 @@ body {
   border-radius: 4px;
 }
 
+/* Light mode toggle */
+body.light-mode { background: #fff; color: #000; }
+body.light-mode .glass-card { background: rgba(0,0,0,0.05); border-color: #ddd; }
+
 @media (max-width: 768px) {
   .hero-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
   .hero-title { font-size: 36px !important; }

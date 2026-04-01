@@ -6,6 +6,7 @@ import useProfile from "@/hooks/useProfile";
 import WalletButton from "./WalletButton";
 import PixelAvatar from "./PixelAvatar";
 import NotificationBell from "./NotificationBell";
+import ThemeToggle from "./ThemeToggle";
 
 type Tab = "home" | "poster" | "taker" | "leaderboard" | "arena" | "proof" | "architecture" | "events" | "admin";
 
@@ -123,6 +124,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         {isConnected && account && (
           <NotificationBell wallet={account} variant={isDark ? "dark" : "light"} />
         )}
+        <ThemeToggle />
         <WalletButton />
       </div>
     </nav>
