@@ -79,6 +79,12 @@ export default function ArenaPage() {
   const [zkData, setZkData] = useState<Record<string, unknown> | null>(null);
   const [deliverablePreview, setDeliverablePreview] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<"idle" | "created" | "accepted" | "completed">("idle");
+  const [perfTimestamps, setPerfTimestamps] = useState<Record<string, number>>({});
+  const [perfMetrics, setPerfMetrics] = useState<{
+    alphaResponseTime: number | null;
+    omegaResponseTime: number | null;
+    totalRoundTime: number | null;
+  } | null>(null);
   const [transactions, setTransactions] = useState<{label: string; txHash: string}[]>([]);
   const [x402Payments, setX402Payments] = useState<{from: string; to: string; amount: number; memo: string; txHash: string}[]>([]);
   const logPanelRef = useRef<HTMLDivElement>(null);
@@ -91,6 +97,9 @@ export default function ArenaPage() {
 
   const handleEvent = useCallback((event: ArenaEvent) => {
     setLogs((prev) => [...prev, { timestamp: getTimestamp(), event }]);
+
+    // Track timestamps for performance metrics
+    setPerfTimestamps((prev) => ({ ...prev, [event.step]: Date.now() }));
 
     switch (event.step) {
       case "alpha_thinking":
@@ -198,6 +207,20 @@ export default function ArenaPage() {
       case "complete":
         setAlphaState("celebrating");
         setOmegaState("celebrating");
+        // Compute perf metrics
+        setPerfTimestamps((prev) => {
+          const now = Date.now();
+          const ts = { ...prev, complete: now };
+          const alphaResp = ts.job_created && ts.alpha_thinking ? ts.job_created - ts.alpha_thinking : null;
+          const omegaResp = ts.omega_completed && ts.omega_thinking ? ts.omega_completed - ts.omega_thinking : null;
+          const totalTime = ts.alpha_thinking ? now - ts.alpha_thinking : null;
+          setPerfMetrics({
+            alphaResponseTime: alphaResp,
+            omegaResponseTime: omegaResp,
+            totalRoundTime: totalTime,
+          });
+          return ts;
+        });
         setTimeout(() => {
           setAlphaState("idle");
           setOmegaState("idle");
@@ -229,6 +252,8 @@ export default function ArenaPage() {
     setJobStatus("idle");
     setTransactions([]);
     setX402Payments([]);
+    setPerfTimestamps({});
+    setPerfMetrics(null);
 
     try {
       const response = await fetch("/api/arena/run", { method: "POST" });
@@ -1728,6 +1753,66 @@ export default function ArenaPage() {
                     {String(specData?.amount || "—")} USDC
                   </span>
                 </div>
+              </div>
+            </div>
+          )}
+          {/* Performance Metrics */}
+          {done && perfMetrics && (
+            <div
+              style={{
+                backgroundColor: "rgba(0,0,0,0.4)",
+                border: "1px solid rgba(147,197,253,0.2)",
+                borderRadius: "10px",
+                padding: "20px",
+                backdropFilter: "blur(12px)",
+                marginTop: "24px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  color: "#93c5fd",
+                  marginBottom: "16px",
+                  fontWeight: 600,
+                }}
+              >
+                Performance
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "20px", fontWeight: 700, color: "#3B82F6" }}>
+                    {perfMetrics.alphaResponseTime !== null ? (perfMetrics.alphaResponseTime / 1000).toFixed(1) + "s" : "--"}
+                  </div>
+                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "4px" }}>
+                    Alpha Response
+                  </div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "20px", fontWeight: 700, color: "#10B981" }}>
+                    {perfMetrics.omegaResponseTime !== null ? (perfMetrics.omegaResponseTime / 1000).toFixed(1) + "s" : "--"}
+                  </div>
+                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "4px" }}>
+                    Omega Response
+                  </div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "20px", fontWeight: 700, color: "#fff" }}>
+                    {perfMetrics.totalRoundTime !== null ? (perfMetrics.totalRoundTime / 1000).toFixed(1) + "s" : "--"}
+                  </div>
+                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "4px" }}>
+                    Total Round Time
+                  </div>
+                </div>
+              </div>
+              <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "12px", display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                <span style={{ color: "rgba(255,255,255,0.4)" }}>
+                  Est. Haiku Tokens: ~3,000 (3 calls x ~1,000)
+                </span>
+                <span style={{ color: "rgba(255,255,255,0.4)" }}>
+                  Est. API Cost: ~$0.009 (3 x $0.003)
+                </span>
               </div>
             </div>
           )}
