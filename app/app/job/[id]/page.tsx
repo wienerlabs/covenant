@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import StatusBadge from "@/components/StatusBadge";
+import JobTimeline from "@/components/JobTimeline";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
 import { formatAddress } from "@/lib/format";
@@ -33,6 +34,8 @@ interface Job {
   specHash?: string;
   txHash?: string | null;
   specJson?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
   submissions?: Submission[];
 }
 
@@ -402,6 +405,18 @@ export default function JobDetailPage() {
                   </div>
                 </div>
               )}
+
+              {/* Job Timeline */}
+              <JobTimeline
+                job={{
+                  id: job.id,
+                  status: job.status,
+                  createdAt: job.createdAt || new Date().toISOString(),
+                  updatedAt: job.updatedAt || new Date().toISOString(),
+                  txHash: job.txHash,
+                }}
+                submissions={job.submissions || []}
+              />
 
               {/* Action buttons */}
               <div style={{ display: "flex", gap: "12px" }}>
