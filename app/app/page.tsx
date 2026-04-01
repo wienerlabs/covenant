@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import TopographicBlob from "@/components/TopographicBlob";
+import GasTracker from "@/components/GasTracker";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 
 interface ActivityItem {
@@ -490,6 +491,20 @@ export default function LandingPage() {
               }}
             >
               Active Users
+            </div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <GasTracker variant="inline" />
+            <div
+              style={{
+                fontSize: "10px",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                color: "rgba(255,255,255,0.4)",
+                marginTop: "4px",
+              }}
+            >
+              Protocol Gas
             </div>
           </div>
         </div>
