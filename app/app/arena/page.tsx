@@ -79,7 +79,7 @@ export default function ArenaPage() {
   const [zkData, setZkData] = useState<Record<string, unknown> | null>(null);
   const [deliverablePreview, setDeliverablePreview] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<"idle" | "created" | "accepted" | "completed">("idle");
-  const [perfTimestamps, setPerfTimestamps] = useState<Record<string, number>>({});
+  const [perfTimestamps, setPerfTimestamps] = useState<{ [key: string]: number }>({});
   const [perfMetrics, setPerfMetrics] = useState<{
     alphaResponseTime: number | null;
     omegaResponseTime: number | null;
@@ -210,10 +210,10 @@ export default function ArenaPage() {
         // Compute perf metrics
         setPerfTimestamps((prev) => {
           const now = Date.now();
-          const ts = { ...prev, complete: now };
-          const alphaResp = ts.job_created && ts.alpha_thinking ? ts.job_created - ts.alpha_thinking : null;
-          const omegaResp = ts.omega_completed && ts.omega_thinking ? ts.omega_completed - ts.omega_thinking : null;
-          const totalTime = ts.alpha_thinking ? now - ts.alpha_thinking : null;
+          const ts: { [key: string]: number } = { ...prev, complete: now };
+          const alphaResp = ts["job_created"] && ts["alpha_thinking"] ? ts["job_created"] - ts["alpha_thinking"] : null;
+          const omegaResp = ts["omega_completed"] && ts["omega_thinking"] ? ts["omega_completed"] - ts["omega_thinking"] : null;
+          const totalTime = ts["alpha_thinking"] ? now - ts["alpha_thinking"] : null;
           setPerfMetrics({
             alphaResponseTime: alphaResp,
             omegaResponseTime: omegaResp,
