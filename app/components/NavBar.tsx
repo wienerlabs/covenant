@@ -8,7 +8,7 @@ import PixelAvatar from "./PixelAvatar";
 import NotificationBell from "./NotificationBell";
 import ThemeToggle from "./ThemeToggle";
 
-type Tab = "home" | "poster" | "taker" | "leaderboard" | "arena" | "proof" | "architecture" | "events" | "admin";
+type Tab = "home" | "poster" | "taker" | "leaderboard" | "arena" | "proof" | "architecture" | "events" | "admin" | "onchain";
 
 interface NavBarProps {
   activeTab: Tab;
@@ -24,6 +24,7 @@ const TABS: { id: Tab; label: string; href: string }[] = [
   { id: "proof", label: "ZK Proof", href: "/proof" },
   { id: "architecture", label: "Arch", href: "/architecture" },
   { id: "events", label: "Events", href: "/events" },
+  { id: "onchain", label: "On-Chain", href: "/onchain" },
   { id: "admin", label: "DB", href: "/admin" },
 ];
 
