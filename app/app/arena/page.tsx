@@ -49,9 +49,20 @@ function truncateWallet(addr: string): string {
   return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
 }
 
+interface MultiRoundSummary {
+  totalRounds: number;
+  totalJobs: number;
+  totalUsdc: number;
+  totalTx: number;
+  avgTimePerRound: number;
+}
+
 export default function ArenaPage() {
   const [running, setRunning] = useState(false);
   const [round, setRound] = useState(0);
+  const [selectedRounds, setSelectedRounds] = useState(1);
+  const [currentRoundOf, setCurrentRoundOf] = useState(0);
+  const [multiRoundSummary, setMultiRoundSummary] = useState<MultiRoundSummary | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [alphaState, setAlphaState] = useState<AgentState>("idle");
   const [omegaState, setOmegaState] = useState<AgentState>("idle");
@@ -199,9 +210,11 @@ export default function ArenaPage() {
     }
   }, []);
 
-  async function runArena() {
-    setRunning(true);
-    setDone(false);
+  async function runSingleRound(): Promise<{ jobCount: number; usdcTotal: number; txCount: number }> {
+    let jobCount = 0;
+    let usdcTotal = 0;
+    let txCount = 0;
+
     setLogs([]);
     setAlphaThought(null);
     setOmegaThought(null);
@@ -216,7 +229,6 @@ export default function ArenaPage() {
     setJobStatus("idle");
     setTransactions([]);
     setX402Payments([]);
-    setRound((prev) => prev + 1);
 
     try {
       const response = await fetch("/api/arena/run", { method: "POST" });
@@ -227,8 +239,7 @@ export default function ArenaPage() {
           message: "Failed to start arena: " + response.statusText,
           data: null,
         });
-        setRunning(false);
-        return;
+        return { jobCount, usdcTotal, txCount };
       }
 
       const reader = response.body.getReader();
@@ -249,6 +260,8 @@ export default function ArenaPage() {
           try {
             const event: ArenaEvent = JSON.parse(trimmed);
             handleEvent(event);
+            if (event.step === "job_created") { jobCount++; usdcTotal += Number(event.data?.amount || 0); }
+            if (event.data && typeof event.data.txHash === "string") { txCount++; }
             if (event.step === "complete" || event.step === "error") {
               setDone(true);
             }
@@ -263,6 +276,8 @@ export default function ArenaPage() {
         try {
           const event: ArenaEvent = JSON.parse(buffer.trim());
           handleEvent(event);
+          if (event.step === "job_created") { jobCount++; usdcTotal += Number(event.data?.amount || 0); }
+          if (event.data && typeof event.data.txHash === "string") { txCount++; }
           if (event.step === "complete" || event.step === "error") {
             setDone(true);
           }
@@ -276,10 +291,47 @@ export default function ArenaPage() {
         message: "Arena error: " + String(err),
         data: null,
       });
-    } finally {
-      setRunning(false);
-      setDone(true);
     }
+
+    return { jobCount, usdcTotal, txCount };
+  }
+
+  async function runArena() {
+    setRunning(true);
+    setDone(false);
+    setMultiRoundSummary(null);
+    setRound((prev) => prev + 1);
+
+    const totalRounds = selectedRounds;
+    let totalJobs = 0;
+    let totalUsdc = 0;
+    let totalTx = 0;
+    const startTime = Date.now();
+
+    for (let r = 1; r <= totalRounds; r++) {
+      setCurrentRoundOf(r);
+      const result = await runSingleRound();
+      totalJobs += result.jobCount;
+      totalUsdc += result.usdcTotal;
+      totalTx += result.txCount;
+    }
+
+    const elapsed = Date.now() - startTime;
+    const avgTime = elapsed / totalRounds;
+
+    if (totalRounds > 1) {
+      setMultiRoundSummary({
+        totalRounds,
+        totalJobs,
+        totalUsdc,
+        totalTx,
+        avgTimePerRound: avgTime,
+      });
+    }
+
+    setCurrentRoundOf(0);
+    setRunning(false);
+    setDone(true);
   }
 
   function copyWallet(wallet: string, agent: "alpha" | "omega") {
@@ -528,6 +580,43 @@ export default function ArenaPage() {
             Watch AI agents autonomously negotiate, deliver, and settle on-chain
           </p>
 
+          {/* Rounds Selector */}
+          <div
+            style={{
+              textAlign: "center",
+              marginBottom: "12px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+            }}
+          >
+            <span style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.4)" }}>
+              Rounds:
+            </span>
+            {[1, 3, 5].map((n) => (
+              <button
+                key={n}
+                onClick={() => !running && setSelectedRounds(n)}
+                disabled={running}
+                style={{
+                  fontFamily: "inherit",
+                  fontSize: "12px",
+                  fontWeight: selectedRounds === n ? 700 : 400,
+                  padding: "4px 14px",
+                  cursor: running ? "not-allowed" : "pointer",
+                  border: selectedRounds === n ? "1px solid #ffffff" : "1px solid rgba(255,255,255,0.2)",
+                  borderRadius: "4px",
+                  backgroundColor: selectedRounds === n ? "rgba(255,255,255,0.15)" : "transparent",
+                  color: selectedRounds === n ? "#ffffff" : "rgba(255,255,255,0.5)",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+
           {/* Controls */}
           <div
             style={{
@@ -539,7 +628,24 @@ export default function ArenaPage() {
               gap: "16px",
             }}
           >
-            {round > 0 && (
+            {currentRoundOf > 0 && selectedRounds > 1 && (
+              <span
+                style={{
+                  fontSize: "10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  color: "#fde68a",
+                  border: "1px solid rgba(253,230,138,0.3)",
+                  padding: "4px 12px",
+                  borderRadius: "4px",
+                  backgroundColor: "rgba(253,230,138,0.1)",
+                  fontWeight: 600,
+                }}
+              >
+                Round {currentRoundOf}/{selectedRounds}
+              </span>
+            )}
+            {round > 0 && !currentRoundOf && (
               <span
                 style={{
                   fontSize: "10px",
@@ -582,6 +688,54 @@ export default function ArenaPage() {
               {running ? "Running..." : done ? "Run Again" : "Start Arena"}
             </button>
           </div>
+
+          {/* Multi-Round Summary */}
+          {multiRoundSummary && (
+            <div
+              style={{
+                backgroundColor: "rgba(0,0,0,0.4)",
+                border: "1px solid rgba(134,239,172,0.25)",
+                borderRadius: "10px",
+                padding: "20px",
+                backdropFilter: "blur(12px)",
+                marginBottom: "24px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  color: "#86efac",
+                  marginBottom: "16px",
+                  fontWeight: 600,
+                }}
+              >
+                Multi-Round Summary ({multiRoundSummary.totalRounds} Rounds)
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "16px" }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "24px", fontWeight: 700, color: "#fff" }}>{multiRoundSummary.totalJobs}</div>
+                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "4px" }}>Jobs Created</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "24px", fontWeight: 700, color: "#fff", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <img src={USDC_LOGO_URL} alt="USDC" width={18} height={18} style={{ borderRadius: "50%" }} />
+                    {multiRoundSummary.totalUsdc.toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "4px" }}>Total USDC</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "24px", fontWeight: 700, color: "#fff" }}>{multiRoundSummary.totalTx}</div>
+                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "4px" }}>Total TX</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "24px", fontWeight: 700, color: "#fff" }}>{(multiRoundSummary.avgTimePerRound / 1000).toFixed(1)}s</div>
+                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "4px" }}>Avg Time/Round</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Agent Panels */}
           <div style={{ display: "flex", gap: "24px", marginBottom: "24px" }}>
