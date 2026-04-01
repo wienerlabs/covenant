@@ -27,6 +27,14 @@ export default function ProofPage() {
   const [minWords, setMinWords] = useState(100);
   const [wordCount, setWordCount] = useState(0);
   const [hash, setHash] = useState("");
+  const [executing, setExecuting] = useState(false);
+  const [circuitResult, setCircuitResult] = useState<{
+    passed: boolean;
+    wordCount: number;
+    textHash: string;
+    cycleCount: number;
+    executionTime: string;
+  } | null>(null);
 
   const computeHash = useCallback(async (input: string) => {
     if (!input.trim()) {
@@ -53,6 +61,27 @@ export default function ProofPage() {
 
   const wouldPass = wordCount >= minWords && text.trim().length > 0;
   const progress = minWords > 0 ? Math.min((wordCount / minWords) * 100, 100) : 0;
+
+  async function executeCircuit() {
+    if (!text.trim()) return;
+    setExecuting(true);
+    setCircuitResult(null);
+    try {
+      const res = await fetch("/api/proof/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, minWords }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCircuitResult(data);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setExecuting(false);
+    }
+  }
 
   const glassCard: React.CSSProperties = {
     backgroundColor: "rgba(255,255,255,0.07)",
@@ -399,6 +428,76 @@ export default function ProofPage() {
                   </span>
                 </div>
               </div>
+
+              {/* Execute Circuit Button */}
+              <button
+                onClick={executeCircuit}
+                disabled={executing || !text.trim()}
+                style={{
+                  width: "100%",
+                  fontFamily: "inherit",
+                  fontSize: "12px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  fontWeight: 600,
+                  padding: "10px 0",
+                  cursor: executing || !text.trim() ? "not-allowed" : "pointer",
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  borderRadius: "6px",
+                  backgroundColor: executing ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.1)",
+                  color: executing || !text.trim() ? "rgba(255,255,255,0.3)" : "#ffffff",
+                  backdropFilter: "blur(8px)",
+                  transition: "all 0.15s ease",
+                  marginBottom: circuitResult ? "16px" : "0",
+                }}
+              >
+                {executing ? "Executing..." : "Execute Circuit"}
+              </button>
+
+              {/* Circuit Execution Result */}
+              {circuitResult && (
+                <div
+                  style={{
+                    backgroundColor: "rgba(0,0,0,0.3)",
+                    borderRadius: "6px",
+                    padding: "16px",
+                    border: `1px solid ${circuitResult.passed ? "rgba(134,239,172,0.3)" : "rgba(252,165,165,0.3)"}`,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        color: circuitResult.passed ? "#86efac" : "#fca5a5",
+                      }}
+                    >
+                      {circuitResult.passed ? "PASS" : "FAIL"}
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "11px" }}>
+                    <div>
+                      <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "2px" }}>Cycle Count</div>
+                      <div style={{ color: "#fff", fontFamily: "monospace" }}>{circuitResult.cycleCount.toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "2px" }}>Execution Time</div>
+                      <div style={{ color: "#fff", fontFamily: "monospace" }}>{circuitResult.executionTime}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "2px" }}>Word Count</div>
+                      <div style={{ color: "#fff", fontFamily: "monospace" }}>{circuitResult.wordCount}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "2px" }}>Hash Computed</div>
+                      <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "10px", wordBreak: "break-all" }}>
+                        {circuitResult.textHash.slice(0, 16)}...
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Circuit test results */}
