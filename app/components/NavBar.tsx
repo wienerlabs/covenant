@@ -6,8 +6,9 @@ import useProfile from "@/hooks/useProfile";
 import WalletButton from "./WalletButton";
 import PixelAvatar from "./PixelAvatar";
 import NotificationBell from "./NotificationBell";
+import ThemeToggle from "./ThemeToggle";
 
-type Tab = "home" | "poster" | "taker" | "leaderboard" | "arena" | "proof" | "architecture" | "admin";
+type Tab = "home" | "poster" | "taker" | "leaderboard" | "arena" | "proof" | "architecture" | "events" | "admin" | "onchain";
 
 interface NavBarProps {
   activeTab: Tab;
@@ -22,6 +23,8 @@ const TABS: { id: Tab; label: string; href: string }[] = [
   { id: "arena", label: "Arena", href: "/arena" },
   { id: "proof", label: "ZK Proof", href: "/proof" },
   { id: "architecture", label: "Arch", href: "/architecture" },
+  { id: "events", label: "Events", href: "/events" },
+  { id: "onchain", label: "On-Chain", href: "/onchain" },
   { id: "admin", label: "DB", href: "/admin" },
 ];
 
@@ -77,7 +80,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         Covenant
       </Link>
 
-      <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
+      <div className="nav-tabs" style={{ display: "flex", gap: "20px", alignItems: "center" }}>
         {visibleTabs.map((tab) => (
           <Link key={tab.id} href={tab.href} style={tabStyle(tab.id)}>
             {tab.label}
@@ -122,6 +125,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         {isConnected && account && (
           <NotificationBell wallet={account} variant={isDark ? "dark" : "light"} />
         )}
+        <ThemeToggle />
         <WalletButton />
       </div>
     </nav>

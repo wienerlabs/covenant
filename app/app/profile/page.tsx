@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useConnector } from "@solana/connector/react";
 import Link from "next/link";
 import useProfile from "@/hooks/useProfile";
@@ -12,8 +13,79 @@ import { formatAddress } from "@/lib/format";
 export default function ProfilePage() {
   const { isConnected, account } = useConnector();
   const wallet = isConnected && account ? account : undefined;
-  const { profile, loading } = useProfile(wallet);
+  const { profile, loading, refetch } = useProfile(wallet);
   const { reputation } = useReputation(wallet || null);
+
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editBio, setEditBio] = useState("");
+  const [editRole, setEditRole] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function openEdit() {
+    if (!profile) return;
+    setEditName(profile.displayName || "");
+    setEditBio(profile.bio || "");
+    setEditRole(profile.role || "taker");
+    setSaveError(null);
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setSaveError(null);
+  }
+
+  async function saveEdit() {
+    if (!wallet || !profile) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch(`/api/profile/${wallet}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: editName,
+          bio: editBio,
+          role: editRole,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setSaveError(data.error || "Failed to save");
+        return;
+      }
+      setEditing(false);
+      if (refetch) refetch();
+    } catch {
+      setSaveError("Network error. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    fontFamily: "inherit",
+    fontSize: "13px",
+    padding: "8px 12px",
+    border: "1px solid rgba(255,255,255,0.2)",
+    borderRadius: "6px",
+    backgroundColor: "rgba(255,255,255,0.07)",
+    color: "#fff",
+    width: "100%",
+    outline: "none",
+    boxSizing: "border-box",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: "10px",
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.08em",
+    color: "rgba(255,255,255,0.45)",
+    marginBottom: "6px",
+    display: "block",
+  };
 
   return (
     <div style={{ minHeight: "100vh", position: "relative" }}>
@@ -84,35 +156,151 @@ export default function ProfilePage() {
                 backdropFilter: "blur(16px)",
                 padding: "32px",
               }}>
-                <div style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
-                  <PixelAvatar seed={profile.avatarSeed} size={80} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "24px", fontWeight: 700, color: "#fff", marginBottom: "4px" }}>
-                      {profile.displayName}
+                {editing ? (
+                  /* Edit mode */
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", marginBottom: "4px" }}>
+                      Edit Profile
                     </div>
-                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "12px", display: "flex", gap: "12px", alignItems: "center" }}>
-                      <span>{formatAddress(wallet!)}</span>
-                      <span style={{
-                        padding: "2px 8px",
-                        border: "1px solid rgba(255,255,255,0.2)",
-                        borderRadius: "4px",
-                        fontSize: "10px",
-                        textTransform: "uppercase",
-                      }}>
-                        {profile.role}
-                      </span>
+
+                    <div>
+                      <label style={labelStyle}>Display Name</label>
+                      <input
+                        style={inputStyle}
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Your display name"
+                        maxLength={50}
+                      />
                     </div>
-                    {profile.bio && (
-                      <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", lineHeight: 1.6 }}>
-                        {profile.bio}
+
+                    <div>
+                      <label style={labelStyle}>Bio</label>
+                      <textarea
+                        style={{ ...inputStyle, resize: "vertical", minHeight: "80px" }}
+                        value={editBio}
+                        onChange={(e) => setEditBio(e.target.value)}
+                        placeholder="Short bio (optional)"
+                        maxLength={280}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={labelStyle}>Role</label>
+                      <select
+                        style={{ ...inputStyle, cursor: "pointer" }}
+                        value={editRole}
+                        onChange={(e) => setEditRole(e.target.value)}
+                      >
+                        <option value="poster" style={{ backgroundColor: "#1a1a1a" }}>Poster</option>
+                        <option value="taker" style={{ backgroundColor: "#1a1a1a" }}>Taker</option>
+                        <option value="both" style={{ backgroundColor: "#1a1a1a" }}>Both</option>
+                      </select>
+                    </div>
+
+                    {saveError && (
+                      <div style={{ fontSize: "12px", color: "rgba(255,100,100,0.8)" }}>
+                        {saveError}
                       </div>
                     )}
-                  </div>
-                </div>
 
-                <div style={{ marginTop: "20px", fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
-                  Member since {new Date(profile.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-                </div>
+                    <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+                      <button
+                        onClick={saveEdit}
+                        disabled={saving}
+                        style={{
+                          fontFamily: "inherit",
+                          fontSize: "12px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          padding: "8px 20px",
+                          cursor: saving ? "not-allowed" : "pointer",
+                          border: "1px solid rgba(255,255,255,0.3)",
+                          borderRadius: "6px",
+                          backgroundColor: saving ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.12)",
+                          color: "#fff",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        {saving ? "Saving..." : "Save"}
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        disabled={saving}
+                        style={{
+                          fontFamily: "inherit",
+                          fontSize: "12px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          padding: "8px 20px",
+                          cursor: "pointer",
+                          border: "1px solid rgba(255,255,255,0.15)",
+                          borderRadius: "6px",
+                          backgroundColor: "transparent",
+                          color: "rgba(255,255,255,0.6)",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* View mode */
+                  <>
+                    <div style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
+                      <PixelAvatar seed={profile.avatarSeed} size={80} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                          <div style={{ fontSize: "24px", fontWeight: 700, color: "#fff", marginBottom: "4px" }}>
+                            {profile.displayName}
+                          </div>
+                          <button
+                            onClick={openEdit}
+                            style={{
+                              fontFamily: "inherit",
+                              fontSize: "10px",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              padding: "4px 12px",
+                              cursor: "pointer",
+                              border: "1px solid rgba(255,255,255,0.2)",
+                              borderRadius: "4px",
+                              backgroundColor: "transparent",
+                              color: "rgba(255,255,255,0.5)",
+                              transition: "all 0.15s ease",
+                              flexShrink: 0,
+                              marginLeft: "12px",
+                            }}
+                          >
+                            Edit
+                          </button>
+                        </div>
+                        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "12px", display: "flex", gap: "12px", alignItems: "center" }}>
+                          <span>{formatAddress(wallet!)}</span>
+                          <span style={{
+                            padding: "2px 8px",
+                            border: "1px solid rgba(255,255,255,0.2)",
+                            borderRadius: "4px",
+                            fontSize: "10px",
+                            textTransform: "uppercase",
+                          }}>
+                            {profile.role}
+                          </span>
+                        </div>
+                        {profile.bio && (
+                          <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", lineHeight: 1.6 }}>
+                            {profile.bio}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: "20px", fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
+                      Member since {new Date(profile.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Reputation */}

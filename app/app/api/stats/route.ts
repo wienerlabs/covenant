@@ -24,12 +24,16 @@ export async function GET() {
 
     const activeUsers = await prisma.profile.count();
 
+    const totalTransactions = await prisma.transaction.count();
+    const totalTxFees = totalTransactions * 0.000005; // Average Solana fee
+
     return NextResponse.json({
       totalJobs,
       totalLocked,
       completed,
       successRate: Math.round(successRate * 10) / 10,
       activeUsers,
+      totalTxFees,
     });
   } catch (error) {
     console.error("GET /api/stats error:", error);

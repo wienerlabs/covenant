@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
+import { rateLimit } from "@/lib/rateLimit";
 import crypto from "crypto";
 
 export async function GET(request: NextRequest) {
@@ -56,6 +57,15 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
+  const rl = rateLimit(`jobs:${ip}`, 20);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Max 20 job creations per minute." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+    );
+  }
+
   try {
     const body = await request.json();
     const { posterWallet, amount, minWords, language, deadline, category, paymentToken } = body;

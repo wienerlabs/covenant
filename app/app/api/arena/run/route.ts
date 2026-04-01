@@ -3,9 +3,11 @@ import { sendMarkerTransaction } from "@/lib/solana";
 import { sendX402Payment, getAgentKeypair } from "@/lib/x402";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
+import { rateLimit } from "@/lib/rateLimit";
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
 import { Keypair } from "@solana/web3.js";
+import { NextRequest } from "next/server";
 
 function getDeployerWallet(): string {
   const raw = process.env.DEPLOYER_KEYPAIR;
@@ -47,7 +49,16 @@ async function ensureAgentProfiles() {
   });
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
+  const rl = rateLimit(`arena:${ip}`, 5);
+  if (!rl.allowed) {
+    return new Response(
+      JSON.stringify({ error: "Rate limit exceeded. Max 5 requests per minute." }),
+      { status: 429, headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+    );
+  }
+
   const encoder = new TextEncoder();
   const startTime = Date.now();
 
