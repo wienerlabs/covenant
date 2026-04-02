@@ -10,6 +10,16 @@ import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
 import { formatAddress } from "@/lib/format";
 
+interface DisputeData {
+  id: string;
+  jobId: string;
+  raisedBy: string;
+  reason: string;
+  status: string;
+  resolution: string | null;
+  createdAt: string;
+}
+
 interface Submission {
   id: string;
   takerWallet: string;
@@ -54,6 +64,7 @@ export default function JobDetailPage() {
   const id = params?.id as string;
 
   const [job, setJob] = useState<Job | null>(null);
+  const [disputes, setDisputes] = useState<DisputeData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -62,13 +73,19 @@ export default function JobDetailPage() {
     if (!id) return;
     async function fetchJob() {
       try {
-        const res = await fetch(`/api/jobs/${id}`);
-        if (!res.ok) {
-          setError(res.status === 404 ? "Job not found." : "Failed to load job.");
+        const [jobRes, disputeRes] = await Promise.all([
+          fetch(`/api/jobs/${id}`),
+          fetch(`/api/disputes?jobId=${id}`),
+        ]);
+        if (!jobRes.ok) {
+          setError(jobRes.status === 404 ? "Job not found." : "Failed to load job.");
           return;
         }
-        const data = await res.json();
+        const data = await jobRes.json();
         setJob(data);
+        if (disputeRes.ok) {
+          setDisputes(await disputeRes.json());
+        }
       } catch {
         setError("Failed to load job.");
       } finally {
@@ -200,8 +217,27 @@ export default function JobDetailPage() {
           </Link>
 
           {loading ? (
-            <div style={{ ...cardStyle, textAlign: "center", color: "rgba(255,255,255,0.4)", padding: "64px" }}>
-              Loading job...
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              <div style={cardStyle}>
+                <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
+                  <div className="shimmer" style={{ width: "70px", height: "20px", borderRadius: "4px" }} />
+                  <div className="shimmer" style={{ width: "120px", height: "20px", borderRadius: "6px" }} />
+                </div>
+                <div className="shimmer" style={{ width: "80%", height: "28px", borderRadius: "4px", marginBottom: "20px" }} />
+                <div className="shimmer" style={{ width: "150px", height: "32px", borderRadius: "4px", marginBottom: "20px" }} />
+                <div className="shimmer" style={{ width: "100%", height: "60px", borderRadius: "4px" }} />
+              </div>
+              <div style={cardStyle}>
+                <div className="shimmer" style={{ width: "100px", height: "12px", borderRadius: "4px", marginBottom: "20px" }} />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i}>
+                      <div className="shimmer" style={{ width: "60px", height: "10px", borderRadius: "4px", marginBottom: "6px" }} />
+                      <div className="shimmer" style={{ width: "180px", height: "14px", borderRadius: "4px" }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : error ? (
             <div style={{ ...cardStyle, textAlign: "center", color: "rgba(255,100,100,0.8)", padding: "64px" }}>
@@ -212,7 +248,7 @@ export default function JobDetailPage() {
               {/* Header card */}
               <div style={cardStyle}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
-                  <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled"} />
+                  <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed"} />
                   <span style={{
                     fontSize: "10px",
                     padding: "2px 8px",
@@ -417,6 +453,56 @@ export default function JobDetailPage() {
                 }}
                 submissions={job.submissions || []}
               />
+
+              {/* Disputes */}
+              {disputes.length > 0 && (
+                <div style={{ ...cardStyle, borderColor: "rgba(245,158,11,0.3)" }}>
+                  <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.1em", color: "#f59e0b", marginBottom: "20px" }}>
+                    Disputes ({disputes.length})
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    {disputes.map((d) => (
+                      <div
+                        key={d.id}
+                        style={{
+                          border: "1px solid rgba(245,158,11,0.15)",
+                          borderRadius: "8px",
+                          padding: "16px",
+                          backgroundColor: "rgba(245,158,11,0.05)",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                          <span style={{
+                            fontSize: "10px",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                            backgroundColor: d.status === "open" ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.07)",
+                            color: d.status === "open" ? "#f59e0b" : "rgba(255,255,255,0.5)",
+                            border: `1px solid ${d.status === "open" ? "rgba(245,158,11,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            textTransform: "uppercase",
+                          }}>
+                            {d.status.replace("_", " ")}
+                          </span>
+                          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
+                            {formatJobDate(d.createdAt)}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.8)", lineHeight: 1.6, marginBottom: "8px" }}>
+                          {d.reason}
+                        </div>
+                        <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
+                          Raised by: {formatAddress(d.raisedBy)}
+                        </div>
+                        {d.resolution && (
+                          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)", marginTop: "8px" }}>
+                            {d.resolution}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Action buttons */}
               <div style={{ display: "flex", gap: "12px" }}>

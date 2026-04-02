@@ -6,6 +6,7 @@ import { useConnector } from "@solana/connector/react";
 import NavBar from "@/components/NavBar";
 import PixelAvatar from "@/components/PixelAvatar";
 import StatusBadge from "@/components/StatusBadge";
+import { StatCardSkeleton, JobCardSkeleton } from "@/components/LoadingSkeleton";
 import useProfile from "@/hooks/useProfile";
 import useReputation from "@/hooks/useReputation";
 import { formatAddress } from "@/lib/format";
@@ -195,8 +196,8 @@ export default function DashboardPage() {
 
           {/* Job list */}
           {loading ? (
-            <div style={{ textAlign: "center", padding: "48px", color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>
-              Loading...
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {[1, 2, 3].map((i) => <JobCardSkeleton key={i} />)}
             </div>
           ) : jobs.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px", color: "rgba(255,255,255,0.4)", fontSize: "12px", textTransform: "uppercase" }}>
@@ -224,7 +225,7 @@ export default function DashboardPage() {
                       onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled"} />
+                        <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed"} />
                         <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)", backgroundColor: "rgba(255,255,255,0.06)" }}>
                           {cat.tag}
                         </span>

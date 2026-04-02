@@ -14,6 +14,7 @@ interface JobCardProps {
   onAccept?: (jobId: string) => void;
   onOpenWork?: (jobId: string) => void;
   onCancel?: (jobId: string) => void;
+  onDispute?: (jobId: string) => void;
   connectedWallet?: string;
   variant?: "light" | "dark";
 }
@@ -23,6 +24,7 @@ const sceneMap: Record<string, "escrow" | "handshake" | "proof" | "idle"> = {
   Accepted: "handshake",
   Completed: "proof",
   Cancelled: "idle",
+  Disputed: "idle",
 };
 
 function formatJobDate(dateStr: string): string {
@@ -40,6 +42,7 @@ export default function JobCard({
   onAccept,
   onOpenWork,
   onCancel,
+  onDispute,
   connectedWallet,
   variant = "light",
 }: JobCardProps) {
@@ -107,7 +110,7 @@ export default function JobCard({
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled"} />
+          <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed"} />
           <span style={{
             fontSize: "10px",
             padding: "2px 8px",
@@ -198,8 +201,41 @@ export default function JobCard({
             </button>
           )}
           {job.status === "Completed" && (
+            <>
+              <Link
+                href={`/proof/${job.id}`}
+                style={{
+                  fontFamily: "inherit",
+                  fontSize: "12px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  padding: "8px 20px",
+                  textDecoration: "none",
+                  border: isDark ? "1px solid rgba(134,239,172,0.3)" : "1px solid #86efac",
+                  borderRadius: "6px",
+                  backgroundColor: isDark ? "rgba(134,239,172,0.1)" : "rgba(134,239,172,0.15)",
+                  color: "#86efac",
+                  transition: "all 0.15s ease",
+                  display: "inline-block",
+                }}
+              >
+                View Proof
+              </Link>
+              {onDispute && (isPoster || isTaker) && (
+                <button
+                  style={ghostBtn("dispute")}
+                  onMouseEnter={() => setBtnHover("dispute")}
+                  onMouseLeave={() => setBtnHover(null)}
+                  onClick={() => onDispute(job.id)}
+                >
+                  Raise Dispute
+                </button>
+              )}
+            </>
+          )}
+          {job.status === "Disputed" && (
             <Link
-              href={`/proof/${job.id}`}
+              href="/disputes"
               style={{
                 fontFamily: "inherit",
                 fontSize: "12px",
@@ -207,15 +243,15 @@ export default function JobCard({
                 letterSpacing: "0.05em",
                 padding: "8px 20px",
                 textDecoration: "none",
-                border: isDark ? "1px solid rgba(134,239,172,0.3)" : "1px solid #86efac",
+                border: isDark ? "1px solid rgba(245,158,11,0.3)" : "1px solid #f59e0b",
                 borderRadius: "6px",
-                backgroundColor: isDark ? "rgba(134,239,172,0.1)" : "rgba(134,239,172,0.15)",
-                color: "#86efac",
+                backgroundColor: isDark ? "rgba(245,158,11,0.1)" : "rgba(245,158,11,0.15)",
+                color: "#f59e0b",
                 transition: "all 0.15s ease",
                 display: "inline-block",
               }}
             >
-              View Proof
+              View Dispute
             </Link>
           )}
         </div>

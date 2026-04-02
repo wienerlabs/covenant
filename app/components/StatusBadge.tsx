@@ -1,5 +1,5 @@
 interface StatusBadgeProps {
-  status: "Open" | "Accepted" | "Completed" | "Cancelled";
+  status: "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed";
 }
 
 const statusStyles: Record<
@@ -8,12 +8,13 @@ const statusStyles: Record<
 > = {
   Open: { bg: "#ffffff", color: "#000000", borderColor: "#000000", prefix: "" },
   Accepted: { bg: "#000000", color: "#ffffff", borderColor: "#000000", prefix: "" },
-  Completed: { bg: "#000000", color: "#ffffff", borderColor: "#000000", prefix: "✓ " },
+  Completed: { bg: "#000000", color: "#ffffff", borderColor: "#000000", prefix: "\u2713 " },
   Cancelled: { bg: "#ffffff", color: "#999999", borderColor: "#999999", prefix: "" },
+  Disputed: { bg: "#f59e0b", color: "#000000", borderColor: "#f59e0b", prefix: "\u26A0 " },
 };
 
 export default function StatusBadge({ status }: StatusBadgeProps) {
-  const s = statusStyles[status];
+  const s = statusStyles[status] || statusStyles.Open;
 
   return (
     <span
