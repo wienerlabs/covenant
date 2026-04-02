@@ -9,7 +9,7 @@ import PixelAvatar from "./PixelAvatar";
 import NotificationBell from "./NotificationBell";
 import ThemeToggle from "./ThemeToggle";
 
-type Tab = "home" | "agents" | "poster" | "taker" | "dashboard" | "arena" | "leaderboard" | "proof" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet";
+type Tab = "home" | "agents" | "poster" | "taker" | "dashboard" | "arena" | "leaderboard" | "proof" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs";
 
 interface NavBarProps {
   activeTab: Tab;
@@ -34,6 +34,7 @@ const MORE_TABS: { id: Tab; label: string; href: string }[] = [
   { id: "disputes", label: "Disputes", href: "/disputes" },
   { id: "architecture", label: "Architecture", href: "/architecture" },
   { id: "admin", label: "DB Explorer", href: "/admin" },
+  { id: "api-docs", label: "API", href: "/api-docs" },
 ];
 
 export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
@@ -268,6 +269,23 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
           </div>
         </div>
       )}
+
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+        <span
+          style={{
+            fontSize: "9px",
+            color: isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)",
+            border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(0,0,0,0.15)",
+            borderRadius: "4px",
+            padding: "2px 6px",
+            cursor: "default",
+            letterSpacing: "0.05em",
+          }}
+          title="Command Palette"
+        >
+          {"\u2318"}K
+        </span>
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
         {isConnected && profile && (

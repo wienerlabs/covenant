@@ -6,6 +6,7 @@ import PixelAgent from "@/components/PixelAgent";
 import EscrowVisualizer from "@/components/EscrowVisualizer";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
+import { fireConfetti } from "@/lib/confetti";
 
 interface ArenaEvent {
   step: string;
@@ -265,6 +266,7 @@ export default function ArenaPage() {
       case "complete":
         setAlphaState("celebrating");
         setOmegaState("celebrating");
+        fireConfetti();
         // Compute perf metrics
         setPerfTimestamps((prev) => {
           const now = Date.now();

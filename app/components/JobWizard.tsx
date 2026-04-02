@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useConnector } from "@solana/connector/react";
 import { JOB_CATEGORIES, type CategoryId } from "@/lib/categories";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
+import { fireConfetti } from "@/lib/confetti";
 
 interface JobWizardProps {
   onComplete?: (data: Record<string, unknown>) => void;
@@ -92,6 +93,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
       const jobResult = await res.json();
       setResult({ jobId: jobResult.id || jobResult.jobId, txHash: jobResult.txHash || null });
       setStep(4);
+      fireConfetti();
       if (onComplete) onComplete(jobResult);
     } catch {
       setError("Network error. Please try again.");
