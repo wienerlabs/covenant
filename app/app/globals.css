@@ -48,10 +48,26 @@ body {
 body.light-mode { background: #fff; color: #000; }
 body.light-mode .glass-card { background: rgba(0,0,0,0.05); border-color: #ddd; }
 
+/* Step card connector animation */
+@keyframes dash-flow {
+  0% { stroke-dashoffset: 12; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* Step card entrance */
+@keyframes step-enter {
+  0% { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
 @media (max-width: 768px) {
   .hero-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
   .hero-title { font-size: 36px !important; }
   .hero-right { display: none !important; }
   .stats-bar { flex-wrap: wrap !important; gap: 16px !important; }
   .nav-tabs { display: none !important; }
+  .nav-mobile-hamburger { display: block !important; }
+  .step-cards-row { flex-direction: column !important; align-items: center !important; }
+  .step-connector { display: none !important; }
+  .marketplace-grid { grid-template-columns: 1fr !important; }
 }

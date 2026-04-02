@@ -197,6 +197,27 @@ export default function JobCard({
               Cancel Job
             </button>
           )}
+          {job.status === "Completed" && (
+            <Link
+              href={`/proof/${job.id}`}
+              style={{
+                fontFamily: "inherit",
+                fontSize: "12px",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                padding: "8px 20px",
+                textDecoration: "none",
+                border: isDark ? "1px solid rgba(134,239,172,0.3)" : "1px solid #86efac",
+                borderRadius: "6px",
+                backgroundColor: isDark ? "rgba(134,239,172,0.1)" : "rgba(134,239,172,0.15)",
+                color: "#86efac",
+                transition: "all 0.15s ease",
+                display: "inline-block",
+              }}
+            >
+              View Proof
+            </Link>
+          )}
         </div>
       </div>
 

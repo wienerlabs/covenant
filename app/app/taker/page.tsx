@@ -1,22 +1,40 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useConnector } from "@solana/connector/react";
 import NavBar from "@/components/NavBar";
 import JobList from "@/components/JobList";
 import ReputationBadge from "@/components/ReputationBadge";
 import AsciiAnimation from "@/components/AsciiAnimation";
+import PixelAvatar from "@/components/PixelAvatar";
+import StatusBadge from "@/components/StatusBadge";
 import useProtocolStats from "@/hooks/useProtocolStats";
-import { USDC_LOGO_URL } from "@/lib/constants";
-import { JOB_CATEGORIES } from "@/lib/categories";
+import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
+import { JOB_CATEGORIES, getCategoryById } from "@/lib/categories";
+import { formatAddress } from "@/lib/format";
+import type { JobData } from "@/hooks/useJobList";
+
+type GridFilter = "all" | "trending" | "new" | "high";
+
+function getDeadlineCountdown(deadline: string): string {
+  const diff = new Date(deadline).getTime() - Date.now();
+  if (diff <= 0) return "Expired";
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d left`;
+  if (hours > 0) return `${hours}h left`;
+  const mins = Math.floor(diff / (1000 * 60));
+  return `${mins}m left`;
+}
 
 export default function TakerPage() {
   const { account } = useConnector();
   const walletPubkey = account || undefined;
   const { stats, loading: statsLoading } = useProtocolStats();
   const [activeFilter, setActiveFilter] = useState<"all" | "mine">("all");
-  const [allHover, setAllHover] = useState(false);
-  const [mineHover, setMineHover] = useState(false);
+  const [gridFilter, setGridFilter] = useState<GridFilter>("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   // Search & filter state
   const [searchInput, setSearchInput] = useState("");
@@ -25,6 +43,10 @@ export default function TakerPage() {
   const [minPrice, setMinPrice] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<string>("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Grid data
+  const [gridJobs, setGridJobs] = useState<JobData[]>([]);
+  const [gridLoading, setGridLoading] = useState(true);
 
   const handleSearchChange = useCallback((value: string) => {
     setSearchInput(value);
@@ -40,9 +62,47 @@ export default function TakerPage() {
     };
   }, []);
 
+  // Fetch jobs for grid view
+  useEffect(() => {
+    async function fetchGridJobs() {
+      setGridLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (selectedCategory) params.set("category", selectedCategory);
+        if (debouncedSearch) params.set("search", debouncedSearch);
+        if (minPrice) params.set("minAmount", minPrice);
+        if (maxPrice) params.set("maxAmount", maxPrice);
+
+        const res = await fetch(`/api/jobs?${params.toString()}`);
+        if (res.ok) {
+          let data: JobData[] = await res.json();
+
+          // Apply grid filters
+          if (gridFilter === "new") {
+            data = data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          } else if (gridFilter === "high") {
+            data = data.filter(j => j.amount > 20);
+          } else if (gridFilter === "trending") {
+            data = data.filter(j => j.status === "Open" || j.status === "Accepted");
+          }
+
+          setGridJobs(data);
+        }
+      } catch {
+        // silent
+      } finally {
+        setGridLoading(false);
+      }
+    }
+    if (viewMode === "grid") {
+      fetchGridJobs();
+      const poll = setInterval(fetchGridJobs, 10000);
+      return () => clearInterval(poll);
+    }
+  }, [viewMode, gridFilter, selectedCategory, debouncedSearch, minPrice, maxPrice]);
+
   const filterBtnStyle = (
-    isActive: boolean,
-    isHovered: boolean
+    isActive: boolean
   ): React.CSSProperties => ({
     fontFamily: "inherit",
     fontSize: "11px",
@@ -52,8 +112,8 @@ export default function TakerPage() {
     cursor: "pointer",
     border: "1px solid rgba(255,255,255,0.25)",
     borderRadius: "6px",
-    backgroundColor: isActive || isHovered ? "rgba(255,255,255,0.15)" : "transparent",
-    color: isActive || isHovered ? "#ffffff" : "rgba(255,255,255,0.5)",
+    backgroundColor: isActive ? "rgba(255,255,255,0.15)" : "transparent",
+    color: isActive ? "#ffffff" : "rgba(255,255,255,0.5)",
     backdropFilter: "blur(4px)",
     transition: "all 0.15s ease",
   });
@@ -61,25 +121,8 @@ export default function TakerPage() {
   return (
     <div style={{ minHeight: "100vh", fontFamily: "inherit", position: "relative" }}>
       {/* Full-bleed background */}
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 0,
-          backgroundImage: "url('/poster-bg.png')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
-        }}
-      />
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 1,
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-        }}
-      />
+      <div style={{ position: "fixed", inset: 0, zIndex: 0, backgroundImage: "url('/poster-bg.png')", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }} />
+      <div style={{ position: "fixed", inset: 0, zIndex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)" }} />
 
       {/* Content */}
       <div style={{ position: "relative", zIndex: 2 }}>
@@ -97,30 +140,52 @@ export default function TakerPage() {
         >
         {/* Left column */}
         <div>
-          <div
-            style={{
-              display: "flex",
-              gap: "8px",
-              marginBottom: "24px",
-            }}
-          >
-            <button
-              onClick={() => setActiveFilter("all")}
-              onMouseEnter={() => setAllHover(true)}
-              onMouseLeave={() => setAllHover(false)}
-              style={filterBtnStyle(activeFilter === "all", allHover)}
-            >
-              All Jobs
-            </button>
-            <button
-              onClick={() => setActiveFilter("mine")}
-              onMouseEnter={() => setMineHover(true)}
-              onMouseLeave={() => setMineHover(false)}
-              style={filterBtnStyle(activeFilter === "mine", mineHover)}
-            >
-              My Jobs
-            </button>
+          {/* View toggle + filter tabs */}
+          <div style={{ display: "flex", gap: "8px", marginBottom: "16px", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button onClick={() => setActiveFilter("all")} style={filterBtnStyle(activeFilter === "all")}>
+                All Jobs
+              </button>
+              <button onClick={() => setActiveFilter("mine")} style={filterBtnStyle(activeFilter === "mine")}>
+                My Jobs
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: "4px" }}>
+              <button onClick={() => setViewMode("grid")} style={{ ...filterBtnStyle(viewMode === "grid"), padding: "4px 10px" }}>
+                Grid
+              </button>
+              <button onClick={() => setViewMode("list")} style={{ ...filterBtnStyle(viewMode === "list"), padding: "4px 10px" }}>
+                List
+              </button>
+            </div>
           </div>
+
+          {/* Grid filter tabs */}
+          {viewMode === "grid" && (
+            <div style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
+              {(["all", "trending", "new", "high"] as GridFilter[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setGridFilter(f)}
+                  style={{
+                    fontFamily: "inherit",
+                    fontSize: "10px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    padding: "3px 12px",
+                    cursor: "pointer",
+                    border: gridFilter === f ? "1px solid rgba(255,255,255,0.4)" : "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: "20px",
+                    backgroundColor: gridFilter === f ? "rgba(255,255,255,0.1)" : "transparent",
+                    color: gridFilter === f ? "#ffffff" : "rgba(255,255,255,0.4)",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  {f === "high" ? "High Reward" : f}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Search & Filter Bar */}
           <div
@@ -217,15 +282,141 @@ export default function TakerPage() {
             </div>
           </div>
 
-          <JobList
-            filter={activeFilter}
-            walletPubkey={walletPubkey}
-            variant="dark"
-            category={selectedCategory || undefined}
-            search={debouncedSearch || undefined}
-            minAmount={minPrice ? parseFloat(minPrice) : undefined}
-            maxAmount={maxPrice ? parseFloat(maxPrice) : undefined}
-          />
+          {/* Grid view */}
+          {viewMode === "grid" ? (
+            <div>
+              {gridLoading ? (
+                <div style={{ textAlign: "center", padding: "48px", color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>
+                  Loading...
+                </div>
+              ) : gridJobs.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px" }}>
+                  <AsciiAnimation scene="idle" variant="dark" />
+                  <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "12px" }}>
+                    No jobs found
+                  </div>
+                </div>
+              ) : (
+                <div className="marketplace-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  {gridJobs.map((job) => {
+                    const cat = getCategoryById(job.category || "text_writing");
+                    const title = (job.specJson?.title as string) || `Job ${job.id.slice(0, 8)}`;
+                    return (
+                      <Link key={job.id} href={`/job/${job.id}`} style={{ textDecoration: "none" }}>
+                        <div
+                          style={{
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            borderRadius: "12px",
+                            padding: "18px",
+                            backgroundColor: "rgba(0,0,0,0.3)",
+                            backdropFilter: "blur(12px)",
+                            transition: "all 0.15s ease",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "10px",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)";
+                            e.currentTarget.style.transform = "translateY(-2px)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
+                            e.currentTarget.style.transform = "translateY(0)";
+                          }}
+                        >
+                          {/* Top row: category tag + deadline */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{
+                              fontSize: "9px",
+                              padding: "2px 8px",
+                              borderRadius: "6px",
+                              border: "1px solid rgba(255,255,255,0.15)",
+                              color: "rgba(255,255,255,0.7)",
+                              backgroundColor: "rgba(255,255,255,0.06)",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                            }}>
+                              {cat.tag} {cat.label}
+                            </span>
+                            <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)" }}>
+                              {getDeadlineCountdown(job.deadline)}
+                            </span>
+                          </div>
+
+                          {/* Title */}
+                          <div style={{
+                            fontSize: "14px",
+                            fontWeight: 600,
+                            color: "#ffffff",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}>
+                            {title}
+                          </div>
+
+                          {/* Amount + poster */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <img
+                                src={job.paymentToken === "SOL" ? SOL_LOGO_URL : USDC_LOGO_URL}
+                                alt={job.paymentToken || "USDC"}
+                                width={18}
+                                height={18}
+                                style={{ borderRadius: "50%" }}
+                              />
+                              <span style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff" }}>
+                                {job.amount.toFixed(2)}
+                              </span>
+                              <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
+                                {job.paymentToken || "USDC"}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <PixelAvatar seed={job.posterWallet} size={20} />
+                              <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
+                                {formatAddress(job.posterWallet)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Status + apply button */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+                            <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled"} />
+                            {job.status === "Open" && (
+                              <span style={{
+                                fontSize: "10px",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.05em",
+                                padding: "4px 14px",
+                                borderRadius: "6px",
+                                border: "1px solid rgba(255,255,255,0.3)",
+                                color: "#ffffff",
+                                backgroundColor: "rgba(255,255,255,0.1)",
+                              }}>
+                                Apply
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* List view - original JobList */
+            <JobList
+              filter={activeFilter}
+              walletPubkey={walletPubkey}
+              variant="dark"
+              category={selectedCategory || undefined}
+              search={debouncedSearch || undefined}
+              minAmount={minPrice ? parseFloat(minPrice) : undefined}
+              maxAmount={maxPrice ? parseFloat(maxPrice) : undefined}
+            />
+          )}
         </div>
 
         {/* Right column - sticky sidebar */}
@@ -274,25 +465,13 @@ export default function TakerPage() {
                   gap: "8px",
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: "12px",
-                  }}
-                >
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
                   <span style={{ color: "rgba(255,255,255,0.5)" }}>Total Jobs</span>
                   <span style={{ fontWeight: 600, color: "#ffffff" }}>
                     {statsLoading ? "..." : stats.totalJobs}
                   </span>
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: "12px",
-                  }}
-                >
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
                   <span style={{ color: "rgba(255,255,255,0.5)" }}>Total Locked</span>
                   <span style={{ fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
                     {statsLoading ? "..." : (
@@ -303,25 +482,13 @@ export default function TakerPage() {
                     )}
                   </span>
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: "12px",
-                  }}
-                >
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
                   <span style={{ color: "rgba(255,255,255,0.5)" }}>Completed</span>
                   <span style={{ fontWeight: 600, color: "#ffffff" }}>
                     {statsLoading ? "..." : stats.completed}
                   </span>
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: "12px",
-                  }}
-                >
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
                   <span style={{ color: "rgba(255,255,255,0.5)" }}>Success Rate</span>
                   <span style={{ fontWeight: 600, color: "#ffffff" }}>
                     {statsLoading ? "..." : `${stats.successRate}%`}
