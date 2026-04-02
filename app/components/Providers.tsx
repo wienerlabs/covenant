@@ -6,6 +6,8 @@ import { getDefaultConfig } from "@solana/connector/headless";
 import { DEVNET_ENDPOINT } from "@/lib/constants";
 import ProfileGate from "./ProfileGate";
 import OnboardingTour from "./OnboardingTour";
+import FaucetWidget from "./FaucetWidget";
+import TransactionTicker from "./TransactionTicker";
 
 interface ProvidersProps {
   children: ReactNode;
@@ -37,6 +39,8 @@ export default function Providers({ children }: ProvidersProps) {
     <AppProvider connectorConfig={connectorConfig}>
       <ProfileGate>{children}</ProfileGate>
       <OnboardingTour />
+      <FaucetWidget />
+      <TransactionTicker />
     </AppProvider>
   );
 }

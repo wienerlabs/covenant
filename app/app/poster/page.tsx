@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { useConnector } from "@solana/connector/react";
 import NavBar from "@/components/NavBar";
-import CreateJobForm from "@/components/CreateJobForm";
+import JobWizard from "@/components/JobWizard";
 import JobCard from "@/components/JobCard";
 import useJobList from "@/hooks/useJobList";
 
@@ -101,7 +101,7 @@ export default function PosterPage() {
                 padding: "24px",
               }}
             >
-              <CreateJobForm variant="dark" onJobCreated={refetch} />
+              <JobWizard variant="dark" onComplete={() => refetch()} />
             </div>
 
             <div

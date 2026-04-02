@@ -6,6 +6,7 @@ import Link from "next/link";
 import useProfile from "@/hooks/useProfile";
 import useReputation from "@/hooks/useReputation";
 import PixelAvatar from "@/components/PixelAvatar";
+import ReputationScore from "@/components/ReputationScore";
 import WalletButton from "@/components/WalletButton";
 import { USDC_LOGO_URL } from "@/lib/constants";
 import { formatAddress } from "@/lib/format";
@@ -249,7 +250,10 @@ export default function ProfilePage() {
                   /* View mode */
                   <>
                     <div style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
-                      <PixelAvatar seed={profile.avatarSeed} size={80} />
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                        <PixelAvatar seed={profile.avatarSeed} size={80} />
+                        <ReputationScore completed={reputation.jobsCompleted} failed={reputation.jobsFailed} />
+                      </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                           <div style={{ fontSize: "24px", fontWeight: 700, color: "#fff", marginBottom: "4px" }}>
