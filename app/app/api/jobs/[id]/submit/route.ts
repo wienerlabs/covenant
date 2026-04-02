@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
+import { sendX402Payment, getAgentKeypair } from "@/lib/x402";
 import crypto from "crypto";
 
 export async function POST(
@@ -132,7 +133,29 @@ export async function POST(
       console.error("[solana] Failed to send marker tx for submit_completion:", err);
     }
 
-    return NextResponse.json({ job: updatedJob, submission: { ...submission, txHash }, txHash });
+    // Send payment marker: deployer sends 0.001 SOL to taker as "payment released" proof
+    let paymentTxHash: string | null = null;
+    try {
+      const deployerKp = JSON.parse(process.env.DEPLOYER_KEYPAIR || "[]");
+      if (deployerKp.length > 0) {
+        const payment = await sendX402Payment(deployerKp, takerWallet, 0.001, "payment_released:" + id);
+        paymentTxHash = payment.txHash;
+        await prisma.transaction.create({
+          data: {
+            txHash: paymentTxHash,
+            type: "payment_released",
+            jobId: id,
+            wallet: takerWallet,
+            amount: job.amount,
+            status: "confirmed",
+          },
+        });
+      }
+    } catch (err) {
+      console.error("[solana] Failed to send payment marker:", err);
+    }
+
+    return NextResponse.json({ job: updatedJob, submission: { ...submission, txHash }, txHash, paymentTxHash });
   } catch (error) {
     console.error("POST /api/jobs/[id]/submit error:", error);
     return NextResponse.json(

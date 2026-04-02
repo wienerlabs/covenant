@@ -70,7 +70,7 @@ export default function ReputationBadge({
 
   const dividerStyle: React.CSSProperties = {
     width: "1px",
-    backgroundColor: "#e0e0e0",
+    backgroundColor: "rgba(255,255,255,0.15)",
     alignSelf: "stretch",
   };
 
@@ -78,24 +78,25 @@ export default function ReputationBadge({
     fontSize: "9px",
     textTransform: "uppercase",
     letterSpacing: "0.1em",
-    color: "#999",
+    color: "rgba(255,255,255,0.5)",
     marginBottom: "2px",
   };
 
   const valueStyle: React.CSSProperties = {
     fontSize: "14px",
     fontWeight: 600,
-    color: "#000000",
+    color: "#ffffff",
   };
 
   return (
     <div
       style={{
-        border: "1px solid #000000",
+        border: "1px solid rgba(255,255,255,0.2)",
         borderRadius: "8px",
         padding: "10px 16px",
         display: "flex",
         alignItems: "center",
+        backgroundColor: "rgba(255,255,255,0.05)",
       }}
     >
       <div style={segmentStyle}>

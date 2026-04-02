@@ -27,7 +27,7 @@ export default function Providers({ children }: ProvidersProps) {
           },
         ],
         wallets: {
-          featured: ["Phantom", "Solflare"],
+          featured: ["Phantom"],
         },
       }),
     []

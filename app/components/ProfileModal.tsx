@@ -74,6 +74,12 @@ export default function ProfileModal({
         }),
       });
 
+      if (response.status === 409) {
+        // Profile already exists — treat as success
+        onComplete();
+        return;
+      }
+
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Failed to create profile");
