@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import NavBar from "@/components/NavBar";
-import { SOL_LOGO_URL } from "@/lib/constants";
+import { SOL_LOGO_URL, USDC_LOGO_URL } from "@/lib/constants";
 
 interface OnchainData {
   program: {
@@ -19,6 +19,12 @@ interface OnchainData {
   };
 }
 
+interface TokenBalances {
+  deployer: { sol: number; usdc: number };
+  alpha: { sol: number; usdc: number };
+  omega: { sol: number; usdc: number };
+}
+
 function truncate(addr: string): string {
   if (addr.length < 12) return addr;
   return addr.slice(0, 6) + "..." + addr.slice(-6);
@@ -26,6 +32,7 @@ function truncate(addr: string): string {
 
 export default function OnchainPage() {
   const [data, setData] = useState<OnchainData | null>(null);
+  const [tokenBalances, setTokenBalances] = useState<TokenBalances | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<string>("");
 
@@ -37,6 +44,15 @@ export default function OnchainPage() {
           const json = await res.json();
           setData(json);
           setLastRefresh(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }));
+
+          // Fetch token balances for each wallet
+          const wallets = json.wallets;
+          const [dBal, aBal, oBal] = await Promise.all([
+            fetch(`/api/balance/${wallets.deployer.address}`).then(r => r.ok ? r.json() : { sol: 0, usdc: 0 }).catch(() => ({ sol: 0, usdc: 0 })),
+            fetch(`/api/balance/${wallets.alpha.address}`).then(r => r.ok ? r.json() : { sol: 0, usdc: 0 }).catch(() => ({ sol: 0, usdc: 0 })),
+            fetch(`/api/balance/${wallets.omega.address}`).then(r => r.ok ? r.json() : { sol: 0, usdc: 0 }).catch(() => ({ sol: 0, usdc: 0 })),
+          ]);
+          setTokenBalances({ deployer: dBal, alpha: aBal, omega: oBal });
         }
       } catch {
         // silently fail
@@ -149,10 +165,12 @@ export default function OnchainPage() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                   {([
-                    { label: "Deployer", data: data.wallets.deployer, color: "#fff" },
-                    { label: "Agent Alpha", data: data.wallets.alpha, color: "#3B82F6" },
-                    { label: "Agent Omega", data: data.wallets.omega, color: "#10B981" },
-                  ] as const).map((wallet) => (
+                    { label: "Deployer", data: data.wallets.deployer, color: "#fff", key: "deployer" as const },
+                    { label: "Agent Alpha", data: data.wallets.alpha, color: "#3B82F6", key: "alpha" as const },
+                    { label: "Agent Omega", data: data.wallets.omega, color: "#10B981", key: "omega" as const },
+                  ]).map((wallet) => {
+                    const usdcBal = tokenBalances ? tokenBalances[wallet.key]?.usdc : null;
+                    return (
                     <div
                       key={wallet.label}
                       style={{
@@ -173,15 +191,26 @@ export default function OnchainPage() {
                           {truncate(wallet.data.address)}
                         </div>
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <img src={SOL_LOGO_URL} alt="SOL" width={18} height={18} style={{ borderRadius: "50%" }} />
-                        <span style={{ fontSize: "18px", fontWeight: 700, color: "#fff", fontFamily: "monospace" }}>
-                          {wallet.data.balance.toFixed(4)}
-                        </span>
-                        <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>SOL</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <img src={SOL_LOGO_URL} alt="SOL" width={18} height={18} style={{ borderRadius: "50%" }} />
+                          <span style={{ fontSize: "16px", fontWeight: 700, color: "#fff", fontFamily: "monospace" }}>
+                            {wallet.data.balance.toFixed(4)}
+                          </span>
+                          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>SOL</span>
+                        </div>
+                        <div style={{ width: "1px", height: "24px", backgroundColor: "rgba(255,255,255,0.1)" }} />
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <img src={USDC_LOGO_URL} alt="USDC" width={18} height={18} style={{ borderRadius: "50%" }} />
+                          <span style={{ fontSize: "16px", fontWeight: 700, color: "#fff", fontFamily: "monospace" }}>
+                            {usdcBal !== null && usdcBal !== undefined ? usdcBal.toFixed(2) : "..."}
+                          </span>
+                          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>USDC</span>
+                        </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

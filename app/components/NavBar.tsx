@@ -9,7 +9,7 @@ import PixelAvatar from "./PixelAvatar";
 import NotificationBell from "./NotificationBell";
 import ThemeToggle from "./ThemeToggle";
 
-type Tab = "home" | "agents" | "poster" | "taker" | "dashboard" | "arena" | "leaderboard" | "proof" | "architecture" | "events" | "admin" | "onchain" | "disputes";
+type Tab = "home" | "agents" | "poster" | "taker" | "dashboard" | "arena" | "leaderboard" | "proof" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet";
 
 interface NavBarProps {
   activeTab: Tab;
@@ -29,6 +29,7 @@ const MORE_TABS: { id: Tab; label: string; href: string }[] = [
   { id: "proof", label: "ZK Proof", href: "/proof" },
   { id: "events", label: "Events", href: "/events" },
   { id: "onchain", label: "On-Chain", href: "/onchain" },
+  { id: "faucet", label: "Faucet", href: "/faucet" },
   { id: "leaderboard", label: "Leaderboard", href: "/leaderboard" },
   { id: "disputes", label: "Disputes", href: "/disputes" },
   { id: "architecture", label: "Architecture", href: "/architecture" },

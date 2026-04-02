@@ -179,6 +179,38 @@ export default function ArenaPage() {
           }
         }
         break;
+      case "escrow_lock":
+        setAlphaState("working");
+        setAlphaActions((prev) => [...prev, "Locking funds in escrow..."]);
+        break;
+      case "escrow_locked":
+        setAlphaState("celebrating");
+        setAlphaActions((prev) => {
+          const next = [...prev];
+          next[next.length - 1] = `Escrow locked: ${event.data?.amount} USDC`;
+          return next;
+        });
+        if (event.data && typeof event.data.txHash === "string") {
+          setTransactions((prev) => [...prev, { label: "Escrow Lock (SPL)", txHash: event.data!.txHash as string }]);
+        }
+        setTimeout(() => setAlphaState("idle"), 800);
+        break;
+      case "escrow_release":
+        setOmegaState("working");
+        setOmegaActions((prev) => [...prev, "Releasing escrow payment..."]);
+        break;
+      case "escrow_released":
+        setOmegaState("celebrating");
+        setOmegaActions((prev) => {
+          const next = [...prev];
+          next[next.length - 1] = `Payment received: ${event.data?.amount} USDC`;
+          return next;
+        });
+        if (event.data && typeof event.data.txHash === "string") {
+          setTransactions((prev) => [...prev, { label: "Escrow Release (SPL)", txHash: event.data!.txHash as string }]);
+        }
+        setTimeout(() => setOmegaState("idle"), 800);
+        break;
       case "x402_payment":
         if (event.data) {
           setX402Payments((prev) => [...prev, {
@@ -372,6 +404,7 @@ export default function ArenaPage() {
 
   function getEventDotColor(step: string): string {
     if (step === "x402_payment") return "#f59e0b";
+    if (step.startsWith("escrow_")) return "#eab308";
     if (step.includes("error")) return "#ff5f57";
     if (step === "complete" || step.includes("completed") || step.includes("accepted")) return "#28c840";
     if (step.includes("created")) return "#febc2e";
@@ -382,6 +415,7 @@ export default function ArenaPage() {
 
   function getEventTextColor(step: string): string {
     if (step === "x402_payment") return "#f59e0b";
+    if (step.startsWith("escrow_")) return "#eab308";
     if (step.includes("error")) return "#fca5a5";
     if (step === "complete" || step.includes("completed")) return "#86efac";
     if (step.includes("accepted") || step.includes("created")) return "#fde68a";

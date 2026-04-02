@@ -9,7 +9,7 @@ export const DEVNET_ENDPOINT = "https://api.devnet.solana.com";
 export const USDC_DECIMALS = 6;
 
 export const USDC_MINT = new PublicKey(
-  "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+  "F7RYRqCy8uWYxjxrXVhU3iUCRwa9bKBUTkGKktpyYueQ"
 );
 
 export const USDC_LOGO_URL =
