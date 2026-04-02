@@ -16,7 +16,7 @@ model Job {
   paymentToken  String   @default("USDC") // "USDC" or "SOL"
   specHash      String
   specJson      Json
-  status        String   @default("Open") // Open, Accepted, Completed, Cancelled
+  status        String   @default("Open") // Open, Accepted, Completed, Cancelled, Disputed
   minWords      Int
   category      String   @default("text_writing")
   language      String   @default("en")
@@ -72,4 +72,15 @@ model Transaction {
   amount    Float?
   status    String   @default("confirmed") // confirmed, failed
   createdAt DateTime @default(now())
+}
+
+model Dispute {
+  id         String   @id @default(cuid())
+  jobId      String
+  raisedBy   String   // wallet address
+  reason     String
+  status     String   @default("open") // open, resolved_poster, resolved_taker, dismissed
+  resolution String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }

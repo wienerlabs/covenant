@@ -4,10 +4,19 @@ import { sendX402Payment, getAgentKeypair } from "@/lib/x402";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
 import { rateLimit } from "@/lib/rateLimit";
+import {
+  getAnchorProgram,
+  keypairFromEnv,
+  deriveJobEscrowPDA,
+  deriveReputationPDA,
+  PROGRAM_ID,
+  DEVNET_USDC_MINT,
+} from "@/lib/anchor-client";
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
-import { Keypair } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { NextRequest } from "next/server";
+import BN from "bn.js";
 
 function getDeployerWallet(): string {
   const raw = process.env.DEPLOYER_KEYPAIR;
@@ -234,6 +243,54 @@ export async function POST(request: NextRequest) {
           categoryTag: category.tag,
         });
 
+        // ===== ANCHOR CPI: create_job on-chain =====
+        let anchorCreateTx: string | null = null;
+        try {
+          const alphaKp = keypairFromEnv("AGENT_ALPHA_KEYPAIR");
+          const program = getAnchorProgram(alphaKp);
+          const specHashBytes = Uint8Array.from(Buffer.from(specHash, "hex"));
+          const [jobEscrowPDA] = deriveJobEscrowPDA(alphaKp.publicKey, specHashBytes);
+          const escrowTokenAccount = Keypair.generate();
+          const amountLamports = new BN(jobSpec.amount * 1_000_000); // USDC has 6 decimals
+          const deadlineTs = new BN(Math.floor(deadline.getTime() / 1000));
+
+          // Derive poster associated token account (ATA)
+          const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+          const TOKEN_PROG = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+          const posterTokenAccount = PublicKey.findProgramAddressSync(
+            [alphaKp.publicKey.toBuffer(), TOKEN_PROG.toBuffer(), DEVNET_USDC_MINT.toBuffer()],
+            ATA_PROGRAM
+          )[0];
+
+          const tx = await program.methods
+            .createJob(amountLamports, Array.from(specHashBytes), deadlineTs)
+            .accounts({
+              poster: alphaKp.publicKey,
+              jobEscrow: jobEscrowPDA,
+              escrowTokenAccount: escrowTokenAccount.publicKey,
+              posterTokenAccount,
+              tokenMint: DEVNET_USDC_MINT,
+              tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+              systemProgram: SystemProgram.programId,
+              rent: new PublicKey("SysvarRent111111111111111111111111111111111"),
+            })
+            .signers([alphaKp, escrowTokenAccount])
+            .rpc();
+
+          anchorCreateTx = tx;
+          send("onchain_create", "Submitted create_job to Solana program", {
+            txHash: tx,
+            programId: PROGRAM_ID.toBase58(),
+            jobEscrowPDA: jobEscrowPDA.toBase58(),
+          });
+        } catch (err) {
+          console.error("[anchor] create_job CPI failed:", err);
+          send("onchain_create", "On-chain create_job attempted (fallback to marker tx)", {
+            error: String(err).slice(0, 200),
+            programId: PROGRAM_ID.toBase58(),
+          });
+        }
+
         // ===== STEP 3: OMEGA THINKS (ACCEPT DECISION) =====
         send("omega_thinking", "Agent Omega evaluating the job...");
 
@@ -291,6 +348,38 @@ export async function POST(request: NextRequest) {
           reason: evalResult.reason,
           txHash: acceptTxHash,
         });
+
+        // ===== ANCHOR CPI: accept_job on-chain =====
+        let anchorAcceptTx: string | null = null;
+        try {
+          const omegaKp = keypairFromEnv("AGENT_OMEGA_KEYPAIR");
+          const alphaKp = keypairFromEnv("AGENT_ALPHA_KEYPAIR");
+          const program = getAnchorProgram(omegaKp);
+          const specHashBytes = Uint8Array.from(Buffer.from(specHash, "hex"));
+          const [jobEscrowPDA] = deriveJobEscrowPDA(alphaKp.publicKey, specHashBytes);
+
+          const tx = await program.methods
+            .acceptJob(Array.from(specHashBytes))
+            .accounts({
+              taker: omegaKp.publicKey,
+              jobEscrow: jobEscrowPDA,
+              poster: alphaKp.publicKey,
+            })
+            .signers([omegaKp])
+            .rpc();
+
+          anchorAcceptTx = tx;
+          send("onchain_accept", "Submitted accept_job to Solana program", {
+            txHash: tx,
+            programId: PROGRAM_ID.toBase58(),
+          });
+        } catch (err) {
+          console.error("[anchor] accept_job CPI failed:", err);
+          send("onchain_accept", "On-chain accept_job attempted (fallback to marker tx)", {
+            error: String(err).slice(0, 200),
+            programId: PROGRAM_ID.toBase58(),
+          });
+        }
 
         // ===== x402 PAYMENT: Alpha pays protocol for escrow service =====
         try {
@@ -447,6 +536,69 @@ export async function POST(request: NextRequest) {
           ]);
         } catch (err) {
           console.error("[arena] Failed to send submit marker tx:", err);
+        }
+
+        // ===== ANCHOR CPI: submit_completion on-chain =====
+        let anchorSubmitTx: string | null = null;
+        try {
+          const omegaKp = keypairFromEnv("AGENT_OMEGA_KEYPAIR");
+          const alphaKp = keypairFromEnv("AGENT_ALPHA_KEYPAIR");
+          const program = getAnchorProgram(omegaKp);
+          const specHashBytes = Uint8Array.from(Buffer.from(specHash, "hex"));
+          const textHashBytes = Uint8Array.from(Buffer.from(textHash, "hex"));
+          const [jobEscrowPDA] = deriveJobEscrowPDA(alphaKp.publicKey, specHashBytes);
+          const [takerRepPDA] = deriveReputationPDA(omegaKp.publicKey);
+
+          // Build a placeholder proof (the real SP1 proof would be generated by the prover)
+          const proofBuffer = Buffer.alloc(64, 0);
+
+          // Derive token accounts
+          let escrowTokenAccount: PublicKey;
+          let takerTokenAccount: PublicKey;
+          try {
+            escrowTokenAccount = PublicKey.findProgramAddressSync(
+              [jobEscrowPDA.toBuffer(), new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").toBuffer(), DEVNET_USDC_MINT.toBuffer()],
+              new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+            )[0];
+            takerTokenAccount = PublicKey.findProgramAddressSync(
+              [omegaKp.publicKey.toBuffer(), new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").toBuffer(), DEVNET_USDC_MINT.toBuffer()],
+              new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+            )[0];
+          } catch {
+            escrowTokenAccount = jobEscrowPDA;
+            takerTokenAccount = omegaKp.publicKey;
+          }
+
+          const tx = await program.methods
+            .submitCompletion(
+              proofBuffer,
+              jobSpec.minWords,
+              Array.from(textHashBytes)
+            )
+            .accounts({
+              taker: omegaKp.publicKey,
+              jobEscrow: jobEscrowPDA,
+              poster: alphaKp.publicKey,
+              escrowTokenAccount,
+              takerTokenAccount,
+              takerReputation: takerRepPDA,
+              tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+              systemProgram: SystemProgram.programId,
+            })
+            .signers([omegaKp])
+            .rpc();
+
+          anchorSubmitTx = tx;
+          send("onchain_submit", "Submitted submit_completion to Solana program", {
+            txHash: tx,
+            programId: PROGRAM_ID.toBase58(),
+          });
+        } catch (err) {
+          console.error("[anchor] submit_completion CPI failed:", err);
+          send("onchain_submit", "On-chain submit_completion attempted (fallback to marker tx)", {
+            error: String(err).slice(0, 200),
+            programId: PROGRAM_ID.toBase58(),
+          });
         }
 
         const textPreview = deliverableText.slice(0, 200);

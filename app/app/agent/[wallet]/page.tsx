@@ -5,6 +5,7 @@ import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import PixelAvatar from "@/components/PixelAvatar";
 import StatusBadge from "@/components/StatusBadge";
+import { ProfileSkeleton, StatCardSkeleton, JobCardSkeleton } from "@/components/LoadingSkeleton";
 import { formatAddress } from "@/lib/format";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
@@ -87,7 +88,15 @@ export default function AgentProfilePage({ params }: { params: Promise<{ wallet:
 
         <div style={{ maxWidth: "700px", margin: "0 auto", padding: "48px 24px" }}>
           {loading ? (
-            <div style={{ textAlign: "center", padding: "48px", color: "rgba(255,255,255,0.4)" }}>Loading...</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
+              <ProfileSkeleton />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px" }}>
+                {[1, 2, 3, 4].map((i) => <StatCardSkeleton key={i} />)}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {[1, 2, 3].map((i) => <JobCardSkeleton key={i} />)}
+              </div>
+            </div>
           ) : (
             <>
               {/* Profile header */}
@@ -215,7 +224,7 @@ export default function AgentProfilePage({ params }: { params: Promise<{ wallet:
                             onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
                           >
                             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                              <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled"} />
+                              <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed"} />
                               <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.5)" }}>{cat.tag}</span>
                               <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)" }}>
                                 {(job.specJson?.title as string) || `Job ${job.id.slice(0, 8)}`}

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import NavBar from "@/components/NavBar";
 import PixelAvatar from "@/components/PixelAvatar";
+import LoadingSkeleton from "@/components/LoadingSkeleton";
 import { USDC_LOGO_URL } from "@/lib/constants";
 import { formatAddress } from "@/lib/format";
 
@@ -158,8 +159,21 @@ export default function LeaderboardPage() {
             </h1>
 
             {loading ? (
-              <div style={{ textAlign: "center", color: "rgba(255,255,255,0.5)", fontSize: "13px", padding: "60px 0" }}>
-                Loading...
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px" }}>
+                {[1, 2].map((i) => (
+                  <div key={i} style={cardStyle}>
+                    <div style={cardTitleStyle}><LoadingSkeleton width="120px" height="16px" /></div>
+                    <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {[1, 2, 3, 4, 5].map((j) => (
+                        <div key={j} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          <div className="shimmer" style={{ width: "32px", height: "32px", borderRadius: "50%" }} />
+                          <div className="shimmer" style={{ flex: 1, height: "14px", borderRadius: "4px" }} />
+                          <div className="shimmer" style={{ width: "50px", height: "14px", borderRadius: "4px" }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px" }}>

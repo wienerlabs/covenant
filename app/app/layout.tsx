@@ -24,12 +24,14 @@ export const metadata: Metadata = {
     url: "https://covenant-omega.vercel.app",
     siteName: "COVENANT",
     type: "website",
+    images: [{ url: "/api/og", width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
     title: "COVENANT — Trustless Work Delivery on Solana",
     description: "Lock payment on-chain. Prove work with zero-knowledge proofs. Get paid automatically.",
     site: "@covenant_sol",
+    images: ["/api/og"],
   },
 };
 
