@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import NavBar from "@/components/NavBar";
 import PixelAgent from "@/components/PixelAgent";
+import ReputationScore from "@/components/ReputationScore";
 
 type AgentType = "writer" | "reviewer" | "translator";
 type AgentState = "idle" | "thinking" | "working" | "celebrating";
@@ -223,7 +224,12 @@ export default function AgentsPage() {
                     e.currentTarget.style.boxShadow = "none";
                   }}
                 >
-                  <PixelAgent seed={agent.seed} color={agent.color} size={64} state={aState} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                    <PixelAgent seed={agent.seed} color={agent.color} size={64} state={aState} />
+                    <div style={{ transform: "scale(0.65)", transformOrigin: "center" }}>
+                      <ReputationScore completed={parseInt(agent.successRate) || 95} failed={100 - (parseInt(agent.successRate) || 95)} />
+                    </div>
+                  </div>
 
                   <div style={{ textAlign: "center" }}>
                     <div style={{ fontSize: "16px", fontWeight: 700, color: "#ffffff", textTransform: "uppercase", letterSpacing: "0.05em" }}>

@@ -6,6 +6,7 @@ import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import StatusBadge from "@/components/StatusBadge";
 import JobTimeline from "@/components/JobTimeline";
+import EscrowVisualizer from "@/components/EscrowVisualizer";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
 import { formatAddress } from "@/lib/format";
@@ -300,6 +301,24 @@ export default function JobDetailPage() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Escrow Visualizer */}
+              <div style={cardStyle}>
+                <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", marginBottom: "4px", textAlign: "center" }}>
+                  Escrow State
+                </div>
+                <EscrowVisualizer
+                  phase={
+                    job.status === "Completed" ? "released" :
+                    job.status === "Accepted" ? "locked" :
+                    job.status === "Open" ? "locking" :
+                    "idle"
+                  }
+                  amount={job.amount}
+                  posterLabel={job.posterWallet ? job.posterWallet.slice(0, 6) : "POSTER"}
+                  takerLabel={job.takerWallet ? job.takerWallet.slice(0, 6) : "TAKER"}
+                />
               </div>
 
               {/* Details card */}

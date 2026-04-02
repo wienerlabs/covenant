@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import NavBar from "@/components/NavBar";
 import PixelAgent from "@/components/PixelAgent";
+import EscrowVisualizer from "@/components/EscrowVisualizer";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
 
@@ -87,13 +88,23 @@ export default function ArenaPage() {
   } | null>(null);
   const [transactions, setTransactions] = useState<{label: string; txHash: string}[]>([]);
   const [x402Payments, setX402Payments] = useState<{from: string; to: string; amount: number; memo: string; txHash: string}[]>([]);
+  const [chatMessages, setChatMessages] = useState<{agent: string; message: string; timestamp: string}[]>([]);
+  const [escrowPhase, setEscrowPhase] = useState<"idle" | "locking" | "locked" | "releasing" | "released">("idle");
+  const [escrowAmount, setEscrowAmount] = useState(0);
   const logPanelRef = useRef<HTMLDivElement>(null);
+  const chatPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (logPanelRef.current) {
       logPanelRef.current.scrollTop = logPanelRef.current.scrollHeight;
     }
   }, [logs]);
+
+  useEffect(() => {
+    if (chatPanelRef.current) {
+      chatPanelRef.current.scrollTop = chatPanelRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
   const handleEvent = useCallback((event: ArenaEvent) => {
     setLogs((prev) => [...prev, { timestamp: getTimestamp(), event }]);
@@ -179,9 +190,20 @@ export default function ArenaPage() {
           }
         }
         break;
+      case "agent_chat":
+        if (event.data) {
+          setChatMessages((prev) => [...prev, {
+            agent: String(event.data!.agent || ""),
+            message: String(event.data!.message || ""),
+            timestamp: getTimestamp(),
+          }]);
+        }
+        break;
       case "escrow_lock":
         setAlphaState("working");
         setAlphaActions((prev) => [...prev, "Locking funds in escrow..."]);
+        setEscrowPhase("locking");
+        if (event.data?.amount) setEscrowAmount(Number(event.data.amount));
         break;
       case "escrow_locked":
         setAlphaState("celebrating");
@@ -193,11 +215,14 @@ export default function ArenaPage() {
         if (event.data && typeof event.data.txHash === "string") {
           setTransactions((prev) => [...prev, { label: "Escrow Lock (SPL)", txHash: event.data!.txHash as string }]);
         }
+        setEscrowPhase("locked");
+        if (event.data?.amount) setEscrowAmount(Number(event.data.amount));
         setTimeout(() => setAlphaState("idle"), 800);
         break;
       case "escrow_release":
         setOmegaState("working");
         setOmegaActions((prev) => [...prev, "Releasing escrow payment..."]);
+        setEscrowPhase("releasing");
         break;
       case "escrow_released":
         setOmegaState("celebrating");
@@ -209,6 +234,7 @@ export default function ArenaPage() {
         if (event.data && typeof event.data.txHash === "string") {
           setTransactions((prev) => [...prev, { label: "Escrow Release (SPL)", txHash: event.data!.txHash as string }]);
         }
+        setEscrowPhase("released");
         setTimeout(() => setOmegaState("idle"), 800);
         break;
       case "x402_payment":
@@ -284,6 +310,9 @@ export default function ArenaPage() {
     setJobStatus("idle");
     setTransactions([]);
     setX402Payments([]);
+    setChatMessages([]);
+    setEscrowPhase("idle");
+    setEscrowAmount(0);
     setPerfTimestamps({});
     setPerfMetrics(null);
 
@@ -799,8 +828,97 @@ export default function ArenaPage() {
           {/* Agent Panels */}
           <div style={{ display: "flex", gap: "24px", marginBottom: "24px" }}>
             {renderAgentPanel(AGENT_ALPHA_CONFIG, alphaState, alphaThought, alphaActions, copiedAlpha, "alpha")}
+
+            {/* Agent Chat Panel */}
+            {chatMessages.length > 0 && (
+              <div
+                style={{
+                  backgroundColor: "rgba(0,0,0,0.4)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: "10px",
+                  padding: "12px",
+                  backdropFilter: "blur(12px)",
+                  width: "220px",
+                  flexShrink: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                <div style={{ fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", marginBottom: "8px", fontWeight: 600 }}>
+                  Agent Chat
+                </div>
+                <div
+                  ref={chatPanelRef}
+                  style={{
+                    flex: 1,
+                    maxHeight: "200px",
+                    overflowY: "auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                  }}
+                >
+                  {chatMessages.map((msg, i) => {
+                    const isAlpha = msg.agent === "alpha";
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          alignSelf: isAlpha ? "flex-start" : "flex-end",
+                          maxWidth: "90%",
+                        }}
+                      >
+                        <div
+                          style={{
+                            backgroundColor: isAlpha ? "rgba(59,130,246,0.2)" : "rgba(16,185,129,0.2)",
+                            border: `1px solid ${isAlpha ? "rgba(59,130,246,0.3)" : "rgba(16,185,129,0.3)"}`,
+                            borderRadius: isAlpha ? "8px 8px 8px 2px" : "8px 8px 2px 8px",
+                            padding: "6px 10px",
+                          }}
+                        >
+                          <div style={{ fontSize: "8px", fontWeight: 700, color: isAlpha ? "#3B82F6" : "#10B981", marginBottom: "2px", textTransform: "uppercase" }}>
+                            {isAlpha ? "Alpha" : "Omega"}
+                          </div>
+                          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", lineHeight: 1.4 }}>
+                            {msg.message}
+                          </div>
+                          <div style={{ fontSize: "7px", color: "rgba(255,255,255,0.25)", marginTop: "2px", textAlign: "right" }}>
+                            {msg.timestamp}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {renderAgentPanel(AGENT_OMEGA_CONFIG, omegaState, omegaThought, omegaActions, copiedOmega, "omega")}
           </div>
+
+          {/* Escrow Visualizer */}
+          {escrowPhase !== "idle" && (
+            <div
+              style={{
+                backgroundColor: "rgba(0,0,0,0.4)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: "10px",
+                padding: "12px 20px",
+                backdropFilter: "blur(12px)",
+                marginBottom: "24px",
+              }}
+            >
+              <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", marginBottom: "4px", textAlign: "center" }}>
+                Escrow Flow
+              </div>
+              <EscrowVisualizer
+                phase={escrowPhase}
+                amount={escrowAmount}
+                posterLabel="ALPHA"
+                takerLabel="OMEGA"
+              />
+            </div>
+          )}
 
           {/* Job Status Progress Bar */}
           {jobStatus !== "idle" && (

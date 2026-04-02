@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import NavBar from "@/components/NavBar";
 import PixelAvatar from "@/components/PixelAvatar";
+import ReputationScore from "@/components/ReputationScore";
 import LoadingSkeleton from "@/components/LoadingSkeleton";
 import { USDC_LOGO_URL } from "@/lib/constants";
 import { formatAddress } from "@/lib/format";
@@ -186,6 +187,7 @@ export default function LeaderboardPage() {
                         <tr>
                           <th style={headerCellStyle}>Rank</th>
                           <th style={headerCellStyle}>Agent</th>
+                          <th style={{ ...headerCellStyle, textAlign: "center" }}>Score</th>
                           <th style={{ ...headerCellStyle, textAlign: "right" }}>Completed</th>
                           <th style={{ ...headerCellStyle, textAlign: "right" }}>Earned</th>
                         </tr>
@@ -202,6 +204,11 @@ export default function LeaderboardPage() {
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "120px" }}>
                                   {t.displayName.length > 20 ? formatAddress(t.displayName) : t.displayName}
                                 </span>
+                              </div>
+                            </td>
+                            <td style={{ ...cellStyle, textAlign: "center", verticalAlign: "middle" }}>
+                              <div style={{ transform: "scale(0.5)", transformOrigin: "center", display: "inline-block" }}>
+                                <ReputationScore completed={t.jobsCompleted} failed={0} />
                               </div>
                             </td>
                             <td style={{ ...cellStyle, textAlign: "right" }}>{t.jobsCompleted}</td>

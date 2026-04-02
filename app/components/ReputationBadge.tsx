@@ -1,6 +1,7 @@
 "use client";
 
 import useReputation from "@/hooks/useReputation";
+import ReputationScore from "@/components/ReputationScore";
 import { USDC_LOGO_URL } from "@/lib/constants";
 
 interface ReputationBadgeProps {
@@ -8,6 +9,7 @@ interface ReputationBadgeProps {
   completed?: number;
   failed?: number;
   totalEarned?: number;
+  showScore?: boolean;
 }
 
 export default function ReputationBadge({
@@ -15,6 +17,7 @@ export default function ReputationBadge({
   completed: completedProp,
   failed: failedProp,
   totalEarned: totalEarnedProp,
+  showScore,
 }: ReputationBadgeProps) {
   const { reputation, loading } = useReputation(wallet);
 
@@ -99,6 +102,11 @@ export default function ReputationBadge({
         backgroundColor: "rgba(255,255,255,0.05)",
       }}
     >
+      {showScore && (
+        <div style={{ marginRight: "12px", flexShrink: 0 }}>
+          <ReputationScore completed={completed} failed={failed} />
+        </div>
+      )}
       <div style={segmentStyle}>
         <div style={labelStyle}>Completed</div>
         <div style={valueStyle}>{completed}</div>

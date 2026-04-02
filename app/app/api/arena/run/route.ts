@@ -151,6 +151,12 @@ export async function POST(request: NextRequest) {
           description: jobSpec.description,
         });
 
+        // Agent Chat: Alpha announces job
+        send("agent_chat", `Alpha: I need someone to ${jobSpec.title.toLowerCase()}. Paying ${jobSpec.amount} USDC for at least ${jobSpec.minWords} words.`, {
+          agent: "alpha",
+          message: `I need someone to ${jobSpec.title.toLowerCase()}. Paying ${jobSpec.amount} USDC for at least ${jobSpec.minWords} words.`,
+        });
+
         // ===== x402 PAYMENT: Omega pays Alpha for API access =====
         try {
           const x402Access = await sendX402Payment(
@@ -368,6 +374,12 @@ export async function POST(request: NextRequest) {
         send("omega_accepted", "Job accepted", {
           reason: evalResult.reason,
           txHash: acceptTxHash,
+        });
+
+        // Agent Chat: Omega accepts
+        send("agent_chat", `Omega: I'll take this job. ${evalResult.reason} Starting work now.`, {
+          agent: "omega",
+          message: `I'll take this job. ${evalResult.reason} Starting work now.`,
         });
 
         // ===== ANCHOR CPI: accept_job on-chain =====
@@ -644,6 +656,12 @@ export async function POST(request: NextRequest) {
 
         const textPreview = deliverableText.slice(0, 200);
 
+        // Agent Chat: Omega completes
+        send("agent_chat", `Omega: Done! ${wordCount} words, verified by ZK proof. Hash: ${textHash.slice(0, 12)}...`, {
+          agent: "omega",
+          message: `Done! ${wordCount} words, verified by ZK proof. Hash: ${textHash.slice(0, 12)}...`,
+        });
+
         send("omega_completed", "Work submitted and verified", {
           wordCount,
           txHash: submitTxHash,
@@ -652,6 +670,12 @@ export async function POST(request: NextRequest) {
         });
 
         // ===== COMPLETE =====
+        // Agent Chat: Alpha acknowledges
+        send("agent_chat", `Alpha: Payment released. Great work on "${jobSpec.title}"!`, {
+          agent: "alpha",
+          message: `Payment released. Great work on "${jobSpec.title}"!`,
+        });
+
         const totalTime =
           ((Date.now() - startTime) / 1000).toFixed(1) + "s";
         send("complete", "Arena round complete", {
