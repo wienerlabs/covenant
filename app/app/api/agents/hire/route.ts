@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
+import { lockFundsInEscrow, releaseFundsToTaker } from "@/lib/escrow";
 import { rateLimit } from "@/lib/rateLimit";
 import crypto from "crypto";
 import { NextRequest } from "next/server";
@@ -115,6 +116,18 @@ export async function POST(request: NextRequest) {
 
         send("created", `Job created: ${job.id.slice(0, 8)}...`, { jobId: job.id, txHash: createTxHash });
 
+        // SPL Token Escrow: Lock funds
+        try {
+          send("escrow_lock", `Locking ${config.amount} USDC in escrow...`);
+          const lockResult = await lockFundsInEscrow("DEPLOYER_KEYPAIR", config.amount);
+          send("escrow_locked", "Funds locked in escrow", { txHash: lockResult.txHash, amount: config.amount });
+          await prisma.transaction.create({
+            data: { txHash: lockResult.txHash, type: "escrow_lock", jobId: job.id, wallet: posterWallet, amount: config.amount, status: "confirmed" },
+          });
+        } catch (err) {
+          console.error("[escrow] Lock failed:", err);
+        }
+
         // Step 2: Accept job
         send("accepting", "Agent accepting job...");
 
@@ -206,6 +219,18 @@ export async function POST(request: NextRequest) {
           });
         } catch {
           // non-blocking
+        }
+
+        // SPL Token Escrow: Release funds to agent
+        try {
+          send("escrow_release", `Releasing ${config.amount} USDC to agent...`);
+          const releaseResult = await releaseFundsToTaker(takerWallet, config.amount);
+          send("escrow_released", "Payment released", { txHash: releaseResult.txHash, amount: config.amount });
+          await prisma.transaction.create({
+            data: { txHash: releaseResult.txHash, type: "escrow_release", jobId: job.id, wallet: takerWallet, amount: config.amount, status: "confirmed" },
+          });
+        } catch (err) {
+          console.error("[escrow] Release failed:", err);
         }
 
         // Update reputation

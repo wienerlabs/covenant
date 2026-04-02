@@ -4,6 +4,7 @@ import { sendX402Payment, getAgentKeypair } from "@/lib/x402";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
 import { rateLimit } from "@/lib/rateLimit";
+import { lockFundsInEscrow, releaseFundsToTaker } from "@/lib/escrow";
 import {
   getAnchorProgram,
   keypairFromEnv,
@@ -289,6 +290,26 @@ export async function POST(request: NextRequest) {
             error: String(err).slice(0, 200),
             programId: PROGRAM_ID.toBase58(),
           });
+        }
+
+        // ===== SPL TOKEN ESCROW: Lock funds =====
+        try {
+          send("escrow_lock", "Locking " + jobSpec.amount + " USDC in escrow...", null);
+          const lockResult = await lockFundsInEscrow("AGENT_ALPHA_KEYPAIR", jobSpec.amount);
+          send("escrow_locked", "Funds locked in escrow", { txHash: lockResult.txHash, amount: jobSpec.amount, fromAta: lockResult.fromAta, toAta: lockResult.toAta });
+          await prisma.transaction.create({
+            data: {
+              txHash: lockResult.txHash,
+              type: "escrow_lock",
+              jobId: job.id,
+              wallet: AGENT_ALPHA.wallet,
+              amount: jobSpec.amount,
+              status: "confirmed",
+            },
+          });
+        } catch (err) {
+          console.error("[escrow] Failed to lock funds:", err);
+          send("escrow_lock", "Escrow lock attempted (fallback to marker tx)", { error: String(err).slice(0, 200) });
         }
 
         // ===== STEP 3: OMEGA THINKS (ACCEPT DECISION) =====
@@ -599,6 +620,26 @@ export async function POST(request: NextRequest) {
             error: String(err).slice(0, 200),
             programId: PROGRAM_ID.toBase58(),
           });
+        }
+
+        // ===== SPL TOKEN ESCROW: Release funds to taker =====
+        try {
+          send("escrow_release", "Releasing " + jobSpec.amount + " USDC to taker...", null);
+          const releaseResult = await releaseFundsToTaker(AGENT_OMEGA.wallet, jobSpec.amount);
+          send("escrow_released", "Payment released to taker", { txHash: releaseResult.txHash, amount: jobSpec.amount, fromAta: releaseResult.fromAta, toAta: releaseResult.toAta });
+          await prisma.transaction.create({
+            data: {
+              txHash: releaseResult.txHash,
+              type: "escrow_release",
+              jobId: job.id,
+              wallet: AGENT_OMEGA.wallet,
+              amount: jobSpec.amount,
+              status: "confirmed",
+            },
+          });
+        } catch (err) {
+          console.error("[escrow] Failed to release funds:", err);
+          send("escrow_release", "Escrow release attempted (fallback to marker tx)", { error: String(err).slice(0, 200) });
         }
 
         const textPreview = deliverableText.slice(0, 200);

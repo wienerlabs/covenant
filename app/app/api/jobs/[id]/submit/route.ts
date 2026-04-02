@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
+import { releaseFundsToTaker } from "@/lib/escrow";
 import { sendX402Payment, getAgentKeypair } from "@/lib/x402";
 import crypto from "crypto";
 
@@ -154,26 +155,43 @@ export async function POST(
       console.error("[solana] Failed to send marker tx for submit_completion:", err);
     }
 
-    // Send payment marker: deployer sends 0.001 SOL to taker as "payment released" proof
+    // Real SPL token escrow release: transfer USDC from escrow to taker
     let paymentTxHash: string | null = null;
     try {
-      const deployerKp = JSON.parse(process.env.DEPLOYER_KEYPAIR || "[]");
-      if (deployerKp.length > 0) {
-        const payment = await sendX402Payment(deployerKp, takerWallet, 0.001, "payment_released:" + id);
-        paymentTxHash = payment.txHash;
-        await prisma.transaction.create({
-          data: {
-            txHash: paymentTxHash,
-            type: "payment_released",
-            jobId: id,
-            wallet: takerWallet,
-            amount: job.amount,
-            status: "confirmed",
-          },
-        });
-      }
+      const releaseResult = await releaseFundsToTaker(takerWallet, job.amount);
+      paymentTxHash = releaseResult.txHash;
+      await prisma.transaction.create({
+        data: {
+          txHash: paymentTxHash,
+          type: "escrow_release",
+          jobId: id,
+          wallet: takerWallet,
+          amount: job.amount,
+          status: "confirmed",
+        },
+      });
     } catch (err) {
-      console.error("[solana] Failed to send payment marker:", err);
+      console.error("[escrow] Failed to release funds:", err);
+      // Fallback: try old payment marker
+      try {
+        const deployerKp = JSON.parse(process.env.DEPLOYER_KEYPAIR || "[]");
+        if (deployerKp.length > 0) {
+          const payment = await sendX402Payment(deployerKp, takerWallet, 0.001, "payment_released:" + id);
+          paymentTxHash = payment.txHash;
+          await prisma.transaction.create({
+            data: {
+              txHash: paymentTxHash,
+              type: "payment_released",
+              jobId: id,
+              wallet: takerWallet,
+              amount: job.amount,
+              status: "confirmed",
+            },
+          });
+        }
+      } catch (fallbackErr) {
+        console.error("[solana] Fallback payment marker also failed:", fallbackErr);
+      }
     }
 
     return NextResponse.json({
