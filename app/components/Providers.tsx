@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, useEffect, type ReactNode } from "react";
 import { AppProvider } from "@solana/connector/react";
 import { getDefaultConfig } from "@solana/connector/headless";
 import { DEVNET_ENDPOINT } from "@/lib/constants";
@@ -35,12 +35,20 @@ export default function Providers({ children }: ProvidersProps) {
     []
   );
 
+  // Ensure client-side only rendering for widgets that access browser APIs
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   return (
     <AppProvider connectorConfig={connectorConfig}>
       <ProfileGate>{children}</ProfileGate>
-      <OnboardingTour />
-      <FaucetWidget />
-      <TransactionTicker />
+      {mounted && (
+        <>
+          <OnboardingTour />
+          <FaucetWidget />
+          <TransactionTicker />
+        </>
+      )}
     </AppProvider>
   );
 }
