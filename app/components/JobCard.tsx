@@ -7,6 +7,7 @@ import AsciiAnimation from "./AsciiAnimation";
 import { formatAddress } from "@/lib/format";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
+import CopyButton from "./CopyButton";
 import type { JobData } from "@/hooks/useJobList";
 
 interface JobCardProps {
@@ -137,6 +138,7 @@ export default function JobCard({
           >
             {formatAddress(job.id)}
           </Link>
+          <CopyButton text={job.id} label="Copy Job ID" />
         </div>
 
         <div style={{ fontSize: "22px", fontWeight: 700, color: isDark ? "#ffffff" : "#000000", display: "flex", alignItems: "center", gap: "8px" }}>

@@ -9,6 +9,7 @@ import JobTimeline from "@/components/JobTimeline";
 import EscrowVisualizer from "@/components/EscrowVisualizer";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
+import CopyButton from "@/components/CopyButton";
 import { formatAddress } from "@/lib/format";
 
 interface DisputeData {
@@ -329,7 +330,9 @@ export default function JobDetailPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
                   <div>
                     <div style={labelStyle}>Poster Wallet</div>
-                    <div style={valueStyle}>{formatAddress(job.posterWallet)}</div>
+                    <div style={{ ...valueStyle, display: "flex", alignItems: "center", gap: "6px" }}>
+                      {formatAddress(job.posterWallet)} <CopyButton text={job.posterWallet} />
+                    </div>
                     <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.25)", marginTop: "2px", wordBreak: "break-all" }}>
                       {job.posterWallet}
                     </div>
@@ -337,7 +340,9 @@ export default function JobDetailPage() {
                   {job.takerWallet && (
                     <div>
                       <div style={labelStyle}>Taker Wallet</div>
-                      <div style={valueStyle}>{formatAddress(job.takerWallet)}</div>
+                      <div style={{ ...valueStyle, display: "flex", alignItems: "center", gap: "6px" }}>
+                        {formatAddress(job.takerWallet)} <CopyButton text={job.takerWallet!} />
+                      </div>
                       <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.25)", marginTop: "2px", wordBreak: "break-all" }}>
                         {job.takerWallet}
                       </div>
@@ -354,32 +359,35 @@ export default function JobDetailPage() {
                   {job.specHash && (
                     <div style={{ gridColumn: "1 / -1" }}>
                       <div style={labelStyle}>Spec Hash</div>
-                      <div style={{ ...valueStyle, fontSize: "11px", fontFamily: "monospace", opacity: 0.7 }}>
-                        {job.specHash}
+                      <div style={{ ...valueStyle, fontSize: "11px", fontFamily: "monospace", opacity: 0.7, display: "flex", alignItems: "center", gap: "6px" }}>
+                        {job.specHash} <CopyButton text={job.specHash!} />
                       </div>
                     </div>
                   )}
                   {job.txHash && (
                     <div style={{ gridColumn: "1 / -1" }}>
                       <div style={labelStyle}>Transaction Hash</div>
-                      <a
-                        href={`https://explorer.solana.com/tx/${job.txHash}?cluster=devnet`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          fontSize: "11px",
-                          fontFamily: "monospace",
-                          color: "#5ba4f5",
-                          textDecoration: "none",
-                          wordBreak: "break-all",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "6px",
-                        }}
-                      >
-                        <img src={SOL_LOGO_URL} alt="SOL" width={12} height={12} style={{ borderRadius: "50%" }} />
-                        {job.txHash}
-                      </a>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <a
+                          href={`https://explorer.solana.com/tx/${job.txHash}?cluster=devnet`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            fontSize: "11px",
+                            fontFamily: "monospace",
+                            color: "#5ba4f5",
+                            textDecoration: "none",
+                            wordBreak: "break-all",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          <img src={SOL_LOGO_URL} alt="SOL" width={12} height={12} style={{ borderRadius: "50%" }} />
+                          {job.txHash}
+                        </a>
+                        <CopyButton text={job.txHash!} />
+                      </div>
                     </div>
                   )}
                 </div>

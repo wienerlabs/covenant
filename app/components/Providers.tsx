@@ -8,6 +8,9 @@ import ProfileGate from "./ProfileGate";
 import OnboardingTour from "./OnboardingTour";
 import FaucetWidget from "./FaucetWidget";
 import TransactionTicker from "./TransactionTicker";
+import ToastContainer from "./ToastContainer";
+import CommandPalette from "./CommandPalette";
+import ConfettiContainer from "./ConfettiContainer";
 
 interface ProvidersProps {
   children: ReactNode;
@@ -47,6 +50,9 @@ export default function Providers({ children }: ProvidersProps) {
           <OnboardingTour />
           <FaucetWidget />
           <TransactionTicker />
+          <ToastContainer />
+          <CommandPalette />
+          <ConfettiContainer />
         </>
       )}
     </AppProvider>

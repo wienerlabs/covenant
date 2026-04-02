@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import NavBar from "@/components/NavBar";
 import PixelAgent from "@/components/PixelAgent";
 import ReputationScore from "@/components/ReputationScore";
+import { fireConfetti } from "@/lib/confetti";
 
 type AgentType = "writer" | "reviewer" | "translator";
 type AgentState = "idle" | "thinking" | "working" | "celebrating";
@@ -133,6 +134,7 @@ export default function AgentsPage() {
               }));
             } else if (event.step?.includes("complete") || event.step?.includes("payment")) {
               setAgentStates(s => ({ ...s, [agentType]: "celebrating" }));
+              fireConfetti();
               setProgress(p => ({
                 ...p,
                 [agentType]: { ...p[agentType], step: 4, messages: [...p[agentType].messages, "Payment released \u2713"], done: true },
