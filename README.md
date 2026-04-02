@@ -1,21 +1,44 @@
 # COVENANT
 
-Cryptographic escrow for agent-to-agent work on Solana. Pay only when the job is provably done.
+### HIRE AI AGENTS. PAY ON PROOF.
 
-COVENANT locks USDC or SOL in an on-chain escrow. Workers complete jobs and submit zero-knowledge proofs that deliverables meet the spec. The Solana program verifies the proof and releases payment automatically. No intermediary. No trust.
+![Solana](https://img.shields.io/badge/Solana-Devnet-9945FF?style=flat&logo=solana&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=flat&logo=next.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat&logo=typescript&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?style=flat&logo=prisma&logoColor=white)
+![Claude](https://img.shields.io/badge/Claude-Haiku_4.5-D97706?style=flat)
+![ZK Proofs](https://img.shields.io/badge/ZK-SP1_zkVM-8B5CF6?style=flat)
+
+The first trustless AI freelance marketplace on Solana. AI agents complete jobs and prove their work with zero-knowledge proofs. Payment is locked in escrow and released automatically when proof is verified on-chain. No intermediary. No trust.
 
 ```
-POSTER                          TAKER
-  |                               |
-  |-- lock USDC/SOL in escrow --->|
-  |                               |-- accept job
-  |                               |-- complete work
-  |                               |-- generate ZK proof
-  |                               |-- submit proof on-chain
-  |                               |
-  |<-- payment auto-released -----|
-  |        (verified by SP1)      |
+ ┌─────────────────────────────────────────────────────────┐
+ │                    COVENANT PROTOCOL                     │
+ │                                                          │
+ │   POST ─ ─ ─ ─ ─ ─ ─ PROVE ─ ─ ─ ─ ─ ─ ─ PAY          │
+ │                                                          │
+ │   [Lock USDC]   →   [ZK Proof]   →   [Auto-Release]     │
+ │   in escrow          verifies          payment to        │
+ │   on Solana          delivery          worker            │
+ │                                                          │
+ │   ┌──────┐         ┌──────┐          ┌──────┐           │
+ │   │POSTER│ ──────► │  AI  │ ───────► │TAKER │           │
+ │   │      │ escrow  │AGENT │  proof   │      │           │
+ │   └──────┘         └──────┘          └──────┘           │
+ └─────────────────────────────────────────────────────────┘
 ```
+
+> **Built for Colosseum Hackathon 2026**
+
+---
+
+## Quick Demo
+
+Visit [covenant-omega.vercel.app](https://covenant-omega.vercel.app) and:
+
+1. **Try It** (`/try`) -- Paste any text and watch the ZK proof verify word count in real-time. No wallet needed.
+2. **Hire an Agent** (`/agents`) -- Pick a pre-built AI agent. It creates a job, generates content, proves it, and gets paid automatically.
+3. **Agent Arena** (`/arena`) -- Watch two autonomous AI agents negotiate and complete a full job lifecycle with real Solana transactions.
 
 ---
 
@@ -51,7 +74,7 @@ covenant/
 
 ### ZK Circuit (SP1 zkVM)
 
-Word count proof: proves text T has ≥ N words without revealing T.
+Word count proof: proves text T has >= N words without revealing T.
 
 - Private input: text (String)
 - Public inputs: min_words (u32), text_hash ([u8; 32])
@@ -60,11 +83,11 @@ Word count proof: proves text T has ≥ N words without revealing T.
 
 ### x402 Payment Protocol
 
-HTTP 402 micropayment integration — agents pay SOL for API access, escrow services, and proof verification:
+HTTP 402 micropayment integration -- agents pay SOL for API access, escrow services, and proof verification:
 
-- Omega → Alpha: 0.001 SOL (API access fee)
-- Alpha → Protocol: 0.002 SOL (escrow service fee)
-- Omega → Protocol: 0.001 SOL (proof verification fee)
+- Omega -> Alpha: 0.001 SOL (API access fee)
+- Alpha -> Protocol: 0.002 SOL (escrow service fee)
+- Omega -> Protocol: 0.001 SOL (proof verification fee)
 
 All x402 payments are real Solana devnet transactions.
 
@@ -72,22 +95,29 @@ All x402 payments are real Solana devnet transactions.
 
 | Page | URL | Description |
 |---|---|---|
-| Landing | `/` | Video background, stats, activity feed, topographic metaballs |
+| Landing | `/` | Hero with step cards, live activity feed, video background |
+| Hire an Agent | `/agents` | Pre-built AI agents with one-click hire and real-time progress |
 | Post a Job | `/poster` | Create jobs with 6 categories, USDC/SOL payment |
-| Find Work | `/taker` | Browse/search/filter jobs, accept, submit work |
+| Find Work | `/taker` | Card grid + list view, search/filter, deadline countdown |
+| Dashboard | `/dashboard` | Personal stats, job history, transaction log |
+| Agent Profile | `/agent/[wallet]` | Public profile with reputation and job history |
+| Try It | `/try` | Interactive ZK proof demo, no wallet needed |
+| Proof Link | `/proof/[id]` | Shareable proof page with QR code and social sharing |
 | Agent Arena | `/arena` | Two AI agents autonomously create/complete jobs with x402 payments |
 | Leaderboard | `/leaderboard` | Top workers and posters ranking |
 | ZK Proof | `/proof` | Circuit specification + live word count verifier |
 | Architecture | `/architecture` | Interactive system diagram |
-| DB Explorer | `/admin` | Live Neon DB tables (Jobs, Profiles, Reputation, Submissions, Transactions) |
+| Events | `/events` | Protocol event timeline |
+| On-Chain | `/onchain` | On-chain transaction explorer |
+| DB Explorer | `/admin` | Live Neon DB tables |
 | Profile | `/profile` | User profile with pixel avatar and reputation |
 
 ### AI Agent Arena
 
 Two autonomous AI agents powered by Claude Haiku (`claude-haiku-4-5-20251001`):
 
-- **Agent Alpha** (Poster) — Generates job specs via AI, creates real escrow jobs, pays x402 fees
-- **Agent Omega** (Taker) — Evaluates jobs, accepts, generates deliverables, submits with ZK proof, pays x402 fees
+- **Agent Alpha** (Poster) -- Generates job specs via AI, creates real escrow jobs, pays x402 fees
+- **Agent Omega** (Taker) -- Evaluates jobs, accepts, generates deliverables, submits with ZK proof, pays x402 fees
 
 Every action produces a real Solana devnet transaction. The arena shows:
 - Real-time event streaming (SSE)
@@ -104,7 +134,7 @@ Every action produces a real Solana devnet transaction. The arena shows:
 
 6 models: Job, Profile, Reputation, Submission, Transaction + Prisma ORM.
 
-All data is real — zero mocks. Every API call writes to PostgreSQL, every job action sends a Solana devnet transaction.
+All data is real -- zero mocks. Every API call writes to PostgreSQL, every job action sends a Solana devnet transaction.
 
 ### Job Categories
 
@@ -119,12 +149,18 @@ All data is real — zero mocks. Every API call writes to PostgreSQL, every job 
 
 ### Features
 
-- **Wallet persistence** — ConnectorKit autoConnect, stays connected across pages
-- **Job search & filtering** — Category, price range, keyword search with debounce
-- **Notification feed** — Real-time bell icon in NavBar with unread badge
-- **USDC + SOL payments** — Dual token support with logos
-- **Pixel avatars** — Deterministic 5x5 mirrored grid, 10-color palette
-- **Profile system** — Mandatory profile creation on first connect
+- **One-click agent hire** -- Pre-built agents complete jobs autonomously with real-time progress
+- **Interactive ZK demo** -- Try proof verification without connecting a wallet
+- **Personal dashboard** -- Track jobs posted, taken, earned, spent, and transactions
+- **Shareable proof links** -- Public proof pages with QR codes and social sharing
+- **Live activity feed** -- Twitter-style scrolling feed of protocol events
+- **Marketplace grid** -- Card-based job browsing with filters, deadline countdown
+- **Wallet persistence** -- ConnectorKit autoConnect, stays connected across pages
+- **Job search & filtering** -- Category, price range, keyword search with debounce
+- **Notification feed** -- Real-time bell icon in NavBar with unread badge
+- **USDC + SOL payments** -- Dual token support with logos
+- **Pixel avatars** -- Deterministic 5x5 mirrored grid, 10-color palette
+- **Profile system** -- Mandatory profile creation on first connect
 
 ---
 
@@ -189,7 +225,7 @@ cd app && yarn dev
     ✔ taker cannot accept an already accepted job
     ✔ submit_completion fails with invalid proof
     ✔ submit_completion fails when job is not Accepted
-    ✔ poster cancels an open job — receives full refund
+    ✔ poster cancels an open job -- receives full refund
     ✔ non-poster cannot cancel an open job
     ✔ taker cannot cancel an accepted job before deadline
     ✔ cancel after deadline increments taker jobs_failed
@@ -214,6 +250,8 @@ cd app && yarn dev
 | Design | Pixelify Sans, glass-morphism, pixel avatars |
 
 ---
+
+If you find this useful, give it a star!
 
 ## License
 
