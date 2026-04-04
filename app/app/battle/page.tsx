@@ -453,7 +453,7 @@ export default function BattlePage() {
     <div style={{
       minHeight: "100vh",
       backgroundColor: "#0a0a14",
-      backgroundImage: "url('/poster-bg.png')",
+      backgroundImage: "url('/arena-bg.png')",
       backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundAttachment: "fixed",
