@@ -67,41 +67,65 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
 
   const isMoreActive = MORE_TABS.some(t => t.id === activeTab);
 
-  const tabStyle = (tab: Tab): React.CSSProperties => ({
-    fontFamily: "inherit",
-    fontSize: "11px",
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-    textDecoration: "none",
-    color: activeTab === tab
-      ? (isDark ? "#ffffff" : "#000000")
-      : (isDark ? "rgba(255,255,255,0.4)" : "#999999"),
-    borderBottom: activeTab === tab
-      ? `2px solid ${isDark ? "#ffffff" : "#000000"}`
-      : "2px solid transparent",
-    paddingBottom: "4px",
-    transition: "all 0.15s ease",
-  });
+  const tabStyle = (tab: Tab): React.CSSProperties => {
+    const isArena = tab === "arena";
+    const isActive = activeTab === tab;
+
+    if (isArena) {
+      return {
+        fontFamily: "inherit",
+        fontSize: "11px",
+        textTransform: "uppercase",
+        letterSpacing: "0.06em",
+        textDecoration: "none",
+        color: isActive ? "#FFE342" : "#FF425E",
+        borderBottom: isActive ? "2px solid #FF425E" : "2px solid transparent",
+        paddingBottom: "4px",
+        fontWeight: 700,
+        transition: "all 0.15s ease",
+        textShadow: isActive ? "0 0 8px rgba(255,66,94,0.4)" : "none",
+      };
+    }
+
+    return {
+      fontFamily: "inherit",
+      fontSize: "11px",
+      textTransform: "uppercase",
+      letterSpacing: "0.05em",
+      textDecoration: "none",
+      color: isActive
+        ? (isDark ? "#ffffff" : "#000000")
+        : (isDark ? "rgba(255,255,255,0.4)" : "#999999"),
+      borderBottom: isActive
+        ? `2px solid ${isDark ? "#ffffff" : "#000000"}`
+        : "2px solid transparent",
+      paddingBottom: "4px",
+      transition: "all 0.15s ease",
+    };
+  };
 
   return (
     <nav
       style={{
-        height: "48px",
-        borderBottom: isTransparent ? "none" : (isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #000000"),
-        display: "flex",
+        height: "52px",
+        borderBottom: isTransparent ? "none" : (isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #e0e0e0"),
+        display: "grid",
+        gridTemplateColumns: "140px 1fr auto",
         alignItems: "center",
-        justifyContent: "space-between",
         padding: isTransparent ? "0 40px" : "0 24px",
         backgroundColor: "transparent",
         position: "relative",
+        maxWidth: "1400px",
+        margin: "0 auto",
+        width: "100%",
       }}
     >
       <Link
         href="/"
         style={{
-          fontSize: "11px",
+          fontSize: "12px",
           textTransform: "uppercase",
-          letterSpacing: "0.1em",
+          letterSpacing: "0.15em",
           textDecoration: "none",
           color: isDark ? "#ffffff" : "#000000",
           fontWeight: 700,
@@ -111,7 +135,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         Covenant
       </Link>
 
-      <div className="nav-tabs" style={{ display: "flex", gap: "20px", alignItems: "center" }}>
+      <div className="nav-tabs" style={{ display: "flex", gap: "18px", alignItems: "center", justifyContent: "center" }}>
         {visibleTabs.map((tab) => (
           <Link key={tab.id} href={tab.href} style={tabStyle(tab.id)}>
             {tab.label}
@@ -275,7 +299,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, justifyContent: "flex-end" }}>
         <span
           style={{
             fontSize: "9px",
@@ -292,7 +316,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         </span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, justifyContent: "flex-end" }}>
         {isConnected && profile && (
           <Link
             href="/profile"
