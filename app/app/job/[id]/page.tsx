@@ -29,7 +29,30 @@ interface Submission {
   wordCount: number;
   verified: boolean;
   txHash?: string | null;
+  outputText?: string | null;
+  proofHex?: string | null;
   createdAt: string;
+}
+
+interface TxRecord {
+  id: string;
+  txHash: string;
+  type: string;
+  amount: number | null;
+  wallet: string;
+  createdAt: string;
+}
+
+interface RepData {
+  jobsCompleted: number;
+  jobsFailed: number;
+  totalEarned: number;
+}
+
+interface ProfileData {
+  displayName: string;
+  avatarSeed: string;
+  avatarUrl?: string | null;
 }
 
 interface Job {
@@ -67,6 +90,9 @@ export default function JobDetailPage() {
 
   const [job, setJob] = useState<Job | null>(null);
   const [disputes, setDisputes] = useState<DisputeData[]>([]);
+  const [jobTransactions, setJobTransactions] = useState<TxRecord[]>([]);
+  const [takerProfile, setTakerProfile] = useState<ProfileData | null>(null);
+  const [takerRep, setTakerRep] = useState<RepData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -75,9 +101,10 @@ export default function JobDetailPage() {
     if (!id) return;
     async function fetchJob() {
       try {
-        const [jobRes, disputeRes] = await Promise.all([
+        const [jobRes, disputeRes, txRes] = await Promise.all([
           fetch(`/api/jobs/${id}`),
           fetch(`/api/disputes?jobId=${id}`),
+          fetch(`/api/transactions?jobId=${id}`).catch(() => null),
         ]);
         if (!jobRes.ok) {
           setError(jobRes.status === 404 ? "Job not found." : "Failed to load job.");
@@ -87,6 +114,27 @@ export default function JobDetailPage() {
         setJob(data);
         if (disputeRes.ok) {
           setDisputes(await disputeRes.json());
+        }
+        if (txRes && txRes.ok) {
+          try {
+            const txData = await txRes.json();
+            setJobTransactions(Array.isArray(txData) ? txData : []);
+          } catch { /* ignore */ }
+        }
+        // Fetch taker profile + reputation if taker exists
+        if (data.takerWallet) {
+          try {
+            const [profRes, repRes] = await Promise.all([
+              fetch(`/api/profile/${data.takerWallet}`).catch(() => null),
+              fetch(`/api/reputation/${data.takerWallet}`).catch(() => null),
+            ]);
+            if (profRes && profRes.ok) {
+              setTakerProfile(await profRes.json());
+            }
+            if (repRes && repRes.ok) {
+              setTakerRep(await repRes.json());
+            }
+          } catch { /* ignore */ }
         }
       } catch {
         setError("Failed to load job.");
@@ -465,6 +513,229 @@ export default function JobDetailPage() {
                         )}
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Deliverable Output */}
+              {job.status === "Completed" && job.submissions && job.submissions.some((s) => s.outputText) && (() => {
+                const sub = job.submissions.find((s) => s.outputText);
+                if (!sub) return null;
+                return (
+                  <div style={cardStyle}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <div style={{
+                          fontSize: "10px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.1em",
+                          color: "#FFE342",
+                          fontWeight: 600,
+                        }}>
+                          Deliverable Output
+                        </div>
+                        {takerProfile && (
+                          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.5)" }}>
+                            by {takerProfile.displayName}
+                          </span>
+                        )}
+                      </div>
+                      {sub.verified && (
+                        <span style={{
+                          fontSize: "9px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                          padding: "3px 10px",
+                          borderRadius: "4px",
+                          backgroundColor: "rgba(255,227,66,0.1)",
+                          border: "1px solid rgba(255,227,66,0.3)",
+                          color: "#FFE342",
+                          fontWeight: 700,
+                        }}>
+                          ZK Verified
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Full text */}
+                    <div
+                      style={{
+                        backgroundColor: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: "8px",
+                        padding: "16px",
+                        fontFamily: "monospace",
+                        fontSize: "12px",
+                        color: "rgba(255,255,255,0.75)",
+                        lineHeight: 1.7,
+                        maxHeight: "400px",
+                        overflowY: "auto",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        marginBottom: "16px",
+                      }}
+                    >
+                      {sub.outputText}
+                    </div>
+
+                    {/* Stats row */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap", marginBottom: "12px" }}>
+                      <div>
+                        <div style={labelStyle}>Word Count</div>
+                        <div style={{ fontSize: "14px", fontWeight: 600, color: "#fff" }}>{sub.wordCount.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>Text Hash</div>
+                        <div style={{ fontSize: "11px", fontFamily: "monospace", color: "rgba(255,255,255,0.5)" }}>
+                          {sub.textHash.slice(0, 24)}...
+                        </div>
+                      </div>
+                      <div>
+                        <div style={labelStyle}>Status</div>
+                        <div style={{ fontSize: "12px", color: sub.verified ? "#FFE342" : "rgba(255,255,255,0.4)", fontWeight: 600 }}>
+                          {sub.verified ? "Verified" : "Pending"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Taker info */}
+                    {(takerProfile || takerRep) && (
+                      <div style={{
+                        borderTop: "1px solid rgba(255,255,255,0.08)",
+                        paddingTop: "12px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        flexWrap: "wrap",
+                      }}>
+                        {takerProfile && (
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <div style={{
+                              width: "28px",
+                              height: "28px",
+                              borderRadius: "6px",
+                              backgroundColor: "rgba(255,66,94,0.2)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "12px",
+                              color: "#FF425E",
+                              fontWeight: 700,
+                            }}>
+                              {takerProfile.displayName.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: "12px", color: "#fff", fontWeight: 600 }}>{takerProfile.displayName}</div>
+                              <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.35)", fontFamily: "monospace" }}>
+                                {formatAddress(sub.takerWallet)}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {takerRep && (
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
+                              Jobs: <span style={{ color: "#fff" }}>{takerRep.jobsCompleted}</span>
+                            </div>
+                            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
+                              Earned: <span style={{ color: "#fff" }}>${takerRep.totalEarned.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Transaction History */}
+              {jobTransactions.length > 0 && (
+                <div style={cardStyle}>
+                  <div style={{
+                    fontSize: "10px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    color: "rgba(255,255,255,0.4)",
+                    marginBottom: "20px",
+                  }}>
+                    Transaction History ({jobTransactions.length})
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {jobTransactions.map((tx) => {
+                      const typeColors: Record<string, string> = {
+                        escrow_lock: "#a855f7",
+                        accept_job: "#FFE342",
+                        submit_completion: "#22c55e",
+                        escrow_release: "#22c55e",
+                        payment_released: "#22c55e",
+                        create_job: "#42BDFF",
+                      };
+                      const typeLabels: Record<string, string> = {
+                        escrow_lock: "Escrow Lock",
+                        accept_job: "Accept Job",
+                        submit_completion: "Submit Completion",
+                        escrow_release: "Escrow Release",
+                        payment_released: "Payment Released",
+                        create_job: "Create Job",
+                      };
+                      const color = typeColors[tx.type] || "rgba(255,255,255,0.5)";
+                      const label = typeLabels[tx.type] || tx.type.replace(/_/g, " ");
+                      return (
+                        <div
+                          key={tx.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                            padding: "10px 12px",
+                            border: "1px solid rgba(255,255,255,0.06)",
+                            borderRadius: "6px",
+                            backgroundColor: "rgba(255,255,255,0.02)",
+                          }}
+                        >
+                          <span style={{
+                            fontSize: "9px",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                            backgroundColor: `${color}15`,
+                            border: `1px solid ${color}30`,
+                            color: color,
+                            fontWeight: 600,
+                            whiteSpace: "nowrap",
+                          }}>
+                            {label}
+                          </span>
+                          <a
+                            href={`https://explorer.solana.com/tx/${tx.txHash}?cluster=devnet`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              fontSize: "10px",
+                              fontFamily: "monospace",
+                              color: "#42BDFF",
+                              textDecoration: "none",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              flex: 1,
+                              minWidth: 0,
+                            }}
+                          >
+                            {tx.txHash.slice(0, 12)}...{tx.txHash.slice(-6)}
+                          </a>
+                          {tx.amount != null && tx.amount > 0 && (
+                            <span style={{ fontSize: "11px", color: "#fff", fontWeight: 600, flexShrink: 0 }}>
+                              ${tx.amount.toFixed(2)}
+                            </span>
+                          )}
+                          <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.25)", flexShrink: 0 }}>
+                            {new Date(tx.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

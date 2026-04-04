@@ -60,6 +60,17 @@ interface MultiRoundSummary {
   avgTimePerRound: number;
 }
 
+interface OpenJob {
+  id: string;
+  amount: number;
+  category: string;
+  minWords: number;
+  deadline: string;
+  posterWallet: string;
+  specJson: Record<string, unknown>;
+  status: string;
+}
+
 export default function ArenaPage() {
   const [running, setRunning] = useState(false);
   const [round, setRound] = useState(0);
@@ -97,6 +108,12 @@ export default function ArenaPage() {
   const [a2aExpanded, setA2aExpanded] = useState(true);
   const logPanelRef = useRef<HTMLDivElement>(null);
   const chatPanelRef = useRef<HTMLDivElement>(null);
+
+  // ===== Fulfill mode state =====
+  const [arenaMode, setArenaMode] = useState<"new" | "fulfill">("new");
+  const [openJobs, setOpenJobs] = useState<OpenJob[]>([]);
+  const [openJobsLoading, setOpenJobsLoading] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<OpenJob | null>(null);
 
   useEffect(() => {
     if (logPanelRef.current) {
@@ -276,6 +293,73 @@ export default function ArenaPage() {
           }
         }
         break;
+      // ===== Fulfill mode events =====
+      case "fulfill_start":
+        setOmegaState("thinking");
+        setOmegaThought("Discovering open job...");
+        setOmegaActions((prev) => [...prev, "Scanning open jobs..."]);
+        if (event.data?.title) {
+          setSpecData({ ...event.data });
+          setAlphaThought(`Posted: ${event.data.title}\nAmount: ${event.data.amount} USDC`);
+          setAlphaState("idle");
+        }
+        break;
+      case "fulfill_accept":
+        setOmegaState("working");
+        setOmegaThought("Accepting job...");
+        setOmegaActions((prev) => {
+          const next = [...prev];
+          if (next.length > 0 && next[next.length - 1].includes("Scanning")) {
+            next[next.length - 1] = "Job found — accepting";
+          } else {
+            next.push("Job accepted");
+          }
+          return next;
+        });
+        setJobStatus("accepted");
+        if (event.data && typeof event.data.txHash === "string") {
+          setTransactions((prev) => [...prev, { label: "Accept Job", txHash: event.data!.txHash as string }]);
+        }
+        break;
+      case "fulfill_working":
+        setOmegaState("thinking");
+        setOmegaThought("Generating deliverable with Haiku...");
+        setOmegaActions((prev) => [...prev, "Working on deliverable..."]);
+        if (event.data?.textPreview) {
+          setDeliverablePreview(String(event.data.textPreview));
+        }
+        break;
+      case "fulfill_circuit":
+        setOmegaState("working");
+        setOmegaThought(`ZK circuit: ${event.data?.verified ? "VERIFIED" : "checking..."}\nWords: ${event.data?.wordCount || "..."}`);
+        if (event.data) {
+          setZkData({ ...event.data });
+        }
+        setOmegaActions((prev) => {
+          const next = [...prev];
+          if (next.length > 0 && next[next.length - 1].includes("Working")) {
+            next[next.length - 1] = `ZK verified: ${event.data?.wordCount} words`;
+          } else {
+            next.push(`ZK verified: ${event.data?.wordCount} words`);
+          }
+          return next;
+        });
+        break;
+      case "fulfill_submit":
+        setOmegaState("celebrating");
+        setOmegaThought(`Submitted: ${event.data?.wordCount || ""} words\nHash: ${event.data?.textHash || ""}...`);
+        setOmegaActions((prev) => [...prev, `Submitted (${event.data?.wordCount} words)`]);
+        setJobStatus("completed");
+        if (event.data && typeof event.data.txHash === "string") {
+          setTransactions((prev) => [...prev, { label: "Submit Work", txHash: event.data!.txHash as string }]);
+        }
+        break;
+      case "fulfill_complete":
+        setOmegaState("celebrating");
+        setAlphaState("celebrating");
+        fireConfetti();
+        setOmegaActions((prev) => [...prev, "Job fulfilled!"]);
+        break;
       case "complete":
         setAlphaState("celebrating");
         setOmegaState("celebrating");
@@ -434,6 +518,146 @@ export default function ArenaPage() {
     setCurrentRoundOf(0);
     setRunning(false);
     setDone(true);
+  }
+
+  // ===== Fetch open jobs for fulfill mode =====
+  async function fetchOpenJobs() {
+    setOpenJobsLoading(true);
+    try {
+      const res = await fetch("/api/jobs?status=Open&limit=20&sortBy=createdAt&sortOrder=desc");
+      if (res.ok) {
+        const data = await res.json();
+        setOpenJobs(Array.isArray(data) ? data : (data.jobs || []));
+      }
+    } catch {
+      // silent
+    } finally {
+      setOpenJobsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (arenaMode === "fulfill") {
+      fetchOpenJobs();
+    }
+  }, [arenaMode]);
+
+  // ===== Run fulfillment =====
+  async function runFulfillment() {
+    if (!selectedJob) return;
+    setRunning(true);
+    setDone(false);
+    setMultiRoundSummary(null);
+    setRound((prev) => prev + 1);
+
+    // Reset state
+    setLogs([]);
+    setAlphaThought(null);
+    setOmegaThought(null);
+    setAlphaActions([]);
+    setOmegaActions([]);
+    setAlphaState("idle");
+    setOmegaState("idle");
+    setJobData(null);
+    setSpecData(null);
+    setZkData(null);
+    setDeliverablePreview(null);
+    setJobStatus("idle");
+    setTransactions([]);
+    setX402Payments([]);
+    setChatMessages([]);
+    setA2aMessages([]);
+    setEscrowPhase("idle");
+    setEscrowAmount(0);
+    setPerfTimestamps({});
+    setPerfMetrics(null);
+
+    // Set initial job data from selected job
+    setJobData({
+      jobId: selectedJob.id,
+      title: String(selectedJob.specJson?.title || ""),
+      amount: selectedJob.amount,
+      category: selectedJob.category,
+    });
+    setSpecData({
+      title: String(selectedJob.specJson?.title || ""),
+      description: String(selectedJob.specJson?.description || ""),
+      amount: selectedJob.amount,
+      minWords: selectedJob.minWords,
+      category: selectedJob.category,
+    });
+    setJobStatus("created");
+    setEscrowAmount(selectedJob.amount);
+
+    try {
+      const response = await fetch("/api/arena/fulfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: selectedJob.id }),
+      });
+
+      if (!response.ok || !response.body) {
+        handleEvent({
+          step: "error",
+          message: "Failed to start fulfillment: " + response.statusText,
+          data: null,
+        });
+        setRunning(false);
+        setDone(true);
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done: readerDone, value } = await reader.read();
+        if (readerDone) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const event: ArenaEvent = JSON.parse(trimmed);
+            handleEvent(event);
+            if (event.step === "complete" || event.step === "error") {
+              setDone(true);
+            }
+          } catch {
+            // Skip malformed lines
+          }
+        }
+      }
+
+      // Process remaining buffer
+      if (buffer.trim()) {
+        try {
+          const event: ArenaEvent = JSON.parse(buffer.trim());
+          handleEvent(event);
+          if (event.step === "complete" || event.step === "error") {
+            setDone(true);
+          }
+        } catch {
+          // Skip
+        }
+      }
+    } catch (err) {
+      handleEvent({
+        step: "error",
+        message: "Fulfillment error: " + String(err),
+        data: null,
+      });
+    }
+
+    setRunning(false);
+    setDone(true);
+    // Refresh open jobs list
+    fetchOpenJobs();
   }
 
   function copyWallet(wallet: string, agent: "alpha" | "omega") {
@@ -689,7 +913,210 @@ export default function ArenaPage() {
             Watch AI agents autonomously negotiate, deliver, and settle on-chain
           </p>
 
-          {/* Rounds Selector */}
+          {/* Mode Toggle */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: "8px",
+              marginBottom: "20px",
+            }}
+          >
+            <button
+              onClick={() => !running && setArenaMode("new")}
+              disabled={running}
+              style={{
+                fontFamily: "inherit",
+                fontSize: "11px",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                padding: "8px 20px",
+                cursor: running ? "not-allowed" : "pointer",
+                border: arenaMode === "new" ? "1px solid #42BDFF" : "1px solid rgba(255,255,255,0.2)",
+                borderRadius: "6px",
+                backgroundColor: arenaMode === "new" ? "rgba(66,189,255,0.15)" : "transparent",
+                color: arenaMode === "new" ? "#42BDFF" : "rgba(255,255,255,0.5)",
+                fontWeight: arenaMode === "new" ? 700 : 400,
+                transition: "all 0.15s ease",
+              }}
+            >
+              New Job
+            </button>
+            <button
+              onClick={() => !running && setArenaMode("fulfill")}
+              disabled={running}
+              style={{
+                fontFamily: "inherit",
+                fontSize: "11px",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                padding: "8px 20px",
+                cursor: running ? "not-allowed" : "pointer",
+                border: arenaMode === "fulfill" ? "1px solid #FF425E" : "1px solid rgba(255,255,255,0.2)",
+                borderRadius: "6px",
+                backgroundColor: arenaMode === "fulfill" ? "rgba(255,66,94,0.15)" : "transparent",
+                color: arenaMode === "fulfill" ? "#FF425E" : "rgba(255,255,255,0.5)",
+                fontWeight: arenaMode === "fulfill" ? 700 : 400,
+                transition: "all 0.15s ease",
+              }}
+            >
+              Fulfill Open Job
+            </button>
+          </div>
+
+          {/* Fulfill Mode: Job Selector */}
+          {arenaMode === "fulfill" && !running && !done && (
+            <div
+              style={{
+                backgroundColor: "rgba(0,0,0,0.4)",
+                border: "1px solid rgba(255,66,94,0.25)",
+                borderRadius: "10px",
+                padding: "20px",
+                backdropFilter: "blur(12px)",
+                marginBottom: "24px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  color: "#FF425E",
+                  marginBottom: "16px",
+                  fontWeight: 600,
+                }}
+              >
+                Select an Open Job to Fulfill
+              </div>
+              {openJobsLoading ? (
+                <div style={{ textAlign: "center", padding: "20px 0", fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
+                  Loading open jobs...
+                </div>
+              ) : openJobs.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "20px 0" }}>
+                  <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", marginBottom: "8px" }}>No open jobs available</div>
+                  <button
+                    onClick={fetchOpenJobs}
+                    style={{
+                      fontFamily: "inherit",
+                      fontSize: "10px",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      padding: "6px 16px",
+                      cursor: "pointer",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      borderRadius: "4px",
+                      backgroundColor: "transparent",
+                      color: "rgba(255,255,255,0.5)",
+                    }}
+                  >
+                    Refresh
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "280px", overflowY: "auto" }}>
+                  {openJobs.map((oj) => {
+                    const ojTitle = String(oj.specJson?.title || `Job ${oj.id.slice(0, 8)}`);
+                    const ojCat = getCategoryById(oj.category || "text_writing");
+                    const isSelected = selectedJob?.id === oj.id;
+                    return (
+                      <div
+                        key={oj.id}
+                        onClick={() => setSelectedJob(oj)}
+                        style={{
+                          border: isSelected ? "1px solid #FF425E" : "1px solid rgba(255,255,255,0.1)",
+                          borderRadius: "8px",
+                          padding: "12px 16px",
+                          cursor: "pointer",
+                          backgroundColor: isSelected ? "rgba(255,66,94,0.1)" : "rgba(255,255,255,0.03)",
+                          transition: "all 0.15s ease",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: "12px",
+                        }}
+                      >
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: "13px", color: "#fff", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {ojTitle}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px", flexWrap: "wrap" }}>
+                            <span style={{
+                              fontSize: "9px",
+                              padding: "1px 6px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255,255,255,0.15)",
+                              color: "rgba(255,255,255,0.6)",
+                              backgroundColor: "rgba(255,255,255,0.05)",
+                            }}>
+                              {ojCat.tag}
+                            </span>
+                            <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
+                              {truncateWallet(oj.posterWallet)}
+                            </span>
+                            <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
+                              {new Date(oj.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                          <img src={USDC_LOGO_URL} alt="USDC" width={16} height={16} style={{ borderRadius: "50%" }} />
+                          <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>
+                            {oj.amount.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Selected job details */}
+              {selectedJob && (
+                <div
+                  style={{
+                    marginTop: "16px",
+                    padding: "16px",
+                    border: "1px solid rgba(255,66,94,0.2)",
+                    borderRadius: "8px",
+                    backgroundColor: "rgba(255,66,94,0.05)",
+                  }}
+                >
+                  <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#FF425E", marginBottom: "8px", fontWeight: 600 }}>
+                    Selected Job
+                  </div>
+                  <div style={{ fontSize: "15px", color: "#fff", fontWeight: 600, marginBottom: "8px" }}>
+                    {String(selectedJob.specJson?.title || selectedJob.id)}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                    <div>
+                      <div style={{ fontSize: "9px", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginBottom: "2px" }}>Amount</div>
+                      <div style={{ fontSize: "13px", color: "#fff", display: "flex", alignItems: "center", gap: "4px" }}>
+                        <img src={USDC_LOGO_URL} alt="USDC" width={14} height={14} style={{ borderRadius: "50%" }} />
+                        {selectedJob.amount.toFixed(2)} USDC
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "9px", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginBottom: "2px" }}>Min Words</div>
+                      <div style={{ fontSize: "13px", color: "#fff" }}>{selectedJob.minWords}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "9px", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginBottom: "2px" }}>Category</div>
+                      <div style={{ fontSize: "13px", color: "#fff" }}>{getCategoryById(selectedJob.category).tag}</div>
+                    </div>
+                  </div>
+                  {typeof selectedJob.specJson?.description === "string" && selectedJob.specJson.description && (
+                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>
+                      {String(selectedJob.specJson.description).slice(0, 200)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Rounds Selector (only for new job mode) */}
+          {arenaMode === "new" && (
           <div
             style={{
               textAlign: "center",
@@ -725,6 +1152,7 @@ export default function ArenaPage() {
               </button>
             ))}
           </div>
+          )}
 
           {/* Controls */}
           <div
@@ -769,33 +1197,63 @@ export default function ArenaPage() {
                 Round {round}
               </span>
             )}
-            <button
-              onClick={done ? runArena : running ? undefined : runArena}
-              disabled={running}
-              onMouseEnter={() => setButtonHover(true)}
-              onMouseLeave={() => setButtonHover(false)}
-              style={{
-                fontFamily: "inherit",
-                fontSize: "13px",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                padding: "10px 28px",
-                cursor: running ? "not-allowed" : "pointer",
-                border: "1px solid #ffffff",
-                borderRadius: "6px",
-                backgroundColor: running
-                  ? "rgba(255,255,255,0.05)"
-                  : buttonHover
-                  ? "rgba(255,255,255,0.15)"
-                  : "rgba(255,255,255,0.08)",
-                color: running ? "rgba(255,255,255,0.3)" : "#ffffff",
-                backdropFilter: "blur(8px)",
-                transition: "all 0.2s ease",
-                fontWeight: 600,
-              }}
-            >
-              {running ? "Running..." : done ? "Run Again" : "Start Arena"}
-            </button>
+            {arenaMode === "new" ? (
+              <button
+                onClick={done ? runArena : running ? undefined : runArena}
+                disabled={running}
+                onMouseEnter={() => setButtonHover(true)}
+                onMouseLeave={() => setButtonHover(false)}
+                style={{
+                  fontFamily: "inherit",
+                  fontSize: "13px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  padding: "10px 28px",
+                  cursor: running ? "not-allowed" : "pointer",
+                  border: "1px solid #ffffff",
+                  borderRadius: "6px",
+                  backgroundColor: running
+                    ? "rgba(255,255,255,0.05)"
+                    : buttonHover
+                    ? "rgba(255,255,255,0.15)"
+                    : "rgba(255,255,255,0.08)",
+                  color: running ? "rgba(255,255,255,0.3)" : "#ffffff",
+                  backdropFilter: "blur(8px)",
+                  transition: "all 0.2s ease",
+                  fontWeight: 600,
+                }}
+              >
+                {running ? "Running..." : done ? "Run Again" : "Start Arena"}
+              </button>
+            ) : (
+              <button
+                onClick={done ? runFulfillment : running ? undefined : runFulfillment}
+                disabled={running || !selectedJob}
+                onMouseEnter={() => setButtonHover(true)}
+                onMouseLeave={() => setButtonHover(false)}
+                style={{
+                  fontFamily: "inherit",
+                  fontSize: "13px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  padding: "10px 28px",
+                  cursor: running || !selectedJob ? "not-allowed" : "pointer",
+                  border: `1px solid ${!selectedJob ? "rgba(255,255,255,0.2)" : "#FF425E"}`,
+                  borderRadius: "6px",
+                  backgroundColor: running || !selectedJob
+                    ? "rgba(255,255,255,0.05)"
+                    : buttonHover
+                    ? "rgba(255,66,94,0.2)"
+                    : "rgba(255,66,94,0.1)",
+                  color: running || !selectedJob ? "rgba(255,255,255,0.3)" : "#FF425E",
+                  backdropFilter: "blur(8px)",
+                  transition: "all 0.2s ease",
+                  fontWeight: 600,
+                }}
+              >
+                {running ? "Fulfilling..." : done ? "Fulfill Again" : "Start Fulfillment"}
+              </button>
+            )}
           </div>
 
           {/* Multi-Round Summary */}

@@ -13,7 +13,7 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { takerWallet, text, wordCount } = body;
+    const { takerWallet, text, wordCount, outputText: bodyOutputText } = body;
 
     if (!takerWallet || typeof takerWallet !== "string") {
       return NextResponse.json(
@@ -90,6 +90,9 @@ export async function POST(
       .digest("hex");
 
     const [submission, updatedJob] = await prisma.$transaction(async (tx) => {
+      // Store the full output text if provided (from arena/fulfill or user submission)
+      const storedOutputText = typeof bodyOutputText === "string" ? bodyOutputText : (typeof text === "string" ? text : null);
+
       const sub = await tx.submission.create({
         data: {
           jobId: id,
@@ -98,6 +101,7 @@ export async function POST(
           wordCount: actualWordCount,
           proofHex,
           verified: zkVerified,
+          outputText: storedOutputText,
         },
       });
 

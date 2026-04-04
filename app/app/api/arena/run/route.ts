@@ -492,6 +492,7 @@ export async function POST(request: NextRequest) {
               textHash,
               wordCount,
               verified: false,
+              outputText: deliverableText,
             },
           });
 

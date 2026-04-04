@@ -21,6 +21,14 @@ import { getCategoryById } from "@/lib/categories";
 
 /* ---------- Types ---------- */
 
+interface DashSubmission {
+  id: string;
+  outputText?: string | null;
+  wordCount: number;
+  verified: boolean;
+  textHash: string;
+}
+
 interface JobData {
   id: string;
   posterWallet: string;
@@ -33,6 +41,7 @@ interface JobData {
   deadline: string;
   createdAt: string;
   specJson: Record<string, unknown>;
+  submissions?: DashSubmission[];
 }
 
 interface TxData {
@@ -686,56 +695,105 @@ export default function DashboardPage() {
                 {pagedJobs.map((job) => {
                   const cat = getCategoryById(job.category || "text_writing");
                   const title = (job.specJson?.title as string) || `Job ${job.id.slice(0, 8)}`;
+                  const completedSub = job.status === "Completed" && job.submissions
+                    ? job.submissions.find((s) => s.outputText)
+                    : null;
+                  const hasVerifiedSub = job.submissions?.some((s) => s.verified);
                   return (
                     <div
                       key={job.id}
                       style={{
                         ...GLASS_CARD,
                         padding: "14px 20px",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
                         transition: "border-color 0.15s ease",
                       }}
                       onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
-                        <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed"} />
-                        <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)", backgroundColor: "rgba(255,255,255,0.06)", whiteSpace: "nowrap" }}>
-                          {cat.tag}
-                        </span>
-                        <span style={{ fontSize: "12px", color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {title}
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                          <img src={job.paymentToken === "SOL" ? SOL_LOGO_URL : USDC_LOGO_URL} alt={job.paymentToken || "USDC"} width={14} height={14} style={{ borderRadius: "50%" }} />
-                          <span style={{ fontSize: "13px", fontWeight: 600, color: "#ffffff" }}>
-                            {job.amount.toFixed(2)}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
+                          <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed"} />
+                          <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)", backgroundColor: "rgba(255,255,255,0.06)", whiteSpace: "nowrap" }}>
+                            {cat.tag}
                           </span>
+                          <span style={{ fontSize: "12px", color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {title}
+                          </span>
+                          {hasVerifiedSub && (
+                            <span style={{
+                              fontSize: "9px",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.04em",
+                              padding: "2px 8px",
+                              borderRadius: "4px",
+                              backgroundColor: "rgba(255,227,66,0.1)",
+                              border: "1px solid rgba(255,227,66,0.3)",
+                              color: "#FFE342",
+                              fontWeight: 700,
+                              whiteSpace: "nowrap",
+                            }}>
+                              ZK Verified
+                            </span>
+                          )}
                         </div>
-                        <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
-                          {new Date(job.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        </span>
-                        <Link
-                          href={`/job/${job.id}`}
-                          style={{
-                            fontSize: "9px",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            color: "#42BDFF",
-                            textDecoration: "none",
-                            padding: "3px 10px",
-                            border: "1px solid rgba(66,189,255,0.3)",
-                            borderRadius: "4px",
-                            transition: "all 0.15s ease",
-                          }}
-                        >
-                          View
-                        </Link>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                            <img src={job.paymentToken === "SOL" ? SOL_LOGO_URL : USDC_LOGO_URL} alt={job.paymentToken || "USDC"} width={14} height={14} style={{ borderRadius: "50%" }} />
+                            <span style={{ fontSize: "13px", fontWeight: 600, color: "#ffffff" }}>
+                              {job.amount.toFixed(2)}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
+                            {new Date(job.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                          <Link
+                            href={`/job/${job.id}`}
+                            style={{
+                              fontSize: "9px",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              color: "#42BDFF",
+                              textDecoration: "none",
+                              padding: "3px 10px",
+                              border: "1px solid rgba(66,189,255,0.3)",
+                              borderRadius: "4px",
+                              transition: "all 0.15s ease",
+                            }}
+                          >
+                            View
+                          </Link>
+                        </div>
                       </div>
+                      {/* Output preview for completed jobs */}
+                      {completedSub && completedSub.outputText && (
+                        <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                          <div style={{
+                            fontSize: "11px",
+                            color: "rgba(255,255,255,0.45)",
+                            lineHeight: 1.5,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            maxWidth: "100%",
+                          }}>
+                            {completedSub.outputText.slice(0, 150)}...
+                          </div>
+                          <Link
+                            href={`/job/${job.id}`}
+                            style={{
+                              fontSize: "9px",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              color: "#FF425E",
+                              textDecoration: "none",
+                              marginTop: "6px",
+                              display: "inline-block",
+                            }}
+                          >
+                            View Full Output &rarr;
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

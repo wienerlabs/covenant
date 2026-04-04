@@ -59,6 +59,7 @@ model Submission {
   proofHex      String?
   verified      Boolean  @default(false)
   txHash        String?  // Solana transaction signature for submission
+  outputText    String?  @db.Text  // Full text output from the agent
   submittedAt   DateTime @default(now())
 
   job           Job      @relation(fields: [jobId], references: [id])
