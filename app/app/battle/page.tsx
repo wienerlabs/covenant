@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import NavBar from "@/components/NavBar";
 import PixelAgent from "@/components/PixelAgent";
+import PixelBattle from "@/components/PixelBattle";
 import CopyButton from "@/components/CopyButton";
 import { fireConfetti } from "@/lib/confetti";
 import { toast } from "@/lib/toast";
@@ -242,6 +243,13 @@ export default function BattlePage() {
   const [alphaStatus, setAlphaStatus] = useState<"STANDBY" | "WRITING..." | "SUBMITTED" | "WINNER!" | "DEFEATED">("STANDBY");
   const [omegaStatus, setOmegaStatus] = useState<"STANDBY" | "WRITING..." | "SUBMITTED" | "WINNER!" | "DEFEATED">("STANDBY");
 
+  /* ---- Pixel battle animation states ---- */
+  type PixelWarriorState = "idle" | "taunt" | "attack" | "hit" | "victory" | "defeat";
+  const [alphaAnimState, setAlphaAnimState] = useState<PixelWarriorState>("idle");
+  const [omegaAnimState, setOmegaAnimState] = useState<PixelWarriorState>("idle");
+  const [alphaHP, setAlphaHP] = useState(100);
+  const [omegaHP, setOmegaHP] = useState(100);
+
   /* ---- Typewriter state ---- */
   const [alphaFullText, setAlphaFullText] = useState("");
   const [omegaFullText, setOmegaFullText] = useState("");
@@ -429,6 +437,10 @@ export default function BattlePage() {
         }
         setPhase("fighting");
         setTotalTimerRunning(true);
+        setAlphaAnimState("idle");
+        setOmegaAnimState("idle");
+        setAlphaHP(100);
+        setOmegaHP(100);
         toast("Battle initialized! Agents are preparing...", "info");
         break;
 
@@ -444,6 +456,13 @@ export default function BattlePage() {
               displayText: "",
             },
           ]);
+          // Pre-battle chat = taunt
+          setAlphaAnimState("taunt");
+          setOmegaAnimState("taunt");
+          setTimeout(() => {
+            setAlphaAnimState("idle");
+            setOmegaAnimState("idle");
+          }, 500);
         }
         break;
 
@@ -452,6 +471,8 @@ export default function BattlePage() {
         setAlphaState("working");
         setAlphaStatus("WRITING...");
         setAlphaTimerRunning(true);
+        setAlphaAnimState("attack");
+        setTimeout(() => setAlphaAnimState("idle"), 600);
         break;
 
       case "battle_alpha_progress":
@@ -476,6 +497,7 @@ export default function BattlePage() {
           setAlphaProgress(100);
         }
         setTimeout(() => setAlphaState("idle"), 2000);
+        setAlphaAnimState("idle");
         toast("Agent Alpha submitted!", "success");
         break;
 
@@ -484,6 +506,8 @@ export default function BattlePage() {
         setOmegaState("working");
         setOmegaStatus("WRITING...");
         setOmegaTimerRunning(true);
+        setOmegaAnimState("attack");
+        setTimeout(() => setOmegaAnimState("idle"), 600);
         break;
 
       case "battle_omega_progress":
@@ -508,12 +532,15 @@ export default function BattlePage() {
           setOmegaProgress(100);
         }
         setTimeout(() => setOmegaState("idle"), 2000);
+        setOmegaAnimState("idle");
         toast("Agent Omega submitted!", "success");
         break;
 
       case "battle_judging":
         setJudging(true);
         setPhase("judging");
+        setAlphaAnimState("idle");
+        setOmegaAnimState("idle");
         toast("AI Judge is evaluating...", "info");
         break;
 
@@ -537,6 +564,21 @@ export default function BattlePage() {
           // Set status labels
           setAlphaStatus(w === "alpha" ? "WINNER!" : "DEFEATED");
           setOmegaStatus(w === "omega" ? "WINNER!" : "DEFEATED");
+          // Pixel battle animations
+          setAlphaAnimState(w === "alpha" ? "victory" : "defeat");
+          setOmegaAnimState(w === "omega" ? "victory" : "defeat");
+          // Loser HP drops based on score diff
+          const aScore = Number(event.data.alphaScore || 5);
+          const oScore = Number(event.data.omegaScore || 5);
+          if (w === "alpha") {
+            setOmegaHP(Math.max(0, oScore * 10));
+          } else {
+            setAlphaHP(Math.max(0, aScore * 10));
+          }
+          // Hit animation for loser briefly before defeat
+          const loserSetter = w === "alpha" ? setOmegaAnimState : setAlphaAnimState;
+          loserSetter("hit");
+          setTimeout(() => loserSetter("defeat"), 400);
         }
         setPhase("results");
         fireConfetti();
@@ -614,6 +656,10 @@ export default function BattlePage() {
     setBattleTitle("");
     setBattleCategory("");
     setTotalTime("");
+    setAlphaAnimState("idle");
+    setOmegaAnimState("idle");
+    setAlphaHP(100);
+    setOmegaHP(100);
 
     try {
       const response = await fetch("/api/battle/run", {
@@ -700,6 +746,10 @@ export default function BattlePage() {
     setBattleTitle("");
     setBattleCategory("");
     setTotalTime("");
+    setAlphaAnimState("idle");
+    setOmegaAnimState("idle");
+    setAlphaHP(100);
+    setOmegaHP(100);
   }
 
   function pickRandomChallenge() {
@@ -1456,6 +1506,23 @@ export default function BattlePage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/*  PIXEL BATTLE ANIMATION                                      */}
+        {/* ============================================================ */}
+
+        {(phase === "fighting" || phase === "judging" || phase === "results") && (
+          <div style={{ marginBottom: "28px", display: "flex", justifyContent: "center" }}>
+            <PixelBattle
+              alphaState={alphaAnimState}
+              omegaState={omegaAnimState}
+              alphaHP={alphaHP}
+              omegaHP={omegaHP}
+              width={700}
+              height={220}
+            />
           </div>
         )}
 
