@@ -31,7 +31,7 @@ export default function WalletBalance() {
     }
 
     fetchBalance();
-    intervalRef.current = setInterval(fetchBalance, 15000);
+    intervalRef.current = setInterval(fetchBalance, 10000);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);

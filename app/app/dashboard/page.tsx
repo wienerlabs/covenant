@@ -223,8 +223,8 @@ export default function DashboardPage() {
   }, [wallet]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchData().then(() => refetchBalance());
+  }, [fetchData, refetchBalance]);
 
   // Reset page when tab changes
   useEffect(() => {
@@ -239,11 +239,12 @@ export default function DashboardPage() {
       const res = await fetch("/api/faucet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet }),
+        body: JSON.stringify({ walletAddress: wallet }),
       });
       if (res.ok) {
         setFaucetMsg("Test USDC sent!");
-        setTimeout(() => refetchBalance(), 2000);
+        refetchBalance();
+        setTimeout(() => refetchBalance(), 3000);
       } else {
         const d = await res.json().catch(() => ({}));
         setFaucetMsg(d.error || "Faucet request failed");

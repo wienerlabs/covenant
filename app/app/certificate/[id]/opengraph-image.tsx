@@ -5,8 +5,8 @@ export const alt = "COVENANT Verification Certificate";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default async function Image({ params }: { params: { id: string } }) {
-  const certId = params.id;
+export default async function Image({ params }: { params: Promise<{ id: string }> }) {
+  const { id: certId } = await params;
 
   // We cannot use prisma in edge runtime, so we display a generic cert OG
   // with the certificate ID. The actual data is on the page itself.

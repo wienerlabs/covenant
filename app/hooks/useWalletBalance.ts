@@ -43,7 +43,7 @@ export default function useWalletBalance(wallet?: string | null): WalletBalanceR
     setLoading(true);
     fetchBalance();
 
-    intervalRef.current = setInterval(fetchBalance, 15000);
+    intervalRef.current = setInterval(fetchBalance, 10000);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);

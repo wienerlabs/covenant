@@ -14,6 +14,7 @@ import useProtocolStats from "@/hooks/useProtocolStats";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { JOB_CATEGORIES, getCategoryById } from "@/lib/categories";
 import { formatAddress } from "@/lib/format";
+import { toast } from "@/lib/toast";
 import type { JobData } from "@/hooks/useJobList";
 
 function PosterAvatarCell({ wallet }: { wallet: string }) {
@@ -69,44 +70,45 @@ export default function TakerPage() {
   }, []);
 
   // Fetch jobs for grid view
-  useEffect(() => {
-    async function fetchGridJobs() {
-      setGridLoading(true);
-      try {
-        const params = new URLSearchParams();
-        if (selectedCategory) params.set("category", selectedCategory);
-        if (debouncedSearch) params.set("search", debouncedSearch);
-        if (minPrice) params.set("minAmount", minPrice);
-        if (maxPrice) params.set("maxAmount", maxPrice);
+  const fetchGridJobs = useCallback(async () => {
+    setGridLoading(true);
+    try {
+      const qp = new URLSearchParams();
+      if (selectedCategory) qp.set("category", selectedCategory);
+      if (debouncedSearch) qp.set("search", debouncedSearch);
+      if (minPrice) qp.set("minAmount", minPrice);
+      if (maxPrice) qp.set("maxAmount", maxPrice);
 
-        const res = await fetch(`/api/jobs?${params.toString()}`);
-        if (res.ok) {
-          const result = await res.json();
-          let data: JobData[] = Array.isArray(result) ? result : (result.jobs || []);
+      const res = await fetch(`/api/jobs?${qp.toString()}`);
+      if (res.ok) {
+        const result = await res.json();
+        let data: JobData[] = Array.isArray(result) ? result : (result.jobs || []);
 
-          // Apply grid filters
-          if (gridFilter === "new") {
-            data = data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          } else if (gridFilter === "high") {
-            data = data.filter(j => j.amount > 20);
-          } else if (gridFilter === "trending") {
-            data = data.filter(j => j.status === "Open" || j.status === "Accepted");
-          }
-
-          setGridJobs(data);
+        // Apply grid filters
+        if (gridFilter === "new") {
+          data = data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        } else if (gridFilter === "high") {
+          data = data.filter(j => j.amount > 20);
+        } else if (gridFilter === "trending") {
+          data = data.filter(j => j.status === "Open" || j.status === "Accepted");
         }
-      } catch {
-        // silent
-      } finally {
-        setGridLoading(false);
+
+        setGridJobs(data);
       }
+    } catch {
+      // silent
+    } finally {
+      setGridLoading(false);
     }
+  }, [gridFilter, selectedCategory, debouncedSearch, minPrice, maxPrice]);
+
+  useEffect(() => {
     if (viewMode === "grid") {
       fetchGridJobs();
       const poll = setInterval(fetchGridJobs, 10000);
       return () => clearInterval(poll);
     }
-  }, [viewMode, gridFilter, selectedCategory, debouncedSearch, minPrice, maxPrice]);
+  }, [viewMode, fetchGridJobs]);
 
   const filterBtnStyle = (
     isActive: boolean
@@ -392,18 +394,47 @@ export default function TakerPage() {
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
                             <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled"} />
                             {job.status === "Open" && (
-                              <span style={{
-                                fontSize: "10px",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.05em",
-                                padding: "4px 14px",
-                                borderRadius: "6px",
-                                border: "1px solid rgba(255,255,255,0.3)",
-                                color: "#ffffff",
-                                backgroundColor: "rgba(255,255,255,0.1)",
-                              }}>
+                              <button
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (!walletPubkey) {
+                                    toast("Connect wallet to apply", "error");
+                                    return;
+                                  }
+                                  try {
+                                    const res = await fetch(`/api/jobs/${job.id}/accept`, {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ takerWallet: walletPubkey }),
+                                    });
+                                    if (res.ok) {
+                                      toast("Job accepted!", "success");
+                                      fetchGridJobs();
+                                    } else {
+                                      const data = await res.json();
+                                      toast(data.error || "Failed to apply", "error");
+                                    }
+                                  } catch {
+                                    toast("Failed to apply", "error");
+                                  }
+                                }}
+                                style={{
+                                  fontFamily: "inherit",
+                                  fontSize: "10px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.05em",
+                                  padding: "4px 14px",
+                                  borderRadius: "6px",
+                                  border: "1px solid rgba(255,255,255,0.3)",
+                                  color: "#ffffff",
+                                  backgroundColor: "rgba(255,255,255,0.1)",
+                                  cursor: "pointer",
+                                  transition: "all 0.15s ease",
+                                }}
+                              >
                                 Apply
-                              </span>
+                              </button>
                             )}
                           </div>
                         </div>

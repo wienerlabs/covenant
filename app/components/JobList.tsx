@@ -8,6 +8,7 @@ import Pagination from "./Pagination";
 import EmptyState from "./EmptyState";
 import useJobList from "@/hooks/useJobList";
 import type { JobData } from "@/hooks/useJobList";
+import { toast } from "@/lib/toast";
 
 interface JobListProps {
   filter: "all" | "mine" | "open";
@@ -42,7 +43,7 @@ export default function JobList({ filter, walletPubkey, variant = "light", categ
   const handleAccept = useCallback(
     async (jobId: string) => {
       if (!walletPubkey) {
-        alert("Connect your wallet to accept a job.");
+        toast("Connect your wallet to accept a job.", "error");
         return;
       }
       try {
@@ -53,12 +54,13 @@ export default function JobList({ filter, walletPubkey, variant = "light", categ
         });
         if (!response.ok) {
           const data = await response.json();
-          alert(data.error || "Failed to accept job");
+          toast(data.error || "Failed to accept job", "error");
           return;
         }
+        toast("Job accepted!", "success");
         refetch();
       } catch {
-        alert("Failed to accept job");
+        toast("Failed to accept job", "error");
       }
     },
     [walletPubkey, refetch]
@@ -67,7 +69,7 @@ export default function JobList({ filter, walletPubkey, variant = "light", categ
   const handleCancel = useCallback(
     async (jobId: string) => {
       if (!walletPubkey) {
-        alert("Connect your wallet to cancel a job.");
+        toast("Connect your wallet to cancel a job.", "error");
         return;
       }
       try {
@@ -78,12 +80,13 @@ export default function JobList({ filter, walletPubkey, variant = "light", categ
         });
         if (!response.ok) {
           const data = await response.json();
-          alert(data.error || "Failed to cancel job");
+          toast(data.error || "Failed to cancel job", "error");
           return;
         }
+        toast("Job cancelled.", "success");
         refetch();
       } catch {
-        alert("Failed to cancel job");
+        toast("Failed to cancel job", "error");
       }
     },
     [walletPubkey, refetch]

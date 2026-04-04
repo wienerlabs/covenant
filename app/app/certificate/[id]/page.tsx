@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, use } from "react";
 import NavBar from "@/components/NavBar";
 
 interface CertificateData {
@@ -14,7 +14,8 @@ interface CertificateData {
   createdAt: string;
 }
 
-export default function CertificatePage({ params }: { params: { id: string } }) {
+export default function CertificatePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [cert, setCert] = useState<CertificateData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -24,7 +25,7 @@ export default function CertificatePage({ params }: { params: { id: string } }) 
   useEffect(() => {
     async function fetchCert() {
       try {
-        const res = await fetch(`/api/certificate/${params.id}`);
+        const res = await fetch(`/api/certificate/${id}`);
         if (!res.ok) {
           setError("Certificate not found");
           return;
@@ -38,7 +39,7 @@ export default function CertificatePage({ params }: { params: { id: string } }) 
       }
     }
     fetchCert();
-  }, [params.id]);
+  }, [id]);
 
   // Draw QR code on canvas (simple pattern-based representation)
   useEffect(() => {
