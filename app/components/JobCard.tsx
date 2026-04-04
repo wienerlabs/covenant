@@ -12,6 +12,14 @@ import { getCategoryById } from "@/lib/categories";
 import CopyButton from "./CopyButton";
 import type { JobData } from "@/hooks/useJobList";
 
+function getJobTitle(job: JobData): string | undefined {
+  if (job.specJson && typeof job.specJson === "object") {
+    const title = (job.specJson as Record<string, unknown>).title;
+    if (typeof title === "string" && title.trim()) return title;
+  }
+  return undefined;
+}
+
 interface JobCardProps {
   job: JobData;
   onAccept?: (jobId: string) => void;
@@ -174,6 +182,20 @@ export default function JobCard({
           </Link>
           <CopyButton text={job.id} label="Copy Job ID" />
         </div>
+
+        {/* Job Title */}
+        {getJobTitle(job) && (
+          <div style={{
+            fontSize: "15px",
+            fontWeight: 600,
+            color: isDark ? "#ffffff" : "#000000",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}>
+            {getJobTitle(job)}
+          </div>
+        )}
 
         <div style={{ fontSize: "22px", fontWeight: 700, color: isDark ? "#ffffff" : "#000000", display: "flex", alignItems: "center", gap: "8px" }}>
           <img src={job.paymentToken === "SOL" ? SOL_LOGO_URL : USDC_LOGO_URL} alt={job.paymentToken || "USDC"} width={22} height={22} style={{ borderRadius: "50%" }} />

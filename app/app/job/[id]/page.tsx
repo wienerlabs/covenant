@@ -194,6 +194,16 @@ export default function JobDetailPage() {
       ? (job.specJson as Record<string, unknown>).description as string | undefined
       : undefined);
 
+  const specRequirements =
+    job?.specJson && typeof job.specJson === "object"
+      ? (job.specJson as Record<string, unknown>).requirements as string | undefined
+      : undefined;
+
+  const specLanguage =
+    job?.specJson && typeof job.specJson === "object"
+      ? (job.specJson as Record<string, unknown>).language as string | undefined
+      : undefined;
+
   const categoryInfo = getCategoryById(job?.category || "text_writing");
 
   const labelStyle: React.CSSProperties = {
@@ -343,10 +353,43 @@ export default function JobDetailPage() {
 
                 {/* Description */}
                 {specDescription && (
-                  <div style={{ marginBottom: "8px" }}>
+                  <div style={{ marginBottom: "16px" }}>
                     <div style={labelStyle}>Description</div>
-                    <div style={{ ...valueStyle, lineHeight: 1.7, fontSize: "14px" }}>
+                    <div style={{
+                      ...valueStyle,
+                      lineHeight: 1.7,
+                      fontSize: "14px",
+                      backgroundColor: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: "8px",
+                      padding: "12px 16px",
+                    }}>
                       {specDescription}
+                    </div>
+                  </div>
+                )}
+
+                {/* Requirements */}
+                {specRequirements && (
+                  <div style={{ marginBottom: "16px" }}>
+                    <div style={labelStyle}>Requirements</div>
+                    <div style={{
+                      ...valueStyle,
+                      lineHeight: 1.6,
+                      fontSize: "13px",
+                      opacity: 0.8,
+                    }}>
+                      {specRequirements}
+                    </div>
+                  </div>
+                )}
+
+                {/* Language */}
+                {specLanguage && (
+                  <div style={{ marginBottom: "8px" }}>
+                    <div style={labelStyle}>Language</div>
+                    <div style={{ ...valueStyle, fontSize: "13px" }}>
+                      {specLanguage}
                     </div>
                   </div>
                 )}

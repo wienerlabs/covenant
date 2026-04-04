@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
         // ===== STEP 1: ALPHA THINKS =====
         send("alpha_thinking", "Agent Alpha is generating a job specification...");
 
-        const alphaPrompt = `You are an AI agent posting a job on the COVENANT protocol. Generate a realistic job specification. Respond ONLY with JSON: {"title": "...", "category": "text_writing|code_review|translation|data_labeling|bug_bounty|design", "amount": <number 5-50>, "minWords": <number 100-500>, "description": "..."}`;
+        const alphaPrompt = `You are an AI agent posting a job on the COVENANT protocol. Generate a realistic job specification. Respond ONLY with JSON: {"title": "...", "category": "text_writing|code_review|translation|data_labeling|bug_bounty|design", "amount": <number 5-50>, "minWords": <number 100-500>, "description": "A detailed description of what needs to be done...", "requirements": "Any specific requirements...", "language": "English"}`;
 
         const alphaResponse = await client.messages.create({
           model: HAIKU_MODEL,
@@ -109,10 +109,21 @@ export async function POST(request: NextRequest) {
           amount: number;
           minWords: number;
           description: string;
+          requirements: string;
+          language: string;
         };
         try {
           const jsonMatch = alphaText.match(/\{[\s\S]*\}/);
-          jobSpec = JSON.parse(jsonMatch ? jsonMatch[0] : alphaText);
+          const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : alphaText);
+          jobSpec = {
+            title: parsed.title || "Technical Blog Post on Web3 Security",
+            category: parsed.category || "text_writing",
+            amount: parsed.amount || 25,
+            minWords: parsed.minWords || 200,
+            description: parsed.description || "",
+            requirements: parsed.requirements || "",
+            language: parsed.language || "English",
+          };
         } catch {
           // Fallback spec if parsing fails
           jobSpec = {
@@ -122,6 +133,8 @@ export async function POST(request: NextRequest) {
             minWords: 200,
             description:
               "Write a comprehensive blog post about security best practices in Web3 development.",
+            requirements: "",
+            language: "English",
           };
         }
 
@@ -193,11 +206,12 @@ export async function POST(request: NextRequest) {
           posterWallet: AGENT_ALPHA.wallet,
           amount: jobSpec.amount,
           minWords: jobSpec.minWords,
-          language: "en",
+          language: jobSpec.language || "English",
           deadline: deadline.toISOString(),
           createdAt: new Date().toISOString(),
           title: jobSpec.title,
           description: jobSpec.description,
+          requirements: jobSpec.requirements || "",
         };
 
         const specHash = crypto
@@ -464,7 +478,14 @@ export async function POST(request: NextRequest) {
         // ===== STEP 5: OMEGA WORKS =====
         send("omega_working", "Agent Omega generating deliverable...");
 
-        const omegaWorkPrompt = `You are an AI agent completing a job. Write a ${jobSpec.minWords}+ word response about: ${jobSpec.title}. Be thorough and professional. ${jobSpec.description}`;
+        const omegaWorkPrompt = `You are an AI agent completing a job on the COVENANT protocol.
+
+JOB TITLE: ${jobSpec.title}
+DESCRIPTION: ${jobSpec.description}
+${jobSpec.requirements ? `REQUIREMENTS: ${jobSpec.requirements}` : ""}
+MINIMUM WORDS: ${jobSpec.minWords}
+
+Write a thorough, professional response. Must be at least ${jobSpec.minWords} words.`;
 
         const omegaWorkResponse = await client.messages.create({
           model: HAIKU_MODEL,

@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { posterWallet, amount, minWords, language, deadline, category, paymentToken } = body;
+    const { posterWallet, amount, minWords, language, deadline, category, paymentToken, title, description, requirements, sourceText, repoUrl, targetUrl, stylePreference } = body;
 
     if (!posterWallet || typeof posterWallet !== "string") {
       return NextResponse.json(
@@ -126,9 +126,16 @@ export async function POST(request: NextRequest) {
       posterWallet,
       amount,
       minWords,
-      language: language || "en",
+      language: language || "English",
       deadline: deadlineDate.toISOString(),
       createdAt: new Date().toISOString(),
+      title: title || "",
+      description: description || "",
+      requirements: requirements || "",
+      ...(sourceText ? { sourceText } : {}),
+      ...(repoUrl ? { repoUrl } : {}),
+      ...(targetUrl ? { targetUrl } : {}),
+      ...(stylePreference ? { stylePreference } : {}),
     };
 
     const specHash = crypto

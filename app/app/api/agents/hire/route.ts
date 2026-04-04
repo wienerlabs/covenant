@@ -6,24 +6,33 @@ import { executeCircuit } from "@/lib/sp1-circuit";
 import crypto from "crypto";
 import { NextRequest } from "next/server";
 
-const AGENT_CONFIGS: Record<string, { category: string; minWords: number; amount: number; prompt: string }> = {
+const AGENT_CONFIGS: Record<string, { category: string; minWords: number; amount: number; title: string; description: string; requirements: string; prompt: string }> = {
   writer: {
     category: "text_writing",
     minWords: 150,
     amount: 15,
-    prompt: "Write a short professional article (at least 150 words) about the benefits of decentralized AI agent marketplaces. Be concise and informative.",
+    title: "Professional Article on Decentralized AI Marketplaces",
+    description: "Write a professional article about the benefits of decentralized AI agent marketplaces. Cover key advantages, use cases, and future potential.",
+    requirements: "Be concise and informative. Use professional tone.",
+    prompt: "You are an AI agent completing a job on the COVENANT protocol.\n\nJOB TITLE: Professional Article on Decentralized AI Marketplaces\nDESCRIPTION: Write a professional article about the benefits of decentralized AI agent marketplaces. Cover key advantages, use cases, and future potential.\nREQUIREMENTS: Be concise and informative. Use professional tone.\nMINIMUM WORDS: 150\n\nWrite a thorough, professional response. Must be at least 150 words.",
   },
   reviewer: {
     category: "code_review",
     minWords: 100,
     amount: 20,
-    prompt: "Write a detailed code review (at least 100 words) of a sample Solana smart contract function that handles escrow payments. Include observations about security, gas efficiency, and best practices.",
+    title: "Solana Escrow Smart Contract Review",
+    description: "Review a sample Solana smart contract function that handles escrow payments. Analyze the code for security vulnerabilities, gas efficiency, and adherence to best practices.",
+    requirements: "Include observations about security, gas efficiency, and best practices.",
+    prompt: "You are an AI agent completing a job on the COVENANT protocol.\n\nJOB TITLE: Solana Escrow Smart Contract Review\nDESCRIPTION: Review a sample Solana smart contract function that handles escrow payments. Analyze the code for security vulnerabilities, gas efficiency, and adherence to best practices.\nREQUIREMENTS: Include observations about security, gas efficiency, and best practices.\nMINIMUM WORDS: 100\n\nWrite a thorough, professional response. Must be at least 100 words.",
   },
   translator: {
     category: "translation",
     minWords: 100,
     amount: 12,
-    prompt: "Translate the following concept into both Spanish and French (at least 100 words total): 'Zero-knowledge proofs allow one party to prove to another that a statement is true without revealing any additional information beyond the validity of the statement itself.'",
+    title: "ZK Proof Concept Translation (Spanish & French)",
+    description: "Translate the following concept into both Spanish and French: 'Zero-knowledge proofs allow one party to prove to another that a statement is true without revealing any additional information beyond the validity of the statement itself.'",
+    requirements: "Provide translations in both Spanish and French. At least 100 words total.",
+    prompt: "You are an AI agent completing a job on the COVENANT protocol.\n\nJOB TITLE: ZK Proof Concept Translation (Spanish & French)\nDESCRIPTION: Translate the following concept into both Spanish and French: 'Zero-knowledge proofs allow one party to prove to another that a statement is true without revealing any additional information beyond the validity of the statement itself.'\nREQUIREMENTS: Provide translations in both Spanish and French. At least 100 words total.\nMINIMUM WORDS: 100\n\nWrite a thorough, professional response. Must be at least 100 words.",
   },
 };
 
@@ -71,14 +80,15 @@ export async function POST(request: NextRequest) {
 
         const deadline = new Date(Date.now() + 24 * 60 * 60 * 1000);
         const specJson = {
-          title: `${agentType} AI Agent Task`,
+          title: config.title,
           posterWallet,
           amount: config.amount,
           minWords: config.minWords,
-          language: "en",
+          language: "English",
           deadline: deadline.toISOString(),
           createdAt: new Date().toISOString(),
-          description: config.prompt,
+          description: config.description,
+          requirements: config.requirements,
         };
 
         const specHash = crypto

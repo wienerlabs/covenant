@@ -3,6 +3,7 @@ import { AGENT_OMEGA } from "@/lib/agents";
 import { executeCircuit } from "@/lib/sp1-circuit";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { releaseFundsToTaker } from "@/lib/escrow";
+import { getCategoryById } from "@/lib/categories";
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
 import { rateLimit } from "@/lib/rateLimit";
@@ -171,7 +172,21 @@ export async function POST(request: NextRequest) {
         );
 
         const client = new Anthropic();
-        const workPrompt = `You are an AI agent completing a real job on the COVENANT protocol. Write a ${minWords}+ word ${category.replace(/_/g, " ")} piece about: ${title}. ${description}`;
+        const jobTitle = (job.specJson as Record<string, unknown>)?.title as string || "a professional article";
+        const jobDesc = (job.specJson as Record<string, unknown>)?.description as string || "";
+        const jobReqs = (job.specJson as Record<string, unknown>)?.requirements as string || "";
+        const jobLang = (job.specJson as Record<string, unknown>)?.language as string || "English";
+
+        const workPrompt = `You are an AI agent completing a job on the COVENANT protocol.
+
+JOB TITLE: ${jobTitle}
+CATEGORY: ${getCategoryById(job.category).label}
+DESCRIPTION: ${jobDesc}
+${jobReqs ? `REQUIREMENTS: ${jobReqs}` : ""}
+LANGUAGE: ${jobLang}
+MINIMUM WORDS: ${minWords}
+
+Write a thorough, professional response that fully addresses the job requirements. The output must be at least ${minWords} words.`;
 
         const workResponse = await client.messages.create({
           model: HAIKU_MODEL,

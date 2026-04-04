@@ -30,6 +30,16 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
     minWords: 200,
     deadline: "",
   });
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [requirements, setRequirements] = useState("");
+  const [language, setLanguage] = useState("English");
+  // Category-specific
+  const [sourceText, setSourceText] = useState(""); // translation
+  const [repoUrl, setRepoUrl] = useState(""); // code review
+  const [targetUrl, setTargetUrl] = useState(""); // bug bounty
+  const [stylePreference, setStylePreference] = useState(""); // design
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ jobId: string; txHash: string | null } | null>(null);
@@ -80,7 +90,15 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
           amount: data.amount,
           paymentToken: data.paymentToken,
           minWords: data.minWords,
+          language,
           deadline: deadlineDate.toISOString(),
+          title,
+          description,
+          requirements,
+          ...(data.category === "translation" && sourceText ? { sourceText } : {}),
+          ...(data.category === "code_review" && repoUrl ? { repoUrl } : {}),
+          ...(data.category === "bug_bounty" && targetUrl ? { targetUrl } : {}),
+          ...(data.category === "design" && stylePreference ? { stylePreference } : {}),
         }),
       });
 
@@ -152,6 +170,11 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
           <button
             onClick={() => {
               if (step === 1 && !data.category) return;
+              if (step === 2 && (!title.trim() || !description.trim())) {
+                setError("Please fill in required fields");
+                return;
+              }
+              setError(null);
               setStep((s) => s + 1);
             }}
             disabled={step === 1 && !data.category}
@@ -220,6 +243,205 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
             Set Details
           </div>
           <div style={{ ...glassCard, display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* Job Title */}
+            <div>
+              <label style={labelStyle}>Job Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. DeFi Security Analysis Blog Post"
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  fontSize: "13px",
+                  fontFamily: "inherit",
+                  borderRadius: "6px",
+                  border: `1px solid ${!title && error ? "#FF425E" : cardBorder}`,
+                  backgroundColor: cardBg,
+                  color: textColor,
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+              {!title && error && (
+                <div style={{ fontSize: "10px", color: "#FF425E", marginTop: "4px" }}>Title is required</div>
+              )}
+            </div>
+
+            {/* Task Description */}
+            <div>
+              <label style={labelStyle}>Task Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe exactly what needs to be done. Be specific about format, tone, topics to cover..."
+                rows={4}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  fontSize: "13px",
+                  fontFamily: "inherit",
+                  borderRadius: "6px",
+                  border: `1px solid ${!description && error ? "#FF425E" : cardBorder}`,
+                  backgroundColor: cardBg,
+                  color: textColor,
+                  outline: "none",
+                  boxSizing: "border-box",
+                  resize: "vertical",
+                }}
+              />
+              {!description && error && (
+                <div style={{ fontSize: "10px", color: "#FF425E", marginTop: "4px" }}>Description is required</div>
+              )}
+            </div>
+
+            {/* Additional Requirements */}
+            <div>
+              <label style={labelStyle}>Additional Requirements</label>
+              <textarea
+                value={requirements}
+                onChange={(e) => setRequirements(e.target.value)}
+                placeholder="Optional: sources to cite, style guidelines, technical constraints..."
+                rows={2}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  fontSize: "13px",
+                  fontFamily: "inherit",
+                  borderRadius: "6px",
+                  border: `1px solid ${cardBorder}`,
+                  backgroundColor: cardBg,
+                  color: textColor,
+                  outline: "none",
+                  boxSizing: "border-box",
+                  resize: "vertical",
+                }}
+              />
+            </div>
+
+            {/* Content Language */}
+            <div>
+              <label style={labelStyle}>Content Language</label>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  fontSize: "13px",
+                  fontFamily: "inherit",
+                  borderRadius: "6px",
+                  border: `1px solid ${cardBorder}`,
+                  backgroundColor: cardBg,
+                  color: textColor,
+                  outline: "none",
+                  boxSizing: "border-box",
+                  cursor: "pointer",
+                }}
+              >
+                {["English", "Turkish", "Spanish", "French", "German", "Chinese", "Japanese", "Korean", "Portuguese", "Arabic"].map((lang) => (
+                  <option key={lang} value={lang}>{lang}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Category-specific fields */}
+            {data.category === "translation" && (
+              <div>
+                <label style={labelStyle}>Source Text</label>
+                <textarea
+                  value={sourceText}
+                  onChange={(e) => setSourceText(e.target.value)}
+                  placeholder="Paste the text to translate"
+                  rows={4}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    fontFamily: "inherit",
+                    borderRadius: "6px",
+                    border: `1px solid ${cardBorder}`,
+                    backgroundColor: cardBg,
+                    color: textColor,
+                    outline: "none",
+                    boxSizing: "border-box",
+                    resize: "vertical",
+                  }}
+                />
+              </div>
+            )}
+            {data.category === "code_review" && (
+              <div>
+                <label style={labelStyle}>Repository / Code</label>
+                <textarea
+                  value={repoUrl}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                  placeholder="Paste repo URL or code snippet to review"
+                  rows={3}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    fontFamily: "inherit",
+                    borderRadius: "6px",
+                    border: `1px solid ${cardBorder}`,
+                    backgroundColor: cardBg,
+                    color: textColor,
+                    outline: "none",
+                    boxSizing: "border-box",
+                    resize: "vertical",
+                  }}
+                />
+              </div>
+            )}
+            {data.category === "bug_bounty" && (
+              <div>
+                <label style={labelStyle}>Target</label>
+                <input
+                  type="text"
+                  value={targetUrl}
+                  onChange={(e) => setTargetUrl(e.target.value)}
+                  placeholder="URL or contract address to test"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    fontFamily: "inherit",
+                    borderRadius: "6px",
+                    border: `1px solid ${cardBorder}`,
+                    backgroundColor: cardBg,
+                    color: textColor,
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+            )}
+            {data.category === "design" && (
+              <div>
+                <label style={labelStyle}>Style Preference</label>
+                <input
+                  type="text"
+                  value={stylePreference}
+                  onChange={(e) => setStylePreference(e.target.value)}
+                  placeholder="e.g. minimalist, modern, corporate"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    fontFamily: "inherit",
+                    borderRadius: "6px",
+                    border: `1px solid ${cardBorder}`,
+                    backgroundColor: cardBg,
+                    color: textColor,
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+            )}
+
             {/* Amount */}
             <div>
               <label style={labelStyle}>
@@ -355,6 +577,66 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
             Preview & Lock
           </div>
           <div style={glassCard}>
+            {/* Title */}
+            {title && (
+              <div style={{ fontSize: "18px", fontWeight: 700, color: textColor, marginBottom: "12px" }}>
+                {title}
+              </div>
+            )}
+
+            {/* Description */}
+            {description && (
+              <div style={{ fontSize: "13px", color: textColor, lineHeight: 1.6, marginBottom: "12px", opacity: 0.85 }}>
+                {description}
+              </div>
+            )}
+
+            {/* Requirements */}
+            {requirements && (
+              <div style={{ marginBottom: "12px" }}>
+                <div style={labelStyle}>Requirements</div>
+                <div style={{ fontSize: "12px", color: textColor, opacity: 0.7, lineHeight: 1.5 }}>
+                  {requirements}
+                </div>
+              </div>
+            )}
+
+            {/* Language */}
+            <div style={{ marginBottom: "12px" }}>
+              <div style={labelStyle}>Language</div>
+              <div style={{ fontSize: "12px", color: textColor }}>{language}</div>
+            </div>
+
+            {/* Category-specific preview */}
+            {data.category === "translation" && sourceText && (
+              <div style={{ marginBottom: "12px" }}>
+                <div style={labelStyle}>Source Text</div>
+                <div style={{ fontSize: "12px", color: textColor, opacity: 0.7, lineHeight: 1.5, maxHeight: "60px", overflow: "hidden" }}>
+                  {sourceText.slice(0, 200)}{sourceText.length > 200 ? "..." : ""}
+                </div>
+              </div>
+            )}
+            {data.category === "code_review" && repoUrl && (
+              <div style={{ marginBottom: "12px" }}>
+                <div style={labelStyle}>Repository / Code</div>
+                <div style={{ fontSize: "12px", color: textColor, opacity: 0.7, fontFamily: "monospace" }}>
+                  {repoUrl.slice(0, 100)}{repoUrl.length > 100 ? "..." : ""}
+                </div>
+              </div>
+            )}
+            {data.category === "bug_bounty" && targetUrl && (
+              <div style={{ marginBottom: "12px" }}>
+                <div style={labelStyle}>Target</div>
+                <div style={{ fontSize: "12px", color: textColor, opacity: 0.7, fontFamily: "monospace" }}>{targetUrl}</div>
+              </div>
+            )}
+            {data.category === "design" && stylePreference && (
+              <div style={{ marginBottom: "12px" }}>
+                <div style={labelStyle}>Style Preference</div>
+                <div style={{ fontSize: "12px", color: textColor, opacity: 0.7 }}>{stylePreference}</div>
+              </div>
+            )}
+
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
               <div>
                 <div style={labelStyle}>Category</div>
@@ -555,6 +837,14 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                 onClick={() => {
                   setStep(1);
                   setData({ category: null, amount: 25, paymentToken: "USDC", minWords: 200, deadline: "" });
+                  setTitle("");
+                  setDescription("");
+                  setRequirements("");
+                  setLanguage("English");
+                  setSourceText("");
+                  setRepoUrl("");
+                  setTargetUrl("");
+                  setStylePreference("");
                   setResult(null);
                   setError(null);
                 }}
