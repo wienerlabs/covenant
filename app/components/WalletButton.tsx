@@ -86,7 +86,7 @@ export default function WalletButton() {
             style={{
               position: "fixed",
               inset: 0,
-              zIndex: 99,
+              zIndex: 1099,
             }}
           />
           {/* Dropdown */}
@@ -95,7 +95,7 @@ export default function WalletButton() {
               position: "absolute",
               top: "calc(100% + 8px)",
               right: 0,
-              zIndex: 100,
+              zIndex: 1100,
               backgroundColor: "#ffffff",
               border: "1px solid #000000",
               borderRadius: "8px",

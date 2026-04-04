@@ -114,9 +114,9 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         padding: isTransparent ? "0 32px" : "0 20px",
         backgroundColor: "transparent",
         position: "relative",
+        zIndex: 1000,
         gap: "12px",
         flexWrap: "nowrap",
-        overflow: "hidden",
       }}
     >
       <Link
@@ -190,7 +190,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
                 borderRadius: "8px",
                 backdropFilter: "blur(16px)",
                 boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
-                zIndex: 100,
+                zIndex: 1100,
                 overflow: "hidden",
               }}
             >
@@ -262,7 +262,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
             bottom: 0,
             backgroundColor: isDark ? "rgba(10,10,20,0.98)" : "rgba(255,255,255,0.98)",
             backdropFilter: "blur(16px)",
-            zIndex: 200,
+            zIndex: 1200,
             display: "flex",
             flexDirection: "column",
             padding: "24px",

@@ -124,7 +124,7 @@ export default function NotificationBell({ wallet, variant = "dark" }: Notificat
             border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #e0e0e0",
             backgroundColor: isDark ? "rgba(20,20,20,0.95)" : "rgba(255,255,255,0.95)",
             backdropFilter: "blur(16px)",
-            zIndex: 100,
+            zIndex: 1100,
             padding: "8px 0",
             boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
           }}
