@@ -138,7 +138,7 @@ export default function ProofPage({ params }: { params: Promise<{ id: string }> 
         <div style={{ position: "relative", zIndex: 2 }}>
           <NavBar activeTab="proof" variant="dark" />
           <div style={{ textAlign: "center", padding: "64px", color: "rgba(255,255,255,0.4)" }}>
-            Proof not found. <Link href="/proof" style={{ color: "#3B82F6" }}>Go to ZK Proof page</Link>
+            Proof not found. <Link href="/proof" style={{ color: "#42BDFF" }}>Go to ZK Proof page</Link>
           </div>
         </div>
       </div>
@@ -169,7 +169,7 @@ export default function ProofPage({ params }: { params: Promise<{ id: string }> 
               fontSize: "10px",
               textTransform: "uppercase",
               letterSpacing: "0.1em",
-              color: wordCountVerified ? "#86efac" : "#fca5a5",
+              color: wordCountVerified ? "#FFE342" : "#fca5a5",
               fontWeight: 600,
             }}>
               {wordCountVerified ? "Verified by COVENANT on Solana" : "Proof Pending"}
@@ -223,7 +223,7 @@ export default function ProofPage({ params }: { params: Promise<{ id: string }> 
               )}
               <div>
                 <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em" }}>Status</div>
-                <div style={{ color: job.status === "Completed" ? "#86efac" : "#ffffff" }}>{job.status}</div>
+                <div style={{ color: job.status === "Completed" ? "#FFE342" : "#ffffff" }}>{job.status}</div>
               </div>
             </div>
           </div>
@@ -244,7 +244,7 @@ export default function ProofPage({ params }: { params: Promise<{ id: string }> 
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
                   <span style={{ color: "rgba(255,255,255,0.5)" }}>Word Count</span>
-                  <span style={{ color: wordCountVerified ? "#86efac" : "#fca5a5", fontWeight: 600 }}>
+                  <span style={{ color: wordCountVerified ? "#FFE342" : "#fca5a5", fontWeight: 600 }}>
                     {proof.wordCount} / {job.minWords} min {wordCountVerified ? "\u2713" : "\u2717"}
                   </span>
                 </div>
@@ -256,7 +256,7 @@ export default function ProofPage({ params }: { params: Promise<{ id: string }> 
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
                   <span style={{ color: "rgba(255,255,255,0.5)" }}>Verified</span>
-                  <span style={{ color: proof.proofValid ? "#86efac" : "#fca5a5" }}>
+                  <span style={{ color: proof.proofValid ? "#FFE342" : "#fca5a5" }}>
                     {proof.proofValid ? "YES" : "NO"}
                   </span>
                 </div>
@@ -309,7 +309,7 @@ export default function ProofPage({ params }: { params: Promise<{ id: string }> 
                   border: "1px solid rgba(255,255,255,0.25)",
                   borderRadius: "6px",
                   backgroundColor: copied ? "rgba(134,239,172,0.1)" : "transparent",
-                  color: copied ? "#86efac" : "rgba(255,255,255,0.7)",
+                  color: copied ? "#FFE342" : "rgba(255,255,255,0.7)",
                   transition: "all 0.15s ease",
                 }}
               >

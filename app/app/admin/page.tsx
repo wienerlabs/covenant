@@ -93,9 +93,9 @@ function StatusBadgeDark({ status }: { status: string }) {
   const colors: Record<string, { bg: string; color: string }> = {
     Open: { bg: "rgba(255,255,255,0.15)", color: "#ffffff" },
     Accepted: { bg: "rgba(59,130,246,0.3)", color: "#93c5fd" },
-    Completed: { bg: "rgba(34,197,94,0.3)", color: "#86efac" },
+    Completed: { bg: "rgba(34,197,94,0.3)", color: "#FFE342" },
     Cancelled: { bg: "rgba(239,68,68,0.3)", color: "#fca5a5" },
-    confirmed: { bg: "rgba(34,197,94,0.3)", color: "#86efac" },
+    confirmed: { bg: "rgba(34,197,94,0.3)", color: "#FFE342" },
     failed: { bg: "rgba(239,68,68,0.3)", color: "#fca5a5" },
   };
   const c = colors[status] || colors.Open;

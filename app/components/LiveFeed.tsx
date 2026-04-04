@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import PixelAvatar from "./PixelAvatar";
+import UserAvatar from "./UserAvatar";
 import { SOL_LOGO_URL } from "@/lib/constants";
 
 interface FeedItem {
@@ -62,8 +62,8 @@ export default function LiveFeed() {
 
   const statusColor = (status: FeedItem["status"]) => {
     switch (status) {
-      case "completed": return "#86efac";
-      case "accepted": return "#fde68a";
+      case "completed": return "#FFE342";
+      case "accepted": return "#42BDFF";
       case "cancelled": return "#fca5a5";
       default: return "rgba(255,255,255,0.7)";
     }
@@ -106,9 +106,9 @@ export default function LiveFeed() {
             width: "6px",
             height: "6px",
             borderRadius: "50%",
-            backgroundColor: "#86efac",
+            backgroundColor: "#FFE342",
             display: "inline-block",
-            boxShadow: "0 0 6px #86efac",
+            boxShadow: "0 0 6px #FFE342",
             animation: "pulse 2s infinite",
           }}
         />
@@ -147,7 +147,7 @@ export default function LiveFeed() {
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
           >
             <div style={{ flexShrink: 0, marginTop: "2px" }}>
-              <PixelAvatar seed={item.avatarSeed} size={28} />
+              <UserAvatar seed={item.avatarSeed} avatarUrl={null} size={28} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div

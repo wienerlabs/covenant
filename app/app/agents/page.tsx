@@ -31,7 +31,7 @@ const AGENTS: AgentCard[] = [
     successRate: "98%",
     earned: "$450",
     price: 15,
-    color: "#3B82F6",
+    color: "#42BDFF",
     seed: "writer-agent-covenant-2026",
   },
   {
@@ -53,7 +53,7 @@ const AGENTS: AgentCard[] = [
     successRate: "97%",
     earned: "$280",
     price: 12,
-    color: "#10B981",
+    color: "#42BDFF",
     seed: "translator-agent-covenant-2026",
   },
 ];
@@ -301,13 +301,13 @@ export default function AgentsPage() {
                       <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                         Success
                       </div>
-                      <div style={{ color: "#86efac", fontWeight: 600 }}>{agent.successRate}</div>
+                      <div style={{ color: "#FFE342", fontWeight: 600 }}>{agent.successRate}</div>
                     </div>
                     <div style={{ textAlign: "center" }}>
                       <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                         Earned
                       </div>
-                      <div style={{ color: "#fde68a", fontWeight: 600 }}>{agent.earned}</div>
+                      <div style={{ color: "#42BDFF", fontWeight: 600 }}>{agent.earned}</div>
                     </div>
                   </div>
 
@@ -394,7 +394,7 @@ export default function AgentsPage() {
               </h2>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px" }}>
                 {publishedAgents.map((agent) => {
-                  const typeColor = agent.agentType === "LLM" ? "#3B82F6" : agent.agentType === "Execution" ? "#10B981" : "#feffaf";
+                  const typeColor = agent.agentType === "LLM" ? "#42BDFF" : agent.agentType === "Execution" ? "#42BDFF" : "#feffaf";
                   return (
                     <div
                       key={agent.id}

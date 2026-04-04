@@ -95,7 +95,7 @@ export default function TryItPage() {
       : "rgba(255,255,255,0.04)",
     backdropFilter: "blur(8px)",
     fontSize: "10px",
-    color: active ? (pass ? "#86efac" : "#fca5a5") : "rgba(255,255,255,0.5)",
+    color: active ? (pass ? "#FFE342" : "#fca5a5") : "rgba(255,255,255,0.5)",
     fontFamily: "monospace",
     textAlign: "center",
     transition: "all 0.3s ease",
@@ -163,7 +163,7 @@ export default function TryItPage() {
                 {/* Live stats */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginTop: "16px" }}>
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: "28px", fontWeight: 700, color: wordCountPasses ? "#86efac" : "#ffffff" }}>
+                    <div style={{ fontSize: "28px", fontWeight: 700, color: wordCountPasses ? "#FFE342" : "#ffffff" }}>
                       {wordCount}
                     </div>
                     <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>Words</div>
@@ -195,13 +195,13 @@ export default function TryItPage() {
                       width: `${progress}%`,
                       height: "100%",
                       borderRadius: "3px",
-                      backgroundColor: progress >= 100 ? "#86efac" : "#3B82F6",
+                      backgroundColor: progress >= 100 ? "#FFE342" : "#42BDFF",
                       transition: "width 0.3s ease, background-color 0.3s ease",
                     }} />
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
                     <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)" }}>0</span>
-                    <span style={{ fontSize: "9px", color: progress >= 100 ? "#86efac" : "rgba(255,255,255,0.3)" }}>
+                    <span style={{ fontSize: "9px", color: progress >= 100 ? "#FFE342" : "rgba(255,255,255,0.3)" }}>
                       {Math.round(progress)}%
                     </span>
                     <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)" }}>{minWords}</span>
@@ -303,7 +303,7 @@ export default function TryItPage() {
                       fontWeight: 700,
                       color: text.length > 0
                         ? wordCountPasses
-                          ? "#86efac"
+                          ? "#FFE342"
                           : "#fca5a5"
                         : "rgba(255,255,255,0.3)",
                       textTransform: "uppercase",
@@ -369,7 +369,7 @@ export default function TryItPage() {
                       <div style={{
                         fontSize: "24px",
                         fontWeight: 700,
-                        color: result.passed ? "#86efac" : "#fca5a5",
+                        color: result.passed ? "#FFE342" : "#fca5a5",
                       }}>
                         {result.passed ? "VERIFIED" : "FAILED"}
                       </div>
@@ -389,7 +389,7 @@ export default function TryItPage() {
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px" }}>
                         <span style={{ color: "rgba(255,255,255,0.5)" }}>Verified</span>
-                        <span style={{ color: result.passed ? "#86efac" : "#fca5a5" }}>{result.passed ? "Yes" : "No"}</span>
+                        <span style={{ color: result.passed ? "#FFE342" : "#fca5a5" }}>{result.passed ? "Yes" : "No"}</span>
                       </div>
                     </div>
                   </div>
@@ -423,12 +423,12 @@ export default function TryItPage() {
               href="/poster"
               style={{
                 fontSize: "13px",
-                color: "#3B82F6",
+                color: "#42BDFF",
                 textDecoration: "none",
                 transition: "color 0.15s ease",
               }}
               onMouseEnter={(e) => { e.currentTarget.style.color = "#60a5fa"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "#3B82F6"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "#42BDFF"; }}
             >
               Ready to start? Connect wallet &rarr;
             </Link>

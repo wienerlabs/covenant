@@ -25,7 +25,7 @@ export default function TxConfirmation({ status, txHash, onDismiss }: TxConfirma
     signing: { label: "SIGNING...", color: "#f59e0b", icon: "\u270D" },
     confirming: { label: "CONFIRMING...", color: "#3b82f6", icon: "\u23F3" },
     confirmed: { label: "CONFIRMED", color: "#10b981", icon: "\u2713" },
-    error: { label: "FAILED", color: "#ef4444", icon: "\u2717" },
+    error: { label: "FAILED", color: "#FF425E", icon: "\u2717" },
   };
 
   const cfg = statusConfig[status];

@@ -44,7 +44,7 @@ export default function CopyButton({ text, label }: CopyButtonProps) {
         border: "1px solid rgba(255,255,255,0.15)",
         borderRadius: "3px",
         backgroundColor: copied ? "rgba(134,239,172,0.15)" : "transparent",
-        color: copied ? "#86efac" : "rgba(255,255,255,0.4)",
+        color: copied ? "#FFE342" : "rgba(255,255,255,0.4)",
         transition: "all 0.15s ease",
         display: "inline-flex",
         alignItems: "center",

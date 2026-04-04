@@ -138,7 +138,7 @@ export default function OnchainPage() {
                   </div>
                   <div>
                     <div style={labelStyle}>Executable</div>
-                    <div style={{ ...valueStyle, color: data.program.executable ? "#86efac" : "rgba(255,255,255,0.4)" }}>
+                    <div style={{ ...valueStyle, color: data.program.executable ? "#FFE342" : "rgba(255,255,255,0.4)" }}>
                       {data.program.executable === null ? "Unknown" : data.program.executable ? "Yes" : "No"}
                     </div>
                   </div>
@@ -166,8 +166,8 @@ export default function OnchainPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                   {([
                     { label: "Deployer", data: data.wallets.deployer, color: "#fff", key: "deployer" as const },
-                    { label: "Agent Alpha", data: data.wallets.alpha, color: "#3B82F6", key: "alpha" as const },
-                    { label: "Agent Omega", data: data.wallets.omega, color: "#10B981", key: "omega" as const },
+                    { label: "Agent Alpha", data: data.wallets.alpha, color: "#42BDFF", key: "alpha" as const },
+                    { label: "Agent Omega", data: data.wallets.omega, color: "#42BDFF", key: "omega" as const },
                   ]).map((wallet) => {
                     const usdcBal = tokenBalances ? tokenBalances[wallet.key]?.usdc : null;
                     return (

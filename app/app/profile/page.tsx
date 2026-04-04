@@ -5,7 +5,7 @@ import { useConnector } from "@solana/connector/react";
 import Link from "next/link";
 import useProfile from "@/hooks/useProfile";
 import useReputation from "@/hooks/useReputation";
-import PixelAvatar from "@/components/PixelAvatar";
+import UserAvatar from "@/components/UserAvatar";
 import ReputationScore from "@/components/ReputationScore";
 import WalletButton from "@/components/WalletButton";
 import { USDC_LOGO_URL } from "@/lib/constants";
@@ -24,6 +24,9 @@ export default function ProfilePage() {
   const [editRole, setEditRole] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarToast, setAvatarToast] = useState<string | null>(null);
 
   function openEdit() {
     if (!profile) return;
@@ -64,6 +67,46 @@ export default function ProfilePage() {
       setSaveError("Network error. Please try again.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function handleAvatarSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 500 * 1024) {
+      setAvatarToast("Image too large. Max 500KB.");
+      setTimeout(() => setAvatarToast(null), 3000);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAvatarPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function saveAvatar() {
+    if (!wallet || !avatarPreview) return;
+    setUploadingAvatar(true);
+    try {
+      const res = await fetch(`/api/profile/${wallet}/avatar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageData: avatarPreview }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setAvatarToast(data.error || "Upload failed");
+      } else {
+        setAvatarToast("Avatar updated!");
+        setAvatarPreview(null);
+        if (refetch) refetch();
+      }
+    } catch {
+      setAvatarToast("Network error");
+    } finally {
+      setUploadingAvatar(false);
+      setTimeout(() => setAvatarToast(null), 3000);
     }
   }
 
@@ -252,7 +295,91 @@ export default function ProfilePage() {
                   <>
                     <div style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
-                        <PixelAvatar seed={profile.avatarSeed} size={80} />
+                        {avatarPreview ? (
+                          <img
+                            src={avatarPreview}
+                            alt="Preview"
+                            style={{ width: 80, height: 80, borderRadius: "8px", objectFit: "cover", border: "2px solid #42BDFF" }}
+                          />
+                        ) : (
+                          <UserAvatar seed={profile.avatarSeed} avatarUrl={profile.avatarUrl ?? null} size={80} />
+                        )}
+                        <input
+                          type="file"
+                          id="avatar-upload"
+                          accept="image/png,image/jpeg,image/gif,image/webp"
+                          style={{ display: "none" }}
+                          onChange={handleAvatarSelect}
+                        />
+                        {avatarPreview ? (
+                          <div style={{ display: "flex", gap: "6px" }}>
+                            <button
+                              onClick={saveAvatar}
+                              disabled={uploadingAvatar}
+                              style={{
+                                fontFamily: "inherit",
+                                fontSize: "9px",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.05em",
+                                padding: "4px 10px",
+                                cursor: uploadingAvatar ? "not-allowed" : "pointer",
+                                border: "1px solid #42BDFF",
+                                borderRadius: "4px",
+                                backgroundColor: "rgba(66,189,255,0.15)",
+                                color: "#42BDFF",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              {uploadingAvatar ? "..." : "Save"}
+                            </button>
+                            <button
+                              onClick={() => setAvatarPreview(null)}
+                              style={{
+                                fontFamily: "inherit",
+                                fontSize: "9px",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.05em",
+                                padding: "4px 10px",
+                                cursor: "pointer",
+                                border: "1px solid rgba(255,255,255,0.15)",
+                                borderRadius: "4px",
+                                backgroundColor: "transparent",
+                                color: "rgba(255,255,255,0.5)",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => document.getElementById("avatar-upload")?.click()}
+                            style={{
+                              fontFamily: "inherit",
+                              fontSize: "9px",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              padding: "4px 10px",
+                              cursor: "pointer",
+                              border: "1px solid rgba(255,255,255,0.2)",
+                              borderRadius: "4px",
+                              backgroundColor: "transparent",
+                              color: "rgba(255,255,255,0.45)",
+                              transition: "all 0.15s ease",
+                            }}
+                          >
+                            Change Avatar
+                          </button>
+                        )}
+                        {avatarToast && (
+                          <div style={{
+                            fontSize: "10px",
+                            color: avatarToast.includes("updated") ? "#FFE342" : "#FF425E",
+                            textAlign: "center",
+                          }}>
+                            {avatarToast}
+                          </div>
+                        )}
                         <ReputationScore completed={reputation.jobsCompleted} failed={reputation.jobsFailed} />
                       </div>
                       <div style={{ flex: 1 }}>

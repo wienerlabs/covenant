@@ -26,8 +26,8 @@ function formatTs(dateStr: string): string {
 
 function typeBadgeColor(type: string): { bg: string; border: string; text: string } {
   if (type.includes("create") || type === "job_created") return { bg: "rgba(59,130,246,0.15)", border: "rgba(59,130,246,0.3)", text: "#93c5fd" };
-  if (type.includes("accept")) return { bg: "rgba(253,230,138,0.15)", border: "rgba(253,230,138,0.3)", text: "#fde68a" };
-  if (type.includes("submit") || type === "submission") return { bg: "rgba(16,185,129,0.15)", border: "rgba(16,185,129,0.3)", text: "#86efac" };
+  if (type.includes("accept")) return { bg: "rgba(253,230,138,0.15)", border: "rgba(253,230,138,0.3)", text: "#42BDFF" };
+  if (type.includes("submit") || type === "submission") return { bg: "rgba(16,185,129,0.15)", border: "rgba(16,185,129,0.3)", text: "#FFE342" };
   if (type.includes("cancel")) return { bg: "rgba(252,165,165,0.15)", border: "rgba(252,165,165,0.3)", text: "#fca5a5" };
   return { bg: "rgba(255,255,255,0.08)", border: "rgba(255,255,255,0.15)", text: "rgba(255,255,255,0.6)" };
 }

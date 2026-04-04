@@ -213,10 +213,10 @@ export default function JobCard({
                   letterSpacing: "0.05em",
                   padding: "8px 20px",
                   textDecoration: "none",
-                  border: isDark ? "1px solid rgba(134,239,172,0.3)" : "1px solid #86efac",
+                  border: isDark ? "1px solid rgba(134,239,172,0.3)" : "1px solid #FFE342",
                   borderRadius: "6px",
                   backgroundColor: isDark ? "rgba(134,239,172,0.1)" : "rgba(134,239,172,0.15)",
-                  color: "#86efac",
+                  color: "#FFE342",
                   transition: "all 0.15s ease",
                   display: "inline-block",
                 }}

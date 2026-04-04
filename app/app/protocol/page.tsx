@@ -209,7 +209,7 @@ export default function ProtocolPage() {
                           backgroundColor: item.warn
                             ? "rgba(239, 68, 68, 0.15)"
                             : "transparent",
-                          color: item.warn ? "#ef4444" : "rgba(255,255,255,0.5)",
+                          color: item.warn ? "#FF425E" : "rgba(255,255,255,0.5)",
                           border: item.warn
                             ? "1px solid rgba(239, 68, 68, 0.3)"
                             : "none",
@@ -507,7 +507,7 @@ export default function ProtocolPage() {
                   <span
                     style={{
                       fontSize: "14px",
-                      color: didResult.valid ? "#22c55e" : "#ef4444",
+                      color: didResult.valid ? "#22c55e" : "#FF425E",
                     }}
                   >
                     {didResult.valid ? "\u2713" : "\u2717"}
@@ -515,7 +515,7 @@ export default function ProtocolPage() {
                   <span
                     style={{
                       fontSize: "12px",
-                      color: didResult.valid ? "#22c55e" : "#ef4444",
+                      color: didResult.valid ? "#22c55e" : "#FF425E",
                       fontWeight: 600,
                     }}
                   >

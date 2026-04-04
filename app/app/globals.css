@@ -63,7 +63,7 @@ body.light-mode .glass-card { background: rgba(0,0,0,0.05); border-color: #ddd; 
 /* NProgress loading bar */
 #nprogress { pointer-events: none; }
 #nprogress .bar {
-  background: #3B82F6;
+  background: #42BDFF;
   position: fixed;
   z-index: 10000;
   top: 0;
@@ -77,7 +77,7 @@ body.light-mode .glass-card { background: rgba(0,0,0,0.05); border-color: #ddd; 
   right: 0px;
   width: 100px;
   height: 100%;
-  box-shadow: 0 0 10px #3B82F6, 0 0 5px #3B82F6;
+  box-shadow: 0 0 10px #42BDFF, 0 0 5px #42BDFF;
   opacity: 1;
   transform: rotate(3deg) translate(0px, -4px);
 }

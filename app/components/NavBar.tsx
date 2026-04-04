@@ -6,7 +6,7 @@ import { useConnector } from "@solana/connector/react";
 import useProfile from "@/hooks/useProfile";
 import WalletButton from "./WalletButton";
 import WalletBalance from "./WalletBalance";
-import PixelAvatar from "./PixelAvatar";
+import UserAvatar from "./UserAvatar";
 import NotificationBell from "./NotificationBell";
 import ThemeToggle from "./ThemeToggle";
 
@@ -313,7 +313,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
               e.currentTarget.style.borderColor = isDark ? "rgba(255,255,255,0.15)" : "#e0e0e0";
             }}
           >
-            <PixelAvatar seed={profile.avatarSeed} size={24} />
+            <UserAvatar seed={profile.avatarSeed} avatarUrl={profile.avatarUrl ?? null} size={24} />
             <span style={{
               fontSize: "10px",
               color: isDark ? "rgba(255,255,255,0.7)" : "#555",

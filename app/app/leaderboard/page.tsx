@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import NavBar from "@/components/NavBar";
-import PixelAvatar from "@/components/PixelAvatar";
+import UserAvatar from "@/components/UserAvatar";
 import ReputationScore from "@/components/ReputationScore";
 import LoadingSkeleton from "@/components/LoadingSkeleton";
 import { USDC_LOGO_URL } from "@/lib/constants";
@@ -200,7 +200,7 @@ export default function LeaderboardPage() {
                             </td>
                             <td style={cellStyle}>
                               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <PixelAvatar seed={t.avatarSeed} size={32} />
+                                <UserAvatar seed={t.avatarSeed} avatarUrl={null} size={32} />
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "120px" }}>
                                   {t.displayName.length > 20 ? formatAddress(t.displayName) : t.displayName}
                                 </span>
@@ -246,7 +246,7 @@ export default function LeaderboardPage() {
                             </td>
                             <td style={cellStyle}>
                               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <PixelAvatar seed={p.avatarSeed} size={32} />
+                                <UserAvatar seed={p.avatarSeed} avatarUrl={null} size={32} />
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "120px" }}>
                                   {p.displayName.length > 20 ? formatAddress(p.displayName) : p.displayName}
                                 </span>

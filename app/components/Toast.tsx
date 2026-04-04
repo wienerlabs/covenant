@@ -3,7 +3,7 @@
 import type { ToastItem } from "@/hooks/useToast";
 
 const iconMap: Record<string, { symbol: string; color: string }> = {
-  success: { symbol: "\u2713", color: "#86efac" },
+  success: { symbol: "\u2713", color: "#FFE342" },
   error: { symbol: "\u2717", color: "#fca5a5" },
   info: { symbol: "\u2139", color: "#93c5fd" },
 };

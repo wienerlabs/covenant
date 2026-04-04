@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useConnector } from "@solana/connector/react";
 import NavBar from "@/components/NavBar";
-import PixelAvatar from "@/components/PixelAvatar";
+import UserAvatar from "@/components/UserAvatar";
 import StatusBadge from "@/components/StatusBadge";
 import { StatCardSkeleton, JobCardSkeleton } from "@/components/LoadingSkeleton";
 import useProfile from "@/hooks/useProfile";
@@ -142,7 +142,7 @@ export default function DashboardPage() {
         <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "32px 24px" }}>
           {/* Welcome header */}
           <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "32px" }}>
-            {profile && <PixelAvatar seed={profile.avatarSeed} size={56} />}
+            {profile && <UserAvatar seed={profile.avatarSeed} avatarUrl={profile.avatarUrl ?? null} size={56} />}
             <div>
               <div style={{ fontSize: "24px", fontWeight: 700, color: "#ffffff" }}>
                 {profileLoading ? "Loading..." : profile ? `Welcome, ${profile.displayName}` : "Dashboard"}
@@ -316,7 +316,7 @@ export default function DashboardPage() {
                           {tx.type.replace(/_/g, " ")}
                         </span>
                         {tx.amount > 0 && (
-                          <span style={{ color: "#86efac", fontWeight: 600 }}>${tx.amount.toFixed(2)}</span>
+                          <span style={{ color: "#FFE342", fontWeight: 600 }}>${tx.amount.toFixed(2)}</span>
                         )}
                         <span style={{ color: "rgba(255,255,255,0.25)", fontSize: "9px" }}>
                           {new Date(tx.createdAt).toLocaleString()}

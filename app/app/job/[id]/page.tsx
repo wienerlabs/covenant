@@ -419,7 +419,7 @@ export default function JobDetailPage() {
                             padding: "2px 8px",
                             borderRadius: "4px",
                             backgroundColor: sub.verified ? "rgba(134,239,172,0.15)" : "rgba(255,255,255,0.07)",
-                            color: sub.verified ? "#86efac" : "rgba(255,255,255,0.4)",
+                            color: sub.verified ? "#FFE342" : "rgba(255,255,255,0.4)",
                             border: `1px solid ${sub.verified ? "rgba(134,239,172,0.3)" : "rgba(255,255,255,0.1)"}`,
                           }}>
                             {sub.verified ? "Verified" : "Pending"}

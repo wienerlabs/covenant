@@ -172,7 +172,7 @@ export default function FaucetPage() {
                       style={{
                         fontSize: "12px",
                         fontWeight: 600,
-                        color: "#86efac",
+                        color: "#FFE342",
                         marginBottom: "8px",
                       }}
                     >
@@ -194,7 +194,7 @@ export default function FaucetPage() {
                       style={{
                         fontSize: "11px",
                         fontFamily: "monospace",
-                        color: "#3B82F6",
+                        color: "#42BDFF",
                         textDecoration: "none",
                         wordBreak: "break-all",
                       }}

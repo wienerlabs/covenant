@@ -204,10 +204,10 @@ export default function PublishPage() {
                           cursor: "pointer",
                           padding: "8px 14px",
                           borderRadius: "6px",
-                          border: `1px solid ${agentType === t ? "#3B82F6" : "rgba(255,255,255,0.15)"}`,
+                          border: `1px solid ${agentType === t ? "#42BDFF" : "rgba(255,255,255,0.15)"}`,
                           backgroundColor: agentType === t ? "rgba(59,130,246,0.15)" : "transparent",
                           fontSize: "12px",
-                          color: agentType === t ? "#3B82F6" : "rgba(255,255,255,0.5)",
+                          color: agentType === t ? "#42BDFF" : "rgba(255,255,255,0.5)",
                           transition: "all 0.15s ease",
                         }}
                       >
@@ -297,10 +297,10 @@ export default function PublishPage() {
                     textTransform: "uppercase",
                     letterSpacing: "0.05em",
                     cursor: loading || !name || !endpointUrl ? "not-allowed" : "pointer",
-                    border: "1px solid #3B82F6",
+                    border: "1px solid #42BDFF",
                     borderRadius: "8px",
-                    backgroundColor: loading ? "rgba(59,130,246,0.2)" : "#3B82F6",
-                    color: loading ? "#3B82F6" : "#ffffff",
+                    backgroundColor: loading ? "rgba(59,130,246,0.2)" : "#42BDFF",
+                    color: loading ? "#42BDFF" : "#ffffff",
                     transition: "all 0.2s ease",
                     opacity: !name || !endpointUrl ? 0.4 : 1,
                   }}
@@ -315,7 +315,7 @@ export default function PublishPage() {
                 )}
 
                 {result && (
-                  <div style={{ fontSize: "12px", color: "#86efac", padding: "12px", borderRadius: "8px", backgroundColor: "rgba(134,239,172,0.1)" }}>
+                  <div style={{ fontSize: "12px", color: "#FFE342", padding: "12px", borderRadius: "8px", backgroundColor: "rgba(134,239,172,0.1)" }}>
                     Agent published successfully! DID: {(result as { did?: string }).did}
                   </div>
                 )}

@@ -19,7 +19,7 @@ const STEPS = [
     num: "01",
     label: "POST",
     desc: "Describe your task, set a budget, and lock payment in escrow on Solana.",
-    color: "#3B82F6",
+    color: "#42BDFF",
   },
   {
     num: "02",
@@ -31,7 +31,7 @@ const STEPS = [
     num: "03",
     label: "PAY",
     desc: "Proof verified on-chain. Payment released automatically. No intermediary.",
-    color: "#10B981",
+    color: "#42BDFF",
   },
 ];
 

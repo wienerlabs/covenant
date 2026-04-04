@@ -151,7 +151,7 @@ export default function EscrowVisualizer({
                   width: "6px",
                   height: "6px",
                   borderRadius: "50%",
-                  backgroundColor: "#eab308",
+                  backgroundColor: "#FFE342",
                   animation: `escrow-coin-move-right 1.2s ease-in-out ${i * 0.2}s infinite`,
                   boxShadow: "0 0 4px rgba(234,179,8,0.5)",
                 }}
@@ -187,9 +187,9 @@ export default function EscrowVisualizer({
                 ...balanceStyle,
                 color:
                   isLocked || isLocking
-                    ? "#eab308"
+                    ? "#FFE342"
                     : isReleased
-                    ? "#10B981"
+                    ? "#42BDFF"
                     : "#ffffff",
               }}
             >
@@ -199,7 +199,7 @@ export default function EscrowVisualizer({
           <div
             style={{
               fontSize: "8px",
-              color: isLocked ? "#eab308" : "rgba(255,255,255,0.3)",
+              color: isLocked ? "#FFE342" : "rgba(255,255,255,0.3)",
               marginTop: "2px",
               textTransform: "uppercase",
               fontWeight: isLocked ? 600 : 400,
@@ -245,7 +245,7 @@ export default function EscrowVisualizer({
                   width: "6px",
                   height: "6px",
                   borderRadius: "50%",
-                  backgroundColor: "#eab308",
+                  backgroundColor: "#FFE342",
                   animation: `escrow-coin-move-right 1.2s ease-in-out ${i * 0.2}s infinite`,
                   boxShadow: "0 0 4px rgba(234,179,8,0.5)",
                 }}
@@ -271,7 +271,7 @@ export default function EscrowVisualizer({
             <div
               style={{
                 ...balanceStyle,
-                color: isReleased ? "#10B981" : "#ffffff",
+                color: isReleased ? "#42BDFF" : "#ffffff",
               }}
             >
               {takerBalance.toFixed(1)}
@@ -280,7 +280,7 @@ export default function EscrowVisualizer({
           <div
             style={{
               fontSize: "8px",
-              color: isReleased ? "#10B981" : "rgba(255,255,255,0.3)",
+              color: isReleased ? "#42BDFF" : "rgba(255,255,255,0.3)",
               marginTop: "2px",
             }}
           >
@@ -300,10 +300,10 @@ export default function EscrowVisualizer({
                   borderRadius: i % 2 === 0 ? "50%" : "1px",
                   backgroundColor:
                     i % 3 === 0
-                      ? "#10B981"
+                      ? "#42BDFF"
                       : i % 3 === 1
-                      ? "#eab308"
-                      : "#3B82F6",
+                      ? "#FFE342"
+                      : "#42BDFF",
                   animation: `escrow-confetti 1.5s ease-out ${i * 0.15}s infinite`,
                 }}
               />

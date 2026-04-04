@@ -183,7 +183,7 @@ export default function CertificatePage({ params }: { params: { id: string } }) 
               <div
                 style={{
                   fontSize: "10px",
-                  color: "#eab308",
+                  color: "#FFE342",
                   textTransform: "uppercase",
                   letterSpacing: "0.2em",
                   marginBottom: "8px",
@@ -204,12 +204,12 @@ export default function CertificatePage({ params }: { params: { id: string } }) 
                   height: "80px",
                   borderRadius: "50%",
                   backgroundColor: cert.verified ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
-                  border: `2px solid ${cert.verified ? "#22c55e" : "#ef4444"}`,
+                  border: `2px solid ${cert.verified ? "#22c55e" : "#FF425E"}`,
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
                   fontSize: "36px",
-                  color: cert.verified ? "#22c55e" : "#ef4444",
+                  color: cert.verified ? "#22c55e" : "#FF425E",
                   marginBottom: "16px",
                 }}
               >
@@ -219,7 +219,7 @@ export default function CertificatePage({ params }: { params: { id: string } }) 
                 style={{
                   fontSize: "20px",
                   fontWeight: 700,
-                  color: cert.verified ? "#22c55e" : "#ef4444",
+                  color: cert.verified ? "#22c55e" : "#FF425E",
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
                 }}
@@ -272,7 +272,7 @@ export default function CertificatePage({ params }: { params: { id: string } }) 
                   border: "1px solid rgba(234,179,8,0.15)",
                 }}
               >
-                <span style={{ fontSize: "10px", color: "#eab308", textTransform: "uppercase", letterSpacing: "0.15em" }}>
+                <span style={{ fontSize: "10px", color: "#FFE342", textTransform: "uppercase", letterSpacing: "0.15em" }}>
                   Verified by COVENANT on Solana
                 </span>
               </div>

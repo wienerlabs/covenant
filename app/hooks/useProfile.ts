@@ -7,6 +7,7 @@ interface ProfileData {
   bio: string;
   role: string;
   avatarSeed: string;
+  avatarUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }

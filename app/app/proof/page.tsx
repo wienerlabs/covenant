@@ -367,7 +367,7 @@ export default function ProofPage() {
                     style={{
                       width: `${progress}%`,
                       height: "100%",
-                      backgroundColor: wouldPass ? "#86efac" : "rgba(255,255,255,0.4)",
+                      backgroundColor: wouldPass ? "#FFE342" : "rgba(255,255,255,0.4)",
                       borderRadius: "2px",
                       transition: "width 0.3s ease, background-color 0.3s ease",
                     }}
@@ -416,7 +416,7 @@ export default function ProofPage() {
                       color: !text.trim()
                         ? "rgba(255,255,255,0.3)"
                         : wouldPass
-                        ? "#86efac"
+                        ? "#FFE342"
                         : "#fca5a5",
                     }}
                   >
@@ -470,7 +470,7 @@ export default function ProofPage() {
                         fontSize: "13px",
                         fontWeight: 700,
                         textTransform: "uppercase",
-                        color: circuitResult.passed ? "#86efac" : "#fca5a5",
+                        color: circuitResult.passed ? "#FFE342" : "#fca5a5",
                       }}
                     >
                       {circuitResult.passed ? "PASS" : "FAIL"}
@@ -541,7 +541,7 @@ export default function ProofPage() {
                     <div
                       style={{
                         fontWeight: 700,
-                        color: test.pass ? "#86efac" : "#fca5a5",
+                        color: test.pass ? "#FFE342" : "#fca5a5",
                         textTransform: "uppercase",
                         fontSize: "11px",
                       }}

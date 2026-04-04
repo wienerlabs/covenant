@@ -26,7 +26,7 @@ const AGENT_ALPHA_CONFIG = {
   name: "AGENT ALPHA",
   role: "POSTER",
   wallet: process.env.NEXT_PUBLIC_AGENT_ALPHA_WALLET || "GMCRqvQyyu5WvoaWF4apE1A39W5SaoXUJkGkdvHpGQ9v",
-  color: "#3B82F6",
+  color: "#42BDFF",
   avatarSeed: "agent-alpha-covenant-2026",
 };
 
@@ -34,7 +34,7 @@ const AGENT_OMEGA_CONFIG = {
   name: "AGENT OMEGA",
   role: "TAKER",
   wallet: process.env.NEXT_PUBLIC_AGENT_OMEGA_WALLET || "55EbEM7x6WQxVFSt1KennwYBPgWF7GgF5bd2R2FVxiw1",
-  color: "#10B981",
+  color: "#FF425E",
   avatarSeed: "agent-omega-covenant-2026",
 };
 
@@ -450,22 +450,22 @@ export default function ArenaPage() {
   function getEventDotColor(step: string): string {
     if (step === "a2a_message") return "#feffaf";
     if (step === "x402_payment") return "#f59e0b";
-    if (step.startsWith("escrow_")) return "#eab308";
+    if (step.startsWith("escrow_")) return "#FFE342";
     if (step.includes("error")) return "#ff5f57";
-    if (step === "complete" || step.includes("completed") || step.includes("accepted")) return "#28c840";
-    if (step.includes("created")) return "#febc2e";
+    if (step === "complete" || step.includes("completed") || step.includes("accepted")) return "#FFE342";
+    if (step.includes("created")) return "#FFE342";
     if (step.includes("thinking") || step.includes("working")) return "#5ba4f5";
-    if (step.includes("thought")) return "#3B82F6";
+    if (step.includes("thought")) return "#42BDFF";
     return "#5ba4f5";
   }
 
   function getEventTextColor(step: string): string {
     if (step === "a2a_message") return "#feffaf";
     if (step === "x402_payment") return "#f59e0b";
-    if (step.startsWith("escrow_")) return "#eab308";
+    if (step.startsWith("escrow_")) return "#FFE342";
     if (step.includes("error")) return "#fca5a5";
-    if (step === "complete" || step.includes("completed")) return "#86efac";
-    if (step.includes("accepted") || step.includes("created")) return "#fde68a";
+    if (step === "complete" || step.includes("completed")) return "#FFE342";
+    if (step.includes("accepted") || step.includes("created")) return "#42BDFF";
     return "rgba(255,255,255,0.85)";
   }
 
@@ -533,7 +533,7 @@ export default function ArenaPage() {
                   cursor: "pointer",
                   padding: "2px 4px",
                   fontSize: "9px",
-                  color: copied ? "#86efac" : "rgba(255,255,255,0.3)",
+                  color: copied ? "#FFE342" : "rgba(255,255,255,0.3)",
                   transition: "color 0.15s ease",
                 }}
               >
@@ -743,7 +743,7 @@ export default function ArenaPage() {
                   fontSize: "10px",
                   textTransform: "uppercase",
                   letterSpacing: "0.08em",
-                  color: "#fde68a",
+                  color: "#42BDFF",
                   border: "1px solid rgba(253,230,138,0.3)",
                   padding: "4px 12px",
                   borderRadius: "4px",
@@ -815,7 +815,7 @@ export default function ArenaPage() {
                   fontSize: "10px",
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
-                  color: "#86efac",
+                  color: "#FFE342",
                   marginBottom: "16px",
                   fontWeight: 600,
                 }}
@@ -897,7 +897,7 @@ export default function ArenaPage() {
                             padding: "6px 10px",
                           }}
                         >
-                          <div style={{ fontSize: "8px", fontWeight: 700, color: isAlpha ? "#3B82F6" : "#10B981", marginBottom: "2px", textTransform: "uppercase" }}>
+                          <div style={{ fontSize: "8px", fontWeight: 700, color: isAlpha ? "#42BDFF" : "#42BDFF", marginBottom: "2px", textTransform: "uppercase" }}>
                             {isAlpha ? "Alpha" : "Omega"}
                           </div>
                           <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", lineHeight: 1.4 }}>
@@ -1089,15 +1089,15 @@ export default function ArenaPage() {
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", width: "140px", flexShrink: 0 }}>
                       <div
                         style={{
-                          border: "1px solid #10B98150",
+                          border: "1px solid #42BDFF50",
                           borderRadius: "8px",
                           padding: "12px 16px",
-                          backgroundColor: "#10B98110",
+                          backgroundColor: "#42BDFF10",
                           textAlign: "center",
                           width: "100%",
                         }}
                       >
-                        <div style={{ fontSize: "12px", fontWeight: 700, color: "#10B981", marginBottom: "2px" }}>OMEGA</div>
+                        <div style={{ fontSize: "12px", fontWeight: 700, color: "#42BDFF", marginBottom: "2px" }}>OMEGA</div>
                         <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Taker</div>
                       </div>
                     </div>
@@ -1113,7 +1113,7 @@ export default function ArenaPage() {
                               <img src={SOL_LOGO_URL} alt="SOL" width={12} height={12} style={{ borderRadius: "50%" }} />
                               <span style={{ fontSize: "11px", fontWeight: 600, color: "#f59e0b" }}>{payment.amount} SOL</span>
                             </div>
-                            <div style={{ width: "100%", height: "2px", background: "linear-gradient(90deg, #10B981, #f59e0b, #3B82F6)", borderRadius: "1px", boxShadow: "0 0 8px #f59e0b40" }} />
+                            <div style={{ width: "100%", height: "2px", background: "linear-gradient(90deg, #42BDFF, #f59e0b, #42BDFF)", borderRadius: "1px", boxShadow: "0 0 8px #f59e0b40" }} />
                             <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)" }}>API Access Fee</div>
                             <a
                               href={`https://explorer.solana.com/tx/${payment.txHash}?cluster=devnet`}
@@ -1132,15 +1132,15 @@ export default function ArenaPage() {
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", width: "140px", flexShrink: 0 }}>
                       <div
                         style={{
-                          border: "1px solid #3B82F650",
+                          border: "1px solid #42BDFF50",
                           borderRadius: "8px",
                           padding: "12px 16px",
-                          backgroundColor: "#3B82F610",
+                          backgroundColor: "#42BDFF10",
                           textAlign: "center",
                           width: "100%",
                         }}
                       >
-                        <div style={{ fontSize: "12px", fontWeight: 700, color: "#3B82F6", marginBottom: "2px" }}>ALPHA</div>
+                        <div style={{ fontSize: "12px", fontWeight: 700, color: "#42BDFF", marginBottom: "2px" }}>ALPHA</div>
                         <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Poster</div>
                       </div>
                     </div>
@@ -1157,7 +1157,7 @@ export default function ArenaPage() {
                             <img src={SOL_LOGO_URL} alt="SOL" width={12} height={12} style={{ borderRadius: "50%" }} />
                             <span style={{ fontSize: "11px", fontWeight: 600, color: "#f59e0b" }}>{payment.amount} SOL</span>
                           </div>
-                          <div style={{ width: "60px", height: "2px", background: "linear-gradient(180deg, #10B981, #f59e0b)", borderRadius: "1px", boxShadow: "0 0 8px #f59e0b40" }} />
+                          <div style={{ width: "60px", height: "2px", background: "linear-gradient(180deg, #42BDFF, #f59e0b)", borderRadius: "1px", boxShadow: "0 0 8px #f59e0b40" }} />
                           <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)" }}>Verification</div>
                           <a
                             href={`https://explorer.solana.com/tx/${payment.txHash}?cluster=devnet`}
@@ -1180,7 +1180,7 @@ export default function ArenaPage() {
                             <img src={SOL_LOGO_URL} alt="SOL" width={12} height={12} style={{ borderRadius: "50%" }} />
                             <span style={{ fontSize: "11px", fontWeight: 600, color: "#f59e0b" }}>{payment.amount} SOL</span>
                           </div>
-                          <div style={{ width: "60px", height: "2px", background: "linear-gradient(180deg, #3B82F6, #f59e0b)", borderRadius: "1px", boxShadow: "0 0 8px #f59e0b40" }} />
+                          <div style={{ width: "60px", height: "2px", background: "linear-gradient(180deg, #42BDFF, #f59e0b)", borderRadius: "1px", boxShadow: "0 0 8px #f59e0b40" }} />
                           <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)" }}>Escrow Fee</div>
                           <a
                             href={`https://explorer.solana.com/tx/${payment.txHash}?cluster=devnet`}
@@ -1245,7 +1245,7 @@ export default function ArenaPage() {
                     fontSize: "10px",
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
-                    color: "#3B82F6",
+                    color: "#42BDFF",
                     textDecoration: "none",
                     padding: "4px 10px",
                     border: "1px solid rgba(59,130,246,0.3)",
@@ -1288,15 +1288,15 @@ export default function ArenaPage() {
                 <div>
                   <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", marginBottom: "4px" }}>Status</div>
                   <div style={{ fontSize: "13px", color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <span style={{ color: jobStatus === "created" || jobStatus === "accepted" || jobStatus === "completed" ? "#86efac" : "rgba(255,255,255,0.3)" }}>
+                    <span style={{ color: jobStatus === "created" || jobStatus === "accepted" || jobStatus === "completed" ? "#FFE342" : "rgba(255,255,255,0.3)" }}>
                       Open {(jobStatus === "created" || jobStatus === "accepted" || jobStatus === "completed") ? "\u2713" : ""}
                     </span>
                     <span style={{ color: "rgba(255,255,255,0.3)" }}>&rarr;</span>
-                    <span style={{ color: jobStatus === "accepted" || jobStatus === "completed" ? "#86efac" : "rgba(255,255,255,0.3)" }}>
+                    <span style={{ color: jobStatus === "accepted" || jobStatus === "completed" ? "#FFE342" : "rgba(255,255,255,0.3)" }}>
                       Accepted {(jobStatus === "accepted" || jobStatus === "completed") ? "\u2713" : ""}
                     </span>
                     <span style={{ color: "rgba(255,255,255,0.3)" }}>&rarr;</span>
-                    <span style={{ color: jobStatus === "completed" ? "#86efac" : "rgba(255,255,255,0.3)" }}>
+                    <span style={{ color: jobStatus === "completed" ? "#FFE342" : "rgba(255,255,255,0.3)" }}>
                       Completed {jobStatus === "completed" ? "\u2713" : ""}
                     </span>
                   </div>
@@ -1319,7 +1319,7 @@ export default function ArenaPage() {
                   <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", marginBottom: "4px" }}>Job ID</div>
                   <div style={{ fontSize: "13px", color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}>
                     <span style={{ fontFamily: "monospace" }}>{String(jobData.jobId).slice(0, 12)}...</span>
-                    <a href="/taker" style={{ fontSize: "10px", color: "#3B82F6", textDecoration: "none" }}>[view]</a>
+                    <a href="/taker" style={{ fontSize: "10px", color: "#42BDFF", textDecoration: "none" }}>[view]</a>
                   </div>
                 </div>
                 {typeof jobData.txHash === "string" && (
@@ -1332,7 +1332,7 @@ export default function ArenaPage() {
                         href={`https://explorer.solana.com/tx/${String(jobData.txHash)}?cluster=devnet`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        style={{ fontSize: "10px", color: "#3B82F6", textDecoration: "none" }}
+                        style={{ fontSize: "10px", color: "#42BDFF", textDecoration: "none" }}
                       >
                         [Explorer]
                       </a>
@@ -1396,11 +1396,11 @@ export default function ArenaPage() {
                       <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>Verification:</span>
                     </div>
                     <div style={{ paddingLeft: "12px", fontSize: "12px" }}>
-                      <div style={{ color: "#86efac" }}>
+                      <div style={{ color: "#FFE342" }}>
                         Word Count: {String(zkData.wordCount)} &ge; {String(specData?.minWords || "—")} &#10003;
                       </div>
-                      <div style={{ color: "#86efac" }}>Hash Match: SHA-256 &#10003;</div>
-                      <div style={{ color: "#86efac", fontWeight: 600 }}>Status: VERIFIED &#10003;</div>
+                      <div style={{ color: "#FFE342" }}>Hash Match: SHA-256 &#10003;</div>
+                      <div style={{ color: "#FFE342", fontWeight: 600 }}>Status: VERIFIED &#10003;</div>
                     </div>
                     {typeof zkData.txHash === "string" && (
                       <div style={{ marginTop: "12px", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "12px" }}>
@@ -1412,7 +1412,7 @@ export default function ArenaPage() {
                             href={`https://explorer.solana.com/tx/${String(zkData.txHash)}?cluster=devnet`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={{ fontSize: "10px", color: "#3B82F6", textDecoration: "none" }}
+                            style={{ fontSize: "10px", color: "#42BDFF", textDecoration: "none" }}
                           >
                             [Explorer]
                           </a>
@@ -1504,7 +1504,7 @@ export default function ArenaPage() {
                         style={{
                           height: "100%",
                           borderRadius: "3px",
-                          backgroundColor: "#10B981",
+                          backgroundColor: "#42BDFF",
                           width: `${Math.min(100, (Number(zkData?.wordCount || 0) / Math.max(1, Number(specData?.minWords || 1))) * 100)}%`,
                           transition: "width 0.5s ease",
                         }}
@@ -1555,8 +1555,8 @@ export default function ArenaPage() {
               }}
             >
               <span style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#ff5f57", display: "inline-block" }} />
-              <span style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#febc2e", display: "inline-block" }} />
-              <span style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#28c840", display: "inline-block" }} />
+              <span style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#FFE342", display: "inline-block" }} />
+              <span style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#FFE342", display: "inline-block" }} />
               <span
                 style={{
                   marginLeft: "8px",
@@ -1782,7 +1782,7 @@ export default function ArenaPage() {
                           style={{
                             paddingLeft: "32px",
                             fontSize: "10px",
-                            color: "#86efac",
+                            color: "#FFE342",
                             marginTop: "2px",
                           }}
                         >
@@ -1969,7 +1969,7 @@ export default function ArenaPage() {
                       rel="noopener noreferrer"
                       style={{
                         fontSize: "10px",
-                        color: "#3B82F6",
+                        color: "#42BDFF",
                         textDecoration: "none",
                         marginLeft: "auto",
                       }}
@@ -2114,7 +2114,7 @@ export default function ArenaPage() {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: "20px", fontWeight: 700, color: "#3B82F6" }}>
+                  <div style={{ fontSize: "20px", fontWeight: 700, color: "#42BDFF" }}>
                     {perfMetrics.alphaResponseTime !== null ? (perfMetrics.alphaResponseTime / 1000).toFixed(1) + "s" : "--"}
                   </div>
                   <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "4px" }}>
@@ -2122,7 +2122,7 @@ export default function ArenaPage() {
                   </div>
                 </div>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: "20px", fontWeight: 700, color: "#10B981" }}>
+                  <div style={{ fontSize: "20px", fontWeight: 700, color: "#42BDFF" }}>
                     {perfMetrics.omegaResponseTime !== null ? (perfMetrics.omegaResponseTime / 1000).toFixed(1) + "s" : "--"}
                   </div>
                   <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "4px" }}>

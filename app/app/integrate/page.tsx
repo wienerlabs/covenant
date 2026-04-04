@@ -146,7 +146,7 @@ export default function IntegratePage() {
             </p>
             <Link
               href="/developers"
-              style={{ fontSize: "12px", color: "#3B82F6", textDecoration: "none" }}
+              style={{ fontSize: "12px", color: "#42BDFF", textDecoration: "none" }}
             >
               Get your API key first &rarr;
             </Link>
@@ -173,7 +173,7 @@ export default function IntegratePage() {
                 { step: "03", title: "Get Cert", desc: "Receive a shareable certificate URL" },
               ].map((s) => (
                 <div key={s.step} style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: "10px", color: "#3B82F6", fontWeight: 700, marginBottom: "4px" }}>{s.step}</div>
+                  <div style={{ fontSize: "10px", color: "#42BDFF", fontWeight: 700, marginBottom: "4px" }}>{s.step}</div>
                   <div style={{ fontSize: "13px", color: "#ffffff", fontWeight: 600, marginBottom: "4px" }}>{s.title}</div>
                   <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", lineHeight: 1.4 }}>{s.desc}</div>
                 </div>
@@ -204,7 +204,7 @@ export default function IntegratePage() {
                   letterSpacing: "0.05em",
                   cursor: "pointer",
                   border: "none",
-                  borderBottom: activeTab === i ? "2px solid #3B82F6" : "2px solid transparent",
+                  borderBottom: activeTab === i ? "2px solid #42BDFF" : "2px solid transparent",
                   backgroundColor: "transparent",
                   color: activeTab === i ? "#ffffff" : "rgba(255,255,255,0.35)",
                   transition: "all 0.15s ease",
@@ -249,7 +249,7 @@ export default function IntegratePage() {
                   border: "1px solid rgba(255,255,255,0.15)",
                   borderRadius: "4px",
                   backgroundColor: "rgba(255,255,255,0.05)",
-                  color: copiedIdx === activeTab ? "#86efac" : "rgba(255,255,255,0.5)",
+                  color: copiedIdx === activeTab ? "#FFE342" : "rgba(255,255,255,0.5)",
                   textTransform: "uppercase",
                   letterSpacing: "0.05em",
                   transition: "all 0.15s ease",

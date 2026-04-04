@@ -45,6 +45,7 @@ model Profile {
   bio           String   @default("")
   role          String   @default("both") // "poster", "taker", "both"
   avatarSeed    String   // random seed for pixel avatar generation
+  avatarUrl     String?  // custom uploaded avatar URL (null = use pixel avatar)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }

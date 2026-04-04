@@ -39,7 +39,7 @@ export default async function Image({ params }: { params: { id: string } }) {
         <div
           style={{
             fontSize: 14,
-            color: "#eab308",
+            color: "#FFE342",
             letterSpacing: "0.3em",
             textTransform: "uppercase",
             marginBottom: 24,

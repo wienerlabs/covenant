@@ -7,7 +7,7 @@ import NavBar from "@/components/NavBar";
 import JobList from "@/components/JobList";
 import ReputationBadge from "@/components/ReputationBadge";
 import AsciiAnimation from "@/components/AsciiAnimation";
-import PixelAvatar from "@/components/PixelAvatar";
+import UserAvatar from "@/components/UserAvatar";
 import StatusBadge from "@/components/StatusBadge";
 import useProtocolStats from "@/hooks/useProtocolStats";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
@@ -375,7 +375,7 @@ export default function TakerPage() {
                               </span>
                             </div>
                             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                              <PixelAvatar seed={job.posterWallet} size={20} />
+                              <UserAvatar seed={job.posterWallet} avatarUrl={null} size={20} />
                               <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
                                 {formatAddress(job.posterWallet)}
                               </span>

@@ -55,7 +55,7 @@ export default function JobTimeline({ job, submissions }: JobTimelineProps) {
     key: "created",
     label: "Created",
     active: true,
-    color: "#86efac",
+    color: "#FFE342",
     icon: "\u25CF",
     timestamp: job.createdAt,
     txHash: job.txHash,
@@ -67,7 +67,7 @@ export default function JobTimeline({ job, submissions }: JobTimelineProps) {
       key: "accepted",
       label: "Accepted",
       active: true,
-      color: "#fde68a",
+      color: "#42BDFF",
       icon: "\u25CF",
       timestamp: job.updatedAt,
     });
@@ -95,7 +95,7 @@ export default function JobTimeline({ job, submissions }: JobTimelineProps) {
       key: "completed",
       label: "Completed",
       active: true,
-      color: "#86efac",
+      color: "#FFE342",
       icon: "\u2713",
       timestamp: job.updatedAt,
     });

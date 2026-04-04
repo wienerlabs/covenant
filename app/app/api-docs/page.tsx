@@ -281,9 +281,9 @@ const ENDPOINTS: Endpoint[] = [
 ];
 
 const METHOD_COLORS: Record<string, string> = {
-  GET: "#86efac",
+  GET: "#FFE342",
   POST: "#93c5fd",
-  PATCH: "#fde68a",
+  PATCH: "#42BDFF",
 };
 
 export default function ApiDocsPage() {

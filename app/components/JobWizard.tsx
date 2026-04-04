@@ -417,7 +417,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                         width: "6px",
                         height: "6px",
                         borderRadius: "50%",
-                        backgroundColor: "#eab308",
+                        backgroundColor: "#FFE342",
                         animation: `wizard-coin-flow 1.5s ease-in-out ${i * 0.3}s infinite`,
                       }}
                     />
@@ -500,7 +500,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                 height: "48px",
                 borderRadius: "50%",
                 backgroundColor: "rgba(16,185,129,0.15)",
-                border: "2px solid #10B981",
+                border: "2px solid #42BDFF",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -508,7 +508,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                 animation: "wizard-check-scale 0.5s ease-out",
               }}
             >
-              <span style={{ fontSize: "24px", color: "#10B981" }}>&#10003;</span>
+              <span style={{ fontSize: "24px", color: "#42BDFF" }}>&#10003;</span>
             </div>
 
             <div style={{ marginBottom: "16px" }}>

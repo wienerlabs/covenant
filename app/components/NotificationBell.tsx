@@ -92,7 +92,7 @@ export default function NotificationBell({ wallet, variant = "dark" }: Notificat
               position: "absolute",
               top: "-4px",
               right: "-4px",
-              backgroundColor: "#ef4444",
+              backgroundColor: "#FF425E",
               color: "#ffffff",
               fontSize: "9px",
               fontWeight: 700,
