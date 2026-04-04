@@ -19,50 +19,35 @@ export default function ReputationScore({
   const color =
     score > 80 ? "#10B981" : score >= 50 ? "#eab308" : "#ef4444";
 
-  // SVG ring parameters
-  const size = 80;
-  const strokeWidth = 6;
+  const size = 64;
+  const strokeWidth = 5;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference - (animatedScore / 100) * circumference;
+  const progress = total > 0 ? animatedScore / 100 : 0;
+  const dashOffset = circumference * (1 - progress);
 
   useEffect(() => {
-    // Animate from 0 to score on mount
+    if (total === 0) return;
     let frame: number;
     const start = performance.now();
     const duration = 800;
 
     function animate(now: number) {
       const elapsed = now - start;
-      const progress = Math.min(elapsed / duration, 1);
-      // Ease out
-      const eased = 1 - Math.pow(1 - progress, 3);
+      const t = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
       setAnimatedScore(Math.round(score * eased));
-      if (progress < 1) {
-        frame = requestAnimationFrame(animate);
-      }
+      if (t < 1) frame = requestAnimationFrame(animate);
     }
 
     frame = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frame);
-  }, [score]);
+  }, [score, total]);
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "6px",
-      }}
-    >
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        style={{ transform: "rotate(-90deg)" }}
-      >
-        {/* Background circle */}
+    <div style={{ position: "relative", width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {/* Background ring */}
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -71,53 +56,40 @@ export default function ReputationScore({
           stroke="rgba(255,255,255,0.1)"
           strokeWidth={strokeWidth}
         />
-        {/* Progress circle */}
+        {/* Progress ring */}
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={color}
+          stroke={total > 0 ? color : "rgba(255,255,255,0.15)"}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-          style={{ transition: "stroke-dashoffset 0.1s ease-out" }}
+          strokeDasharray={`${circumference}`}
+          strokeDashoffset={`${dashOffset}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          style={{ transition: "stroke-dashoffset 0.15s ease-out" }}
         />
       </svg>
-      {/* Score number (overlaid) */}
+      {/* Center text */}
       <div
         style={{
-          position: "relative",
-          marginTop: -size + (size / 2 - 10),
-          height: size,
+          position: "absolute",
+          inset: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          width: size,
         }}
       >
         <span
           style={{
-            fontSize: "22px",
+            fontSize: "18px",
             fontWeight: 700,
-            color: color,
+            color: total > 0 ? color : "rgba(255,255,255,0.3)",
           }}
         >
-          {total > 0 ? animatedScore : "--"}
+          {total > 0 ? animatedScore : "—"}
         </span>
-      </div>
-      <div
-        style={{
-          fontSize: "8px",
-          textTransform: "uppercase",
-          letterSpacing: "0.1em",
-          color: "rgba(255,255,255,0.4)",
-          fontWeight: 600,
-          marginTop: "-4px",
-        }}
-      >
-        REPUTATION SCORE
       </div>
     </div>
   );
