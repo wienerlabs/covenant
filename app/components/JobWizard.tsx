@@ -672,40 +672,10 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
               </div>
             </div>
 
-            {/* Animated coin visualization */}
-            <div style={{ display: "flex", justifyContent: "center", padding: "12px 0", position: "relative" }}>
-              <style>{`
-                @keyframes wizard-coin-flow {
-                  0% { transform: translateX(-40px); opacity: 0; }
-                  30% { opacity: 1; }
-                  70% { opacity: 1; }
-                  100% { transform: translateX(40px); opacity: 0; }
-                }
-              `}</style>
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "16px",
-              }}>
-                <div style={{ fontSize: "9px", textTransform: "uppercase", color: mutedText }}>WALLET</div>
-                <div style={{ width: "80px", height: "2px", backgroundColor: `${mutedText}30`, position: "relative" }}>
-                  {[0, 1, 2].map((i) => (
-                    <div
-                      key={i}
-                      style={{
-                        position: "absolute",
-                        top: "-2px",
-                        left: "0",
-                        width: "6px",
-                        height: "6px",
-                        borderRadius: "50%",
-                        backgroundColor: "#FFE342",
-                        animation: `wizard-coin-flow 1.5s ease-in-out ${i * 0.3}s infinite`,
-                      }}
-                    />
-                  ))}
-                </div>
-                <div style={{ fontSize: "9px", textTransform: "uppercase", color: mutedText }}>ESCROW</div>
+            {/* Escrow info note */}
+            <div style={{ padding: "12px 0", textAlign: "center" }}>
+              <div style={{ fontSize: "11px", color: mutedText, lineHeight: 1.5 }}>
+                Your job will be posted to the marketplace. Payment is secured by the protocol&apos;s escrow system on Solana Devnet.
               </div>
             </div>
 
@@ -735,7 +705,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                 marginTop: "8px",
               }}
             >
-              {submitting ? "Locking Payment..." : "Lock Payment"}
+              {submitting ? "Creating Job..." : "Create Job"}
             </button>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-start", marginTop: "12px" }}>
@@ -800,19 +770,26 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
               </div>
             </div>
 
-            {result.txHash && (
-              <div style={{ marginBottom: "16px" }}>
-                <div style={labelStyle}>Transaction</div>
-                <a
-                  href={`https://explorer.solana.com/tx/${result.txHash}?cluster=devnet`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontSize: "11px", color: "#5ba4f5", textDecoration: "none", fontFamily: "monospace" }}
-                >
-                  {result.txHash.slice(0, 20)}...
-                </a>
-              </div>
-            )}
+            <div style={{ marginBottom: "16px" }}>
+              <div style={labelStyle}>Escrow Status</div>
+              {result.txHash ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ fontSize: "12px", color: "#10b981" }}>Escrow locked on Solana &#10003;</span>
+                  <a
+                    href={`https://explorer.solana.com/tx/${result.txHash}?cluster=devnet`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: "11px", color: "#5ba4f5", textDecoration: "none", fontFamily: "monospace" }}
+                  >
+                    {result.txHash.slice(0, 20)}...
+                  </a>
+                </div>
+              ) : (
+                <div style={{ fontSize: "12px", color: "#10b981" }}>
+                  Job posted to marketplace &#10003; (escrow pending on-chain settlement)
+                </div>
+              )}
+            </div>
 
             <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "16px" }}>
               <a

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import NavBar from "@/components/NavBar";
 import PixelAgent from "@/components/PixelAgent";
+import UserAvatar from "@/components/UserAvatar";
 import EscrowVisualizer from "@/components/EscrowVisualizer";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
@@ -114,6 +115,12 @@ export default function ArenaPage() {
   const [openJobs, setOpenJobs] = useState<OpenJob[]>([]);
   const [openJobsLoading, setOpenJobsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState<OpenJob | null>(null);
+  const [fulfillPoster, setFulfillPoster] = useState<{
+    name: string;
+    wallet: string;
+    avatarSeed: string;
+    avatarUrl: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (logPanelRef.current) {
@@ -415,6 +422,7 @@ export default function ArenaPage() {
     setEscrowAmount(0);
     setPerfTimestamps({});
     setPerfMetrics(null);
+    setFulfillPoster(null);
 
     try {
       const response = await fetch("/api/arena/run", { method: "POST" });
@@ -588,6 +596,34 @@ export default function ArenaPage() {
     });
     setJobStatus("created");
     setEscrowAmount(selectedJob.amount);
+
+    // Fetch poster profile
+    try {
+      const profileRes = await fetch(`/api/profile/${selectedJob.posterWallet}`);
+      if (profileRes.ok) {
+        const posterProfile = await profileRes.json();
+        setFulfillPoster({
+          name: posterProfile.displayName || selectedJob.posterWallet.slice(0, 8),
+          wallet: selectedJob.posterWallet,
+          avatarSeed: posterProfile.avatarSeed || selectedJob.posterWallet,
+          avatarUrl: posterProfile.avatarUrl || null,
+        });
+      } else {
+        setFulfillPoster({
+          name: selectedJob.posterWallet.slice(0, 8) + "...",
+          wallet: selectedJob.posterWallet,
+          avatarSeed: selectedJob.posterWallet,
+          avatarUrl: null,
+        });
+      }
+    } catch {
+      setFulfillPoster({
+        name: selectedJob.posterWallet.slice(0, 8) + "...",
+        wallet: selectedJob.posterWallet,
+        avatarSeed: selectedJob.posterWallet,
+        avatarUrl: null,
+      });
+    }
 
     try {
       const response = await fetch("/api/arena/fulfill", {
@@ -923,7 +959,7 @@ export default function ArenaPage() {
             }}
           >
             <button
-              onClick={() => !running && setArenaMode("new")}
+              onClick={() => { if (!running) { setArenaMode("new"); setFulfillPoster(null); } }}
               disabled={running}
               style={{
                 fontFamily: "inherit",
@@ -943,7 +979,7 @@ export default function ArenaPage() {
               New Job
             </button>
             <button
-              onClick={() => !running && setArenaMode("fulfill")}
+              onClick={() => { if (!running) { setArenaMode("fulfill"); setFulfillPoster(null); } }}
               disabled={running}
               style={{
                 fontFamily: "inherit",
@@ -1085,8 +1121,22 @@ export default function ArenaPage() {
                   <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#FF425E", marginBottom: "8px", fontWeight: 600 }}>
                     Selected Job
                   </div>
-                  <div style={{ fontSize: "15px", color: "#fff", fontWeight: 600, marginBottom: "8px" }}>
-                    {String(selectedJob.specJson?.title || selectedJob.id)}
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                    {fulfillPoster ? (
+                      <UserAvatar seed={fulfillPoster.avatarSeed} avatarUrl={fulfillPoster.avatarUrl} size={32} />
+                    ) : (
+                      <div style={{ width: 32, height: 32, borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.1)" }} />
+                    )}
+                    <div>
+                      <div style={{ fontSize: "15px", color: "#fff", fontWeight: 600 }}>
+                        {String(selectedJob.specJson?.title || selectedJob.id)}
+                      </div>
+                      {fulfillPoster && (
+                        <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
+                          by {fulfillPoster.name}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "12px" }}>
                     <div>
@@ -1306,7 +1356,64 @@ export default function ArenaPage() {
 
           {/* Agent Panels */}
           <div style={{ display: "flex", gap: "24px", marginBottom: "24px" }}>
-            {renderAgentPanel(AGENT_ALPHA_CONFIG, alphaState, alphaThought, alphaActions, copiedAlpha, "alpha")}
+            {arenaMode === "fulfill" && fulfillPoster ? (
+              <div
+                style={{
+                  backgroundColor: "rgba(0,0,0,0.4)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderLeft: "3px solid #42BDFF",
+                  borderRadius: "10px",
+                  padding: "20px",
+                  backdropFilter: "blur(12px)",
+                  flex: 1,
+                  minWidth: 0,
+                }}
+              >
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "16px" }}>
+                  <UserAvatar seed={fulfillPoster.avatarSeed} avatarUrl={fulfillPoster.avatarUrl} size={64} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{fulfillPoster.name}</span>
+                      <span style={{ fontSize: "9px", padding: "2px 8px", borderRadius: "4px", backgroundColor: "#42BDFF25", color: "#42BDFF", border: "1px solid #42BDFF40", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>JOB POSTER</span>
+                    </div>
+                    <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", fontFamily: "monospace" }}>
+                      {fulfillPoster.wallet.slice(0, 6)}...{fulfillPoster.wallet.slice(-4)}
+                    </div>
+                    <div style={{ marginTop: "4px" }}>
+                      <DIDBadge walletAddress={fulfillPoster.wallet} compact />
+                    </div>
+                    <div style={{ marginTop: "4px" }}>
+                      <span style={{ fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.05em", color: alphaState === "idle" ? "rgba(255,255,255,0.3)" : "#42BDFF", fontWeight: alphaState === "idle" ? 400 : 600 }}>
+                        {alphaState === "idle" ? "STANDBY" : alphaState.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {/* Thought bubble */}
+                {alphaThought && (
+                  <div style={{ backgroundColor: "#42BDFF10", border: "1px solid #42BDFF30", borderRadius: "8px", padding: "10px 12px", marginBottom: "12px", fontSize: "11px", color: "rgba(255,255,255,0.8)", lineHeight: 1.5, whiteSpace: "pre-wrap", position: "relative" }}>
+                    <div style={{ position: "absolute", top: "-6px", left: "20px", width: "10px", height: "10px", backgroundColor: "#42BDFF10", border: "1px solid #42BDFF30", borderRight: "none", borderBottom: "none", transform: "rotate(45deg)" }} />
+                    {alphaThought}
+                  </div>
+                )}
+                {/* Action log */}
+                <div style={{ maxHeight: "120px", overflowY: "auto", fontSize: "10px", color: "rgba(255,255,255,0.5)" }}>
+                  {alphaActions.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "12px 0", textTransform: "uppercase", letterSpacing: "0.05em" }}>Waiting for arena start...</div>
+                  ) : (
+                    alphaActions.map((action, i) => (
+                      <div key={i} style={{ padding: "3px 0", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ width: "4px", height: "4px", borderRadius: "50%", backgroundColor: "#42BDFF", flexShrink: 0 }} />
+                        {action}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : (
+              renderAgentPanel(AGENT_ALPHA_CONFIG, alphaState, alphaThought, alphaActions, copiedAlpha, "alpha")
+            )}
 
             {/* Agent Chat Panel */}
             {chatMessages.length > 0 && (
