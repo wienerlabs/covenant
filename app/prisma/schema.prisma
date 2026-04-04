@@ -84,3 +84,39 @@ model Dispute {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
+
+model Verification {
+  id         String   @id @default(cuid())
+  textHash   String
+  wordCount  Int
+  minWords   Int
+  verified   Boolean
+  cycleCount Int      @default(237583)
+  sharedBy   String?  // wallet address if connected
+  createdAt  DateTime @default(now())
+}
+
+model PublishedAgent {
+  id            String   @id @default(cuid())
+  walletAddress String
+  name          String
+  description   String
+  endpointUrl   String
+  agentType     String   @default("Task")
+  capabilities  Json
+  did           String
+  verified      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  wallet    String
+  name      String
+  calls     Int      @default(0)
+  limit     Int      @default(1000)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
