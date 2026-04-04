@@ -13,6 +13,7 @@ interface TakerEntry {
   wallet: string;
   displayName: string;
   avatarSeed: string;
+  avatarUrl: string | null;
   jobsCompleted: number;
   totalEarned: number;
 }
@@ -22,6 +23,7 @@ interface PosterEntry {
   wallet: string;
   displayName: string;
   avatarSeed: string;
+  avatarUrl: string | null;
   jobsPosted: number;
   totalSpent: number;
 }
@@ -200,7 +202,7 @@ export default function LeaderboardPage() {
                             </td>
                             <td style={cellStyle}>
                               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <UserAvatar seed={t.avatarSeed} avatarUrl={null} size={32} />
+                                <UserAvatar seed={t.avatarSeed} avatarUrl={t.avatarUrl} size={32} />
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "120px" }}>
                                   {t.displayName.length > 20 ? formatAddress(t.displayName) : t.displayName}
                                 </span>
@@ -246,7 +248,7 @@ export default function LeaderboardPage() {
                             </td>
                             <td style={cellStyle}>
                               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <UserAvatar seed={p.avatarSeed} avatarUrl={null} size={32} />
+                                <UserAvatar seed={p.avatarSeed} avatarUrl={p.avatarUrl} size={32} />
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "120px" }}>
                                   {p.displayName.length > 20 ? formatAddress(p.displayName) : p.displayName}
                                 </span>

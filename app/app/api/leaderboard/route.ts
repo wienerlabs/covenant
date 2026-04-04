@@ -22,6 +22,7 @@ export async function GET() {
         wallet: r.walletAddress,
         displayName: profile?.displayName || r.walletAddress,
         avatarSeed: profile?.avatarSeed || hashWallet(r.walletAddress),
+        avatarUrl: profile?.avatarUrl || null,
         jobsCompleted: r.jobsCompleted,
         totalEarned: r.totalEarned,
       };
@@ -49,6 +50,7 @@ export async function GET() {
         wallet: g.posterWallet,
         displayName: profile?.displayName || g.posterWallet,
         avatarSeed: profile?.avatarSeed || hashWallet(g.posterWallet),
+        avatarUrl: profile?.avatarUrl || null,
         jobsPosted: g._count.id,
         totalSpent: g._sum.amount || 0,
       };

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
+import { lockFundsInEscrow } from "@/lib/escrow";
 import { rateLimit } from "@/lib/rateLimit";
 import crypto from "crypto";
+import { Keypair } from "@solana/web3.js";
 
 export async function GET(request: NextRequest) {
   try {
@@ -174,7 +176,34 @@ export async function POST(request: NextRequest) {
       console.error("[solana] Failed to send marker tx for create_job:", err);
     }
 
-    return NextResponse.json({ ...job, txHash }, { status: 201 });
+    // Attempt real token escrow lock for known wallets
+    let escrowTxHash: string | null = null;
+    const knownWallets: Record<string, string> = {};
+    if (process.env.AGENT_ALPHA_WALLET) knownWallets[process.env.AGENT_ALPHA_WALLET] = "AGENT_ALPHA_KEYPAIR";
+    if (process.env.AGENT_OMEGA_WALLET) knownWallets[process.env.AGENT_OMEGA_WALLET] = "AGENT_OMEGA_KEYPAIR";
+    try {
+      const deployerKpRaw = JSON.parse(process.env.DEPLOYER_KEYPAIR || "[]");
+      if (deployerKpRaw.length > 0) {
+        const deployerWallet = Keypair.fromSecretKey(Uint8Array.from(deployerKpRaw)).publicKey.toBase58();
+        knownWallets[deployerWallet] = "DEPLOYER_KEYPAIR";
+      }
+    } catch { /* ignore */ }
+
+    const keypairEnv = knownWallets[posterWallet];
+    if (keypairEnv && (paymentToken !== "SOL")) {
+      try {
+        const result = await lockFundsInEscrow(keypairEnv, amount);
+        escrowTxHash = result.txHash;
+        await prisma.job.update({ where: { id: job.id }, data: { txHash: escrowTxHash } });
+        await prisma.transaction.create({
+          data: { txHash: escrowTxHash, type: "escrow_lock", jobId: job.id, wallet: posterWallet, amount, status: "confirmed" },
+        });
+      } catch (err) {
+        console.error("[escrow] Lock failed:", err);
+      }
+    }
+
+    return NextResponse.json({ ...job, txHash: escrowTxHash || txHash }, { status: 201 });
   } catch (error) {
     console.error("POST /api/jobs error:", error);
     return NextResponse.json(

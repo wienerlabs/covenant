@@ -9,11 +9,17 @@ import ReputationBadge from "@/components/ReputationBadge";
 import AsciiAnimation from "@/components/AsciiAnimation";
 import UserAvatar from "@/components/UserAvatar";
 import StatusBadge from "@/components/StatusBadge";
+import useAvatar from "@/hooks/useAvatar";
 import useProtocolStats from "@/hooks/useProtocolStats";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { JOB_CATEGORIES, getCategoryById } from "@/lib/categories";
 import { formatAddress } from "@/lib/format";
 import type { JobData } from "@/hooks/useJobList";
+
+function PosterAvatarCell({ wallet }: { wallet: string }) {
+  const { avatarUrl, avatarSeed } = useAvatar(wallet);
+  return <UserAvatar seed={avatarSeed} avatarUrl={avatarUrl} size={20} />;
+}
 
 type GridFilter = "all" | "trending" | "new" | "high";
 
@@ -375,7 +381,7 @@ export default function TakerPage() {
                               </span>
                             </div>
                             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                              <UserAvatar seed={job.posterWallet} avatarUrl={null} size={20} />
+                              <PosterAvatarCell wallet={job.posterWallet} />
                               <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
                                 {formatAddress(job.posterWallet)}
                               </span>

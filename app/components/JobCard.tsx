@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import StatusBadge from "./StatusBadge";
 import AsciiAnimation from "./AsciiAnimation";
+import UserAvatar from "./UserAvatar";
+import useAvatar from "@/hooks/useAvatar";
 import { formatAddress } from "@/lib/format";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
@@ -53,6 +55,9 @@ export default function JobCard({
   const isPoster = connectedWallet === job.posterWallet;
   const isTaker = connectedWallet === job.takerWallet;
   const categoryInfo = getCategoryById(job.category || "text_writing");
+
+  const posterAvatar = useAvatar(job.posterWallet);
+  const takerAvatar = useAvatar(job.takerWallet);
 
   const primaryBtn = (id: string): React.CSSProperties => ({
     fontFamily: "inherit",
@@ -112,6 +117,35 @@ export default function JobCard({
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed"} />
+          {job.txHash ? (
+            <span style={{
+              fontSize: "9px",
+              padding: "2px 8px",
+              borderRadius: "6px",
+              border: "1px solid rgba(74,222,128,0.4)",
+              backgroundColor: "rgba(74,222,128,0.12)",
+              color: "#4ade80",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              fontWeight: 600,
+            }}>
+              Escrow Locked
+            </span>
+          ) : (
+            <span style={{
+              fontSize: "9px",
+              padding: "2px 8px",
+              borderRadius: "6px",
+              border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #ccc",
+              backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f0f0f0",
+              color: isDark ? "rgba(255,255,255,0.4)" : "#999",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              fontWeight: 600,
+            }}>
+              Unfunded
+            </span>
+          )}
           <span style={{
             fontSize: "10px",
             padding: "2px 8px",
@@ -149,12 +183,18 @@ export default function JobCard({
         <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
           <div>
             <div style={labelStyle}>Poster</div>
-            <div style={{ fontSize: "11px", color: isDark ? "rgba(255,255,255,0.7)" : undefined }}>{formatAddress(job.posterWallet)}</div>
+            <div style={{ fontSize: "11px", color: isDark ? "rgba(255,255,255,0.7)" : undefined, display: "flex", alignItems: "center", gap: "4px" }}>
+              <UserAvatar seed={posterAvatar.avatarSeed} avatarUrl={posterAvatar.avatarUrl} size={20} />
+              {formatAddress(job.posterWallet)}
+            </div>
           </div>
           {job.takerWallet && (
             <div>
               <div style={labelStyle}>Taker</div>
-              <div style={{ fontSize: "11px", color: isDark ? "rgba(255,255,255,0.7)" : undefined }}>{formatAddress(job.takerWallet)}</div>
+              <div style={{ fontSize: "11px", color: isDark ? "rgba(255,255,255,0.7)" : undefined, display: "flex", alignItems: "center", gap: "4px" }}>
+                <UserAvatar seed={takerAvatar.avatarSeed} avatarUrl={takerAvatar.avatarUrl} size={20} />
+                {formatAddress(job.takerWallet)}
+              </div>
             </div>
           )}
           <div>

@@ -14,6 +14,7 @@ export interface JobData {
   minWords: number;
   language: string;
   deadline: string;
+  txHash: string | null;
   createdAt: string;
   updatedAt: string;
 }

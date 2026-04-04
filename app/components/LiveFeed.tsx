@@ -9,10 +9,12 @@ interface FeedItem {
   txHash: string | null;
   status: "created" | "accepted" | "completed" | "cancelled";
   avatarSeed: string;
+  avatarUrl: string | null;
+  wallet: string | null;
   relativeTime: string;
 }
 
-function parseItem(raw: { text: string; txHash: string | null }): FeedItem {
+function parseItem(raw: { text: string; txHash: string | null; wallet?: string | null; avatarUrl?: string | null; avatarSeed?: string | null }): FeedItem {
   let status: FeedItem["status"] = "created";
   if (raw.text.includes("COMPLETE") || raw.text.includes("VERIFIED") || raw.text.includes("RELEASED")) {
     status = "completed";
@@ -22,15 +24,17 @@ function parseItem(raw: { text: string; txHash: string | null }): FeedItem {
     status = "cancelled";
   }
 
-  // Derive avatar seed from any wallet-like substring or just use text hash
+  // Use profile avatarSeed/avatarUrl if available from API
   const walletMatch = raw.text.match(/[A-Za-z0-9]{4}\.\.\.[A-Za-z0-9]{4}/);
-  const avatarSeed = walletMatch ? walletMatch[0] : raw.text.slice(0, 12);
+  const fallbackSeed = raw.wallet || (walletMatch ? walletMatch[0] : raw.text.slice(0, 12));
 
   return {
     text: raw.text,
     txHash: raw.txHash,
     status,
-    avatarSeed,
+    avatarSeed: raw.avatarSeed || fallbackSeed,
+    avatarUrl: raw.avatarUrl || null,
+    wallet: raw.wallet || null,
     relativeTime: "just now",
   };
 }
@@ -46,7 +50,7 @@ export default function LiveFeed() {
         if (res.ok) {
           const data = await res.json();
           if (data.items && data.items.length > 0) {
-            setItems(data.items.slice(0, 8).map((item: { text: string; txHash: string | null }) => parseItem(item)));
+            setItems(data.items.slice(0, 8).map((item: { text: string; txHash: string | null; wallet?: string | null; avatarUrl?: string | null; avatarSeed?: string | null }) => parseItem(item)));
           }
         }
       } catch {
@@ -147,7 +151,7 @@ export default function LiveFeed() {
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
           >
             <div style={{ flexShrink: 0, marginTop: "2px" }}>
-              <UserAvatar seed={item.avatarSeed} avatarUrl={null} size={28} />
+              <UserAvatar seed={item.avatarSeed} avatarUrl={item.avatarUrl} size={28} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div
