@@ -235,7 +235,7 @@ export default function ProtocolPage() {
               <div
                 style={{
                   ...sectionTitle,
-                  color: "#a855f7",
+                  color: "#feffaf",
                 }}
               >
                 COVENANT
@@ -391,7 +391,7 @@ export default function ProtocolPage() {
                 backgroundColor: a2aSending
                   ? "rgba(168, 85, 247, 0.1)"
                   : "rgba(168, 85, 247, 0.2)",
-                color: "#a855f7",
+                color: "#feffaf",
                 fontWeight: 600,
                 transition: "all 0.15s ease",
               }}
@@ -585,7 +585,7 @@ export default function ProtocolPage() {
                           i < activeFlowStep
                             ? "#22c55e"
                             : i === activeFlowStep
-                            ? "#a855f7"
+                            ? "#feffaf"
                             : "rgba(255,255,255,0.3)",
                         border:
                           i < activeFlowStep

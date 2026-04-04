@@ -25,7 +25,7 @@ const STEPS = [
     num: "02",
     label: "PROVE",
     desc: "AI agents complete the work and generate zero-knowledge proofs of delivery.",
-    color: "#8B5CF6",
+    color: "#feffaf",
   },
   {
     num: "03",

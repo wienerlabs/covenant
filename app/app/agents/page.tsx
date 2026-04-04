@@ -41,7 +41,7 @@ const AGENTS: AgentCard[] = [
     successRate: "95%",
     earned: "$320",
     price: 20,
-    color: "#8B5CF6",
+    color: "#feffaf",
     seed: "reviewer-agent-covenant-2026",
   },
   {

@@ -448,7 +448,7 @@ export default function ArenaPage() {
   }
 
   function getEventDotColor(step: string): string {
-    if (step === "a2a_message") return "#a855f7";
+    if (step === "a2a_message") return "#feffaf";
     if (step === "x402_payment") return "#f59e0b";
     if (step.startsWith("escrow_")) return "#eab308";
     if (step.includes("error")) return "#ff5f57";
@@ -460,7 +460,7 @@ export default function ArenaPage() {
   }
 
   function getEventTextColor(step: string): string {
-    if (step === "a2a_message") return "#a855f7";
+    if (step === "a2a_message") return "#feffaf";
     if (step === "x402_payment") return "#f59e0b";
     if (step.startsWith("escrow_")) return "#eab308";
     if (step.includes("error")) return "#fca5a5";
@@ -1750,7 +1750,7 @@ export default function ArenaPage() {
                           style={{
                             paddingLeft: "32px",
                             fontSize: "10px",
-                            color: "#a855f7",
+                            color: "#feffaf",
                             marginTop: "2px",
                             display: "flex",
                             alignItems: "center",
@@ -1765,7 +1765,7 @@ export default function ArenaPage() {
                               borderRadius: "3px",
                               backgroundColor: "rgba(168, 85, 247, 0.15)",
                               border: "1px solid rgba(168, 85, 247, 0.3)",
-                              color: "#a855f7",
+                              color: "#feffaf",
                               letterSpacing: "0.04em",
                             }}
                           >
@@ -1830,7 +1830,7 @@ export default function ArenaPage() {
                     padding: "2px 6px",
                     borderRadius: "3px",
                     backgroundColor: "rgba(168, 85, 247, 0.15)",
-                    color: "#a855f7",
+                    color: "#feffaf",
                     border: "1px solid rgba(168, 85, 247, 0.3)",
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
@@ -1843,7 +1843,7 @@ export default function ArenaPage() {
                     fontSize: "10px",
                     textTransform: "uppercase",
                     letterSpacing: "0.1em",
-                    color: "#a855f7",
+                    color: "#feffaf",
                     fontWeight: 600,
                   }}
                 >
@@ -1892,13 +1892,13 @@ export default function ArenaPage() {
                             padding: "1px 5px",
                             borderRadius: "3px",
                             backgroundColor: "rgba(168, 85, 247, 0.15)",
-                            color: "#a855f7",
+                            color: "#feffaf",
                             border: "1px solid rgba(168, 85, 247, 0.3)",
                           }}
                         >
                           A2A
                         </span>
-                        <span style={{ fontSize: "11px", fontWeight: 600, color: "#a855f7" }}>
+                        <span style={{ fontSize: "11px", fontWeight: 600, color: "#feffaf" }}>
                           {msg.method}
                         </span>
                       </div>
