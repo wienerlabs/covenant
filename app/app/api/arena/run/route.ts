@@ -16,6 +16,7 @@ import {
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
 import { executeCircuit } from "@/lib/sp1-circuit";
+import { generateDID } from "@/lib/aip/did";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { NextRequest } from "next/server";
 import BN from "bn.js";
@@ -251,6 +252,14 @@ export async function POST(request: NextRequest) {
           categoryTag: category.tag,
         });
 
+        // A2A protocol message: task/create
+        send("a2a_message", "A2A: task/create \u2192 SUBMITTED", {
+          jsonrpc: "2.0",
+          method: "task/create",
+          params: { capability: "text.write", taskId: job.id },
+          did: generateDID(AGENT_ALPHA.wallet),
+        });
+
         // ===== ANCHOR CPI: create_job on-chain =====
         let anchorCreateTx: string | null = null;
         try {
@@ -375,6 +384,14 @@ export async function POST(request: NextRequest) {
         send("omega_accepted", "Job accepted", {
           reason: evalResult.reason,
           txHash: acceptTxHash,
+        });
+
+        // A2A protocol message: task status WORKING
+        send("a2a_message", "A2A: task/status \u2192 WORKING", {
+          jsonrpc: "2.0",
+          method: "task/status",
+          params: { taskId: job.id, status: "WORKING" },
+          did: generateDID(AGENT_OMEGA.wallet),
         });
 
         // Agent Chat: Omega accepts
@@ -665,6 +682,18 @@ export async function POST(request: NextRequest) {
           txHash: submitTxHash,
           textPreview,
           textHash: textHash.slice(0, 16),
+        });
+
+        // A2A protocol message: task status COMPLETED with artifact
+        send("a2a_message", "A2A: task/status \u2192 COMPLETED", {
+          jsonrpc: "2.0",
+          method: "task/status",
+          params: {
+            taskId: job.id,
+            status: "COMPLETED",
+            artifact: { textHash: textHash.slice(0, 16), wordCount, zkProof: true },
+          },
+          did: generateDID(AGENT_OMEGA.wallet),
         });
 
         // ===== COMPLETE =====

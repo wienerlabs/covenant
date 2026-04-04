@@ -7,6 +7,7 @@ import EscrowVisualizer from "@/components/EscrowVisualizer";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
 import { fireConfetti } from "@/lib/confetti";
+import DIDBadge from "@/components/DIDBadge";
 
 interface ArenaEvent {
   step: string;
@@ -92,6 +93,8 @@ export default function ArenaPage() {
   const [chatMessages, setChatMessages] = useState<{agent: string; message: string; timestamp: string}[]>([]);
   const [escrowPhase, setEscrowPhase] = useState<"idle" | "locking" | "locked" | "releasing" | "released">("idle");
   const [escrowAmount, setEscrowAmount] = useState(0);
+  const [a2aMessages, setA2aMessages] = useState<{method: string; params: Record<string, unknown>; did: string; timestamp: string}[]>([]);
+  const [a2aExpanded, setA2aExpanded] = useState(true);
   const logPanelRef = useRef<HTMLDivElement>(null);
   const chatPanelRef = useRef<HTMLDivElement>(null);
 
@@ -196,6 +199,16 @@ export default function ArenaPage() {
           setChatMessages((prev) => [...prev, {
             agent: String(event.data!.agent || ""),
             message: String(event.data!.message || ""),
+            timestamp: getTimestamp(),
+          }]);
+        }
+        break;
+      case "a2a_message":
+        if (event.data) {
+          setA2aMessages((prev) => [...prev, {
+            method: String(event.data!.method || ""),
+            params: (event.data!.params || {}) as Record<string, unknown>,
+            did: String(event.data!.did || ""),
             timestamp: getTimestamp(),
           }]);
         }
@@ -313,6 +326,7 @@ export default function ArenaPage() {
     setTransactions([]);
     setX402Payments([]);
     setChatMessages([]);
+    setA2aMessages([]);
     setEscrowPhase("idle");
     setEscrowAmount(0);
     setPerfTimestamps({});
@@ -434,6 +448,7 @@ export default function ArenaPage() {
   }
 
   function getEventDotColor(step: string): string {
+    if (step === "a2a_message") return "#a855f7";
     if (step === "x402_payment") return "#f59e0b";
     if (step.startsWith("escrow_")) return "#eab308";
     if (step.includes("error")) return "#ff5f57";
@@ -445,6 +460,7 @@ export default function ArenaPage() {
   }
 
   function getEventTextColor(step: string): string {
+    if (step === "a2a_message") return "#a855f7";
     if (step === "x402_payment") return "#f59e0b";
     if (step.startsWith("escrow_")) return "#eab308";
     if (step.includes("error")) return "#fca5a5";
@@ -523,6 +539,9 @@ export default function ArenaPage() {
               >
                 {copied ? "COPIED" : "COPY"}
               </button>
+            </div>
+            <div style={{ marginTop: "4px" }}>
+              <DIDBadge walletAddress={config.wallet} compact />
             </div>
             <div style={{ marginTop: "4px" }}>
               <span
@@ -1726,6 +1745,38 @@ export default function ArenaPage() {
                           Preview: {String(event.data.textPreview).slice(0, 100)}...
                         </div>
                       )}
+                      {event.step === "a2a_message" && event.data && (
+                        <div
+                          style={{
+                            paddingLeft: "32px",
+                            fontSize: "10px",
+                            color: "#a855f7",
+                            marginTop: "2px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "8px",
+                              fontWeight: 700,
+                              padding: "1px 4px",
+                              borderRadius: "3px",
+                              backgroundColor: "rgba(168, 85, 247, 0.15)",
+                              border: "1px solid rgba(168, 85, 247, 0.3)",
+                              color: "#a855f7",
+                              letterSpacing: "0.04em",
+                            }}
+                          >
+                            A2A
+                          </span>
+                          <span>{String(event.data.method)}</span>
+                          <span style={{ color: "rgba(255,255,255,0.25)", fontFamily: "monospace" }}>
+                            {String(event.data.did).slice(0, 20)}...
+                          </span>
+                        </div>
+                      )}
                       {event.step === "complete" && event.data && (
                         <div
                           style={{
@@ -1744,6 +1795,133 @@ export default function ArenaPage() {
               )}
             </div>
           </div>
+
+          {/* A2A Protocol Log */}
+          {a2aMessages.length > 0 && (
+            <div
+              style={{
+                backgroundColor: "rgba(0,0,0,0.4)",
+                border: "1px solid rgba(168, 85, 247, 0.2)",
+                borderRadius: "10px",
+                padding: "16px 20px",
+                backdropFilter: "blur(12px)",
+                marginTop: "16px",
+                marginBottom: "24px",
+              }}
+            >
+              <button
+                onClick={() => setA2aExpanded(!a2aExpanded)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  width: "100%",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                  marginBottom: a2aExpanded ? "12px" : 0,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "8px",
+                    fontWeight: 700,
+                    padding: "2px 6px",
+                    borderRadius: "3px",
+                    backgroundColor: "rgba(168, 85, 247, 0.15)",
+                    color: "#a855f7",
+                    border: "1px solid rgba(168, 85, 247, 0.3)",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  A2A
+                </span>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    color: "#a855f7",
+                    fontWeight: 600,
+                  }}
+                >
+                  Protocol Log
+                </span>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    color: "rgba(255,255,255,0.3)",
+                    marginLeft: "auto",
+                  }}
+                >
+                  {a2aMessages.length} messages
+                </span>
+                <span
+                  style={{
+                    fontSize: "8px",
+                    color: "rgba(255,255,255,0.3)",
+                    transform: a2aExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform 0.15s ease",
+                  }}
+                >
+                  {"\u25BC"}
+                </span>
+              </button>
+              {a2aExpanded && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {a2aMessages.map((msg, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        backgroundColor: "rgba(168, 85, 247, 0.06)",
+                        border: "1px solid rgba(168, 85, 247, 0.15)",
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                        <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)", fontVariantNumeric: "tabular-nums" }}>
+                          {msg.timestamp}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "8px",
+                            fontWeight: 700,
+                            padding: "1px 5px",
+                            borderRadius: "3px",
+                            backgroundColor: "rgba(168, 85, 247, 0.15)",
+                            color: "#a855f7",
+                            border: "1px solid rgba(168, 85, 247, 0.3)",
+                          }}
+                        >
+                          A2A
+                        </span>
+                        <span style={{ fontSize: "11px", fontWeight: 600, color: "#a855f7" }}>
+                          {msg.method}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: "monospace",
+                          fontSize: "10px",
+                          color: "rgba(255,255,255,0.5)",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-all",
+                        }}
+                      >
+                        {JSON.stringify(msg.params, null, 2)}
+                      </div>
+                      <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.25)", marginTop: "4px", fontFamily: "monospace" }}>
+                        DID: {msg.did.slice(0, 24)}...
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Transaction Summary */}
           {transactions.length > 0 && (

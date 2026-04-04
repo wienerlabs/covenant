@@ -9,6 +9,7 @@ import { ProfileSkeleton, StatCardSkeleton, JobCardSkeleton } from "@/components
 import { formatAddress } from "@/lib/format";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
+import DIDBadge from "@/components/DIDBadge";
 
 interface ProfileData {
   displayName: string;
@@ -109,6 +110,9 @@ export default function AgentProfilePage({ params }: { params: Promise<{ wallet:
                   </div>
                   <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginTop: "4px" }}>
                     {wallet}
+                  </div>
+                  <div style={{ marginTop: "6px" }}>
+                    <DIDBadge walletAddress={wallet} compact />
                   </div>
                   {profile?.role && (
                     <div style={{
