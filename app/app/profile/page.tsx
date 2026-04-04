@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useConnector } from "@solana/connector/react";
 import Link from "next/link";
 import useProfile from "@/hooks/useProfile";
@@ -27,6 +27,8 @@ export default function ProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarToast, setAvatarToast] = useState<string | null>(null);
+  const [avatarHover, setAvatarHover] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function openEdit() {
     if (!profile) return;
@@ -294,88 +296,124 @@ export default function ProfilePage() {
                   /* View mode */
                   <>
                     <div style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
-                        {avatarPreview ? (
-                          <img
-                            src={avatarPreview}
-                            alt="Preview"
-                            style={{ width: 80, height: 80, borderRadius: "8px", objectFit: "cover", border: "2px solid #42BDFF" }}
-                          />
-                        ) : (
-                          <UserAvatar seed={profile.avatarSeed} avatarUrl={profile.avatarUrl ?? null} size={80} />
-                        )}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
                         <input
                           type="file"
-                          id="avatar-upload"
+                          ref={fileInputRef}
                           accept="image/png,image/jpeg,image/gif,image/webp"
                           style={{ display: "none" }}
                           onChange={handleAvatarSelect}
                         />
                         {avatarPreview ? (
-                          <div style={{ display: "flex", gap: "6px" }}>
-                            <button
-                              onClick={saveAvatar}
-                              disabled={uploadingAvatar}
-                              style={{
-                                fontFamily: "inherit",
-                                fontSize: "9px",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.05em",
-                                padding: "4px 10px",
-                                cursor: uploadingAvatar ? "not-allowed" : "pointer",
-                                border: "1px solid #42BDFF",
-                                borderRadius: "4px",
-                                backgroundColor: "rgba(66,189,255,0.15)",
-                                color: "#42BDFF",
-                                transition: "all 0.15s ease",
-                              }}
-                            >
-                              {uploadingAvatar ? "..." : "Save"}
-                            </button>
-                            <button
-                              onClick={() => setAvatarPreview(null)}
-                              style={{
-                                fontFamily: "inherit",
-                                fontSize: "9px",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.05em",
-                                padding: "4px 10px",
-                                cursor: "pointer",
-                                border: "1px solid rgba(255,255,255,0.15)",
-                                borderRadius: "4px",
-                                backgroundColor: "transparent",
-                                color: "rgba(255,255,255,0.5)",
-                                transition: "all 0.15s ease",
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          </div>
+                          /* Preview mode */
+                          <>
+                            <img
+                              src={avatarPreview}
+                              alt="Preview"
+                              style={{ width: 80, height: 80, borderRadius: "8px", objectFit: "cover", border: "2px solid #42BDFF" }}
+                            />
+                            <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
+                              <button
+                                onClick={saveAvatar}
+                                disabled={uploadingAvatar}
+                                style={{
+                                  fontFamily: "inherit",
+                                  fontSize: "9px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.05em",
+                                  padding: "4px 12px",
+                                  cursor: uploadingAvatar ? "not-allowed" : "pointer",
+                                  border: "1px solid #42BDFF",
+                                  borderRadius: "4px",
+                                  backgroundColor: uploadingAvatar ? "rgba(66,189,255,0.08)" : "rgba(66,189,255,0.15)",
+                                  color: "#42BDFF",
+                                  transition: "all 0.15s ease",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
+                              >
+                                {uploadingAvatar ? (
+                                  <>
+                                    <span style={{ display: "inline-block", width: 10, height: 10, border: "2px solid rgba(66,189,255,0.3)", borderTopColor: "#42BDFF", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+                                    Saving
+                                  </>
+                                ) : "Save"}
+                              </button>
+                              <button
+                                onClick={() => setAvatarPreview(null)}
+                                style={{
+                                  fontFamily: "inherit",
+                                  fontSize: "9px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.05em",
+                                  padding: "4px 12px",
+                                  cursor: "pointer",
+                                  border: "1px solid rgba(255,255,255,0.15)",
+                                  borderRadius: "4px",
+                                  backgroundColor: "transparent",
+                                  color: "rgba(255,255,255,0.5)",
+                                  transition: "all 0.15s ease",
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </>
                         ) : (
-                          <button
-                            onClick={() => document.getElementById("avatar-upload")?.click()}
-                            style={{
-                              fontFamily: "inherit",
-                              fontSize: "9px",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.05em",
-                              padding: "4px 10px",
-                              cursor: "pointer",
-                              border: "1px solid rgba(255,255,255,0.2)",
-                              borderRadius: "4px",
-                              backgroundColor: "transparent",
-                              color: "rgba(255,255,255,0.45)",
-                              transition: "all 0.15s ease",
-                            }}
-                          >
-                            Change Avatar
-                          </button>
+                          /* Normal avatar with camera overlay on hover */
+                          <>
+                            <div
+                              style={{ position: "relative", cursor: "pointer", borderRadius: "8px", overflow: "hidden" }}
+                              onMouseEnter={() => setAvatarHover(true)}
+                              onMouseLeave={() => setAvatarHover(false)}
+                              onClick={() => fileInputRef.current?.click()}
+                            >
+                              <UserAvatar seed={profile.avatarSeed} avatarUrl={profile.avatarUrl ?? null} size={80} />
+                              <div style={{
+                                position: "absolute",
+                                inset: 0,
+                                backgroundColor: "rgba(0,0,0,0.55)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                opacity: avatarHover ? 1 : 0,
+                                transition: "opacity 0.2s ease",
+                                borderRadius: "8px",
+                              }}>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                                  <circle cx="12" cy="13" r="4" />
+                                </svg>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => fileInputRef.current?.click()}
+                              style={{
+                                fontFamily: "inherit",
+                                fontSize: "10px",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.08em",
+                                padding: 0,
+                                cursor: "pointer",
+                                border: "none",
+                                backgroundColor: "transparent",
+                                color: "rgba(255,255,255,0.4)",
+                                transition: "color 0.15s ease",
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.color = "#42BDFF"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
+                            >
+                              Change Avatar
+                            </button>
+                          </>
                         )}
                         {avatarToast && (
                           <div style={{
                             fontSize: "10px",
                             color: avatarToast.includes("updated") ? "#FFE342" : "#FF425E",
                             textAlign: "center",
+                            marginTop: "2px",
                           }}>
                             {avatarToast}
                           </div>
