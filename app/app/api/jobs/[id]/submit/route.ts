@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { releaseFundsToTaker } from "@/lib/escrow";
 import { sendX402Payment, getAgentKeypair } from "@/lib/x402";
+import { executeCircuit } from "@/lib/sp1-circuit";
 import crypto from "crypto";
 
 export async function POST(
@@ -60,23 +61,26 @@ export async function POST(
       );
     }
 
-    // ===== ZK CIRCUIT VERIFICATION =====
-    // Compute SHA-256 of the submitted text
-    const textHashBytes = crypto.createHash("sha256").update(text).digest();
-    const textHash = textHashBytes.toString("hex");
+    // ===== ZK CIRCUIT VERIFICATION (SP1) =====
+    const circuitResult = executeCircuit(text, job.minWords);
 
-    // Verify: word count >= minWords
-    const actualWordCount = text.trim().split(/\s+/).length;
-    const zkVerified = actualWordCount >= job.minWords;
+    if (!circuitResult.verified) {
+      return NextResponse.json(
+        {
+          error: "ZK verification failed: " + (!circuitResult.wordCountPass ? "word count below minimum" : "hash mismatch"),
+          proofData: circuitResult,
+        },
+        { status: 400 }
+      );
+    }
 
-    // Compute "proof" data (what SP1 circuit would output)
+    const textHash = circuitResult.textHash;
+    const actualWordCount = circuitResult.wordCount;
+    const zkVerified = circuitResult.verified;
+
     const proofData = {
       circuit: "sp1-word-count",
-      minWords: job.minWords,
-      actualWordCount,
-      textHash,
-      verified: zkVerified,
-      cycleCount: 237583, // Real SP1 cycle count from our tests
+      ...circuitResult,
     };
 
     // Build a proof hex string from the proof data

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { executeCircuit } from "@/lib/sp1-circuit";
 
 export async function POST(req: Request) {
   try {
@@ -12,31 +13,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const startTime = performance.now();
-
-    // Compute word count
-    const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
-    const passed = wordCount >= minWords && text.trim().length > 0;
-
-    // Compute real SHA-256 hash
-    const encoder = new TextEncoder();
-    const data = encoder.encode(text);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const textHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-
-    const endTime = performance.now();
-    const executionTime = ((endTime - startTime) / 1000).toFixed(1) + "s";
-
-    // Cycle count from our SP1 zkVM test results
-    const cycleCount = passed ? 237583 : 0;
+    const result = executeCircuit(text, minWords);
 
     return NextResponse.json({
-      passed,
-      wordCount,
-      textHash,
-      cycleCount,
-      executionTime,
+      passed: result.verified,
+      wordCount: result.wordCount,
+      textHash: result.textHash,
+      cycleCount: result.cycleCount,
+      executionTime: result.executionTime + "ms",
+      hashMatch: result.hashMatch,
+      wordCountPass: result.wordCountPass,
     });
   } catch (error) {
     console.error("POST /api/proof/execute error:", error);

@@ -16,6 +16,12 @@ export async function GET(request: NextRequest) {
     const maxAmount = searchParams.get("maxAmount");
     const search = searchParams.get("search");
 
+    // Pagination params
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "20", 10)));
+    const sortBy = searchParams.get("sortBy") || "createdAt";
+    const sortOrder = (searchParams.get("sortOrder") || "desc") as "asc" | "desc";
+
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (poster) where.posterWallet = poster;
@@ -40,13 +46,24 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const jobs = await prisma.job.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      include: { submissions: true },
-    });
+    // Build orderBy based on sortBy param
+    const validSortFields = ["createdAt", "amount", "status", "deadline"];
+    const orderField = validSortFields.includes(sortBy) ? sortBy : "createdAt";
 
-    return NextResponse.json(jobs);
+    const [jobs, total] = await Promise.all([
+      prisma.job.findMany({
+        where,
+        orderBy: { [orderField]: sortOrder },
+        include: { submissions: true },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.job.count({ where }),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return NextResponse.json({ jobs, total, page, limit, totalPages });
   } catch (error) {
     console.error("GET /api/jobs error:", error);
     return NextResponse.json(

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
+import EmptyState from "@/components/EmptyState";
 import { formatAddress } from "@/lib/format";
 
 interface DisputeData {
@@ -100,9 +101,11 @@ export default function DisputesPage() {
               ))}
             </div>
           ) : disputes.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "60px", color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>
-              No disputes found. All jobs are running smoothly.
-            </div>
+            <EmptyState
+              title="No Disputes"
+              subtitle="All jobs are running smoothly. No disputes have been raised."
+              type="disputes"
+            />
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               {disputes.map((dispute) => {

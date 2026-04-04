@@ -75,7 +75,8 @@ export default function TakerPage() {
 
         const res = await fetch(`/api/jobs?${params.toString()}`);
         if (res.ok) {
-          let data: JobData[] = await res.json();
+          const result = await res.json();
+          let data: JobData[] = Array.isArray(result) ? result : (result.jobs || []);
 
           // Apply grid filters
           if (gridFilter === "new") {
@@ -129,6 +130,7 @@ export default function TakerPage() {
         <NavBar activeTab="taker" variant="dark" />
 
         <div
+          className="taker-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "65% 35%",

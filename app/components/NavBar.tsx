@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useConnector } from "@solana/connector/react";
 import useProfile from "@/hooks/useProfile";
 import WalletButton from "./WalletButton";
+import WalletBalance from "./WalletBalance";
 import PixelAvatar from "./PixelAvatar";
 import NotificationBell from "./NotificationBell";
 import ThemeToggle from "./ThemeToggle";
@@ -320,6 +321,9 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
               {profile.displayName}
             </span>
           </Link>
+        )}
+        {isConnected && account && (
+          <WalletBalance />
         )}
         {isConnected && account && (
           <NotificationBell wallet={account} variant={isDark ? "dark" : "light"} />

@@ -63,7 +63,8 @@ export default function AgentProfilePage({ params }: { params: Promise<{ wallet:
         }
         if (jobsRes.ok) {
           const data = await jobsRes.json();
-          setJobs(Array.isArray(data) ? data.slice(0, 10) : []);
+          const jobsArr = Array.isArray(data) ? data : (data.jobs || []);
+          setJobs(jobsArr.slice(0, 10));
         }
       } catch {
         // silent

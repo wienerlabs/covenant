@@ -11,6 +11,8 @@ import TransactionTicker from "./TransactionTicker";
 import ToastContainer from "./ToastContainer";
 import CommandPalette from "./CommandPalette";
 import ConfettiContainer from "./ConfettiContainer";
+import NavigationProgress from "./NavigationProgress";
+import TxConfirmationContainer from "./TxConfirmationContainer";
 
 interface ProvidersProps {
   children: ReactNode;
@@ -47,12 +49,14 @@ export default function Providers({ children }: ProvidersProps) {
       <ProfileGate>{children}</ProfileGate>
       {mounted && (
         <>
+          <NavigationProgress />
           <OnboardingTour />
           <FaucetWidget />
           <TransactionTicker />
           <ToastContainer />
           <CommandPalette />
           <ConfettiContainer />
+          <TxConfirmationContainer />
         </>
       )}
     </AppProvider>
