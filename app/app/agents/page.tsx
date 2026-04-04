@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import PixelAgent from "@/components/PixelAgent";
 import ReputationScore from "@/components/ReputationScore";
@@ -64,6 +65,18 @@ interface HireProgress {
   error: string | null;
 }
 
+interface PublishedAgentData {
+  id: string;
+  name: string;
+  description: string;
+  endpointUrl: string;
+  agentType: string;
+  capabilities: unknown[];
+  did: string;
+  verified: boolean;
+  walletAddress: string;
+}
+
 export default function AgentsPage() {
   const [hiring, setHiring] = useState<Record<AgentType, boolean>>({ writer: false, reviewer: false, translator: false });
   const [progress, setProgress] = useState<Record<AgentType, HireProgress>>({
@@ -76,6 +89,22 @@ export default function AgentsPage() {
     reviewer: "idle",
     translator: "idle",
   });
+  const [publishedAgents, setPublishedAgents] = useState<PublishedAgentData[]>([]);
+
+  useEffect(() => {
+    async function fetchPublished() {
+      try {
+        const res = await fetch("/api/agents/published");
+        if (res.ok) {
+          const data = await res.json();
+          setPublishedAgents(data.agents || []);
+        }
+      } catch {
+        // silently fail
+      }
+    }
+    fetchPublished();
+  }, []);
 
   const hireAgent = useCallback(async (agentType: AgentType) => {
     setHiring(h => ({ ...h, [agentType]: true }));
@@ -191,9 +220,30 @@ export default function AgentsPage() {
             <h1 style={{ fontSize: "36px", fontWeight: 700, color: "#ffffff", textTransform: "uppercase", margin: "0 0 12px 0" }}>
               Hire an AI Agent
             </h1>
-            <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", margin: 0 }}>
+            <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", margin: "0 0 20px 0" }}>
               Choose a pre-built agent. They complete work and prove it with ZK proofs on Solana.
             </p>
+            <Link href="/publish" style={{ textDecoration: "none" }}>
+              <button
+                style={{
+                  fontFamily: "inherit",
+                  fontSize: "12px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  padding: "10px 24px",
+                  cursor: "pointer",
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  borderRadius: "8px",
+                  backgroundColor: "rgba(255,255,255,0.05)",
+                  color: "#ffffff",
+                  fontWeight: 600,
+                  backdropFilter: "blur(8px)",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                + Publish Your Agent
+              </button>
+            </Link>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px" }}>
@@ -335,6 +385,56 @@ export default function AgentsPage() {
               );
             })}
           </div>
+
+          {/* Published Agents from DB */}
+          {publishedAgents.length > 0 && (
+            <div style={{ marginTop: "48px" }}>
+              <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff", textTransform: "uppercase", textAlign: "center", marginBottom: "24px" }}>
+                Community Agents
+              </h2>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px" }}>
+                {publishedAgents.map((agent) => {
+                  const typeColor = agent.agentType === "LLM" ? "#3B82F6" : agent.agentType === "Execution" ? "#10B981" : "#feffaf";
+                  return (
+                    <div
+                      key={agent.id}
+                      style={{
+                        border: `1px solid ${typeColor}30`,
+                        borderRadius: "16px",
+                        backgroundColor: "rgba(0,0,0,0.35)",
+                        backdropFilter: "blur(16px)",
+                        padding: "24px 20px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "12px",
+                        transition: "border-color 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${typeColor}60`; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = `${typeColor}30`; }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ fontSize: "14px", fontWeight: 700, color: "#ffffff", textTransform: "uppercase" }}>
+                          {agent.name}
+                        </div>
+                        <span style={{ fontSize: "9px", padding: "2px 8px", borderRadius: "4px", backgroundColor: `${typeColor}20`, color: typeColor, fontWeight: 600 }}>
+                          {agent.agentType}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", lineHeight: 1.5, margin: 0 }}>
+                        {agent.description || "No description provided"}
+                      </p>
+                      <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.25)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {agent.did}
+                      </div>
+                      <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
+                        by {agent.walletAddress.slice(0, 4)}...{agent.walletAddress.slice(-4)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
