@@ -62,12 +62,12 @@ export async function POST(
     }
 
     // ===== ZK CIRCUIT VERIFICATION (SP1) =====
-    const circuitResult = executeCircuit(text, job.minWords);
+    const circuitResult = executeCircuit(text, job.minWords, job.category);
 
     if (!circuitResult.verified) {
       return NextResponse.json(
         {
-          error: "ZK verification failed: " + (!circuitResult.wordCountPass ? "word count below minimum" : "hash mismatch"),
+          error: `ZK verification failed: word count ${circuitResult.wordCount} is below minimum ${circuitResult.minWords}`,
           proofData: circuitResult,
         },
         { status: 400 }

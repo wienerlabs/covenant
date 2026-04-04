@@ -222,7 +222,7 @@ Write a thorough, professional response that fully addresses the job requirement
         // ===== STEP 4: SP1 CIRCUIT VERIFICATION =====
         send("fulfill_circuit", "Running SP1 ZK circuit verification...");
 
-        const circuitResult = executeCircuit(deliverableText, minWords);
+        const circuitResult = executeCircuit(deliverableText, minWords, category);
         const wordCount = circuitResult.wordCount;
         const textHash = circuitResult.textHash;
 

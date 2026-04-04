@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useConnector } from "@solana/connector/react";
 import { JOB_CATEGORIES, type CategoryId } from "@/lib/categories";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
@@ -44,6 +44,13 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ jobId: string; txHash: string | null } | null>(null);
 
+  // Balance state
+  const [usdcBalance, setUsdcBalance] = useState<number | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const [faucetLoading, setFaucetLoading] = useState(false);
+  const [faucetSuccess, setFaucetSuccess] = useState(false);
+  const [escrowStep, setEscrowStep] = useState<"idle" | "checking" | "approved" | "creating">("idle");
+
   const cardBg = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.03)";
   const cardBorder = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)";
   const textColor = isDark ? "#ffffff" : "#000000";
@@ -67,13 +74,75 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
     fontWeight: 600,
   };
 
+  // Fetch balance
+  const fetchBalance = useCallback(async () => {
+    if (!account) return;
+    setBalanceLoading(true);
+    try {
+      const res = await fetch(`/api/balance/${account}`);
+      if (res.ok) {
+        const d = await res.json();
+        setUsdcBalance(d.usdc ?? 0);
+      }
+    } catch {
+      // silent fail
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, [account]);
+
+  // Fetch balance when entering step 3
+  useEffect(() => {
+    if (step === 3 && account) {
+      fetchBalance();
+      setEscrowStep("idle");
+      setFaucetSuccess(false);
+    }
+  }, [step, account, fetchBalance]);
+
+  const hasSufficientBalance = usdcBalance !== null && usdcBalance >= data.amount;
+
+  // Handle faucet
+  async function handleFaucet() {
+    if (!account) return;
+    setFaucetLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/faucet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: account }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.error || "Faucet failed");
+        return;
+      }
+      setFaucetSuccess(true);
+      // Re-fetch balance
+      await fetchBalance();
+    } catch {
+      setError("Faucet request failed. Try again.");
+    } finally {
+      setFaucetLoading(false);
+    }
+  }
+
   function handleCategorySelect(id: CategoryId) {
     setData((prev) => ({ ...prev, category: id }));
   }
 
   async function handleSubmit() {
     if (!account || !data.category) return;
+
+    // Balance gate for USDC
+    if (data.paymentToken === "USDC" && !hasSufficientBalance) {
+      setError(`Insufficient USDC balance. You need ${data.amount} USDC.`);
+      return;
+    }
+
     setSubmitting(true);
+    setEscrowStep("creating");
     setError(null);
 
     try {
@@ -81,30 +150,36 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
         ? new Date(data.deadline)
         : new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-      const res = await fetch("/api/jobs", {
+      const jobData = {
+        category: data.category,
+        paymentToken: data.paymentToken,
+        minWords: data.minWords,
+        language,
+        deadline: deadlineDate.toISOString(),
+        title,
+        description,
+        requirements,
+        ...(data.category === "translation" && sourceText ? { sourceText } : {}),
+        ...(data.category === "code_review" && repoUrl ? { repoUrl } : {}),
+        ...(data.category === "bug_bounty" && targetUrl ? { targetUrl } : {}),
+        ...(data.category === "design" && stylePreference ? { stylePreference } : {}),
+      };
+
+      // Use escrow/confirm endpoint for integrated escrow + job creation
+      const res = await fetch("/api/escrow/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           posterWallet: account,
-          category: data.category,
           amount: data.amount,
-          paymentToken: data.paymentToken,
-          minWords: data.minWords,
-          language,
-          deadline: deadlineDate.toISOString(),
-          title,
-          description,
-          requirements,
-          ...(data.category === "translation" && sourceText ? { sourceText } : {}),
-          ...(data.category === "code_review" && repoUrl ? { repoUrl } : {}),
-          ...(data.category === "bug_bounty" && targetUrl ? { targetUrl } : {}),
-          ...(data.category === "design" && stylePreference ? { stylePreference } : {}),
+          jobData,
         }),
       });
 
       if (!res.ok) {
         const d = await res.json();
         setError(d.error || "Failed to create job");
+        setEscrowStep("idle");
         return;
       }
 
@@ -115,6 +190,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
       if (onComplete) onComplete(jobResult);
     } catch {
       setError("Network error. Please try again.");
+      setEscrowStep("idle");
     } finally {
       setSubmitting(false);
     }
@@ -672,22 +748,119 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
               </div>
             </div>
 
+            {/* Balance check section */}
+            {data.paymentToken === "USDC" && (
+              <div
+                style={{
+                  border: `1px solid ${hasSufficientBalance ? "#42BDFF" : "#FF425E"}`,
+                  borderRadius: "8px",
+                  padding: "14px 16px",
+                  marginBottom: "16px",
+                  backgroundColor: hasSufficientBalance
+                    ? "rgba(66,189,255,0.08)"
+                    : "rgba(255,66,94,0.08)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <img src={USDC_LOGO_URL} alt="USDC" width={14} height={14} style={{ borderRadius: "50%" }} />
+                    <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", color: mutedText, fontWeight: 600 }}>
+                      Your Balance
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    {balanceLoading ? (
+                      <span style={{ fontSize: "13px", color: mutedText }}>Loading...</span>
+                    ) : (
+                      <span style={{ fontSize: "16px", fontWeight: 700, color: textColor }}>
+                        {usdcBalance !== null ? usdcBalance.toFixed(2) : "--"} USDC
+                      </span>
+                    )}
+                    <button
+                      onClick={fetchBalance}
+                      disabled={balanceLoading}
+                      style={{
+                        fontFamily: "inherit",
+                        fontSize: "10px",
+                        padding: "2px 6px",
+                        cursor: "pointer",
+                        border: `1px solid ${cardBorder}`,
+                        borderRadius: "4px",
+                        backgroundColor: "transparent",
+                        color: mutedText,
+                      }}
+                      title="Refresh balance"
+                    >
+                      &#8635;
+                    </button>
+                  </div>
+                </div>
+
+                {hasSufficientBalance ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ color: "#42BDFF", fontSize: "14px" }}>&#10003;</span>
+                    <span style={{ fontSize: "11px", color: "#42BDFF", fontWeight: 600 }}>
+                      Sufficient balance for {data.amount} USDC escrow
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+                      <span style={{ color: "#FF425E", fontSize: "14px" }}>&#9888;</span>
+                      <span style={{ fontSize: "11px", color: "#FF425E", fontWeight: 600 }}>
+                        Insufficient USDC balance. You need {data.amount} USDC but only have {usdcBalance !== null ? usdcBalance.toFixed(2) : "0"}.
+                      </span>
+                    </div>
+                    <button
+                      onClick={handleFaucet}
+                      disabled={faucetLoading}
+                      style={{
+                        fontFamily: "inherit",
+                        fontSize: "11px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        padding: "8px 16px",
+                        cursor: faucetLoading ? "wait" : "pointer",
+                        border: `1px solid #FFE342`,
+                        borderRadius: "6px",
+                        backgroundColor: "rgba(255,227,66,0.15)",
+                        color: "#FFE342",
+                        fontWeight: 600,
+                        transition: "all 0.15s ease",
+                        width: "100%",
+                      }}
+                    >
+                      {faucetLoading ? "Minting..." : "Get Test USDC (100 USDC)"}
+                    </button>
+                    {faucetSuccess && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px" }}>
+                        <span style={{ color: "#42BDFF", fontSize: "14px" }}>&#10003;</span>
+                        <span style={{ fontSize: "11px", color: "#42BDFF" }}>
+                          Test USDC minted successfully! Balance updated.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Escrow info note */}
             <div style={{ padding: "12px 0", textAlign: "center" }}>
               <div style={{ fontSize: "11px", color: mutedText, lineHeight: 1.5 }}>
-                Your job will be posted to the marketplace. Payment is secured by the protocol&apos;s escrow system on Solana Devnet.
+                {data.amount} {data.paymentToken} will be locked in escrow. Released to the worker upon ZK-verified completion.
               </div>
             </div>
 
             {error && (
-              <div style={{ fontSize: "11px", color: "#fca5a5", textAlign: "center", marginBottom: "8px" }}>
+              <div style={{ fontSize: "11px", color: "#FF425E", textAlign: "center", marginBottom: "8px" }}>
                 {error}
               </div>
             )}
 
             <button
               onClick={handleSubmit}
-              disabled={submitting || !account}
+              disabled={submitting || !account || (data.paymentToken === "USDC" && !hasSufficientBalance)}
               style={{
                 width: "100%",
                 fontFamily: "inherit",
@@ -695,17 +868,30 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
                 padding: "12px",
-                cursor: submitting ? "wait" : "pointer",
-                border: `1px solid ${textColor}`,
+                cursor: submitting || (data.paymentToken === "USDC" && !hasSufficientBalance) ? "not-allowed" : "pointer",
+                border: `1px solid ${hasSufficientBalance || data.paymentToken === "SOL" ? textColor : cardBorder}`,
                 borderRadius: "8px",
-                backgroundColor: submitting ? cardBg : (isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)"),
-                color: submitting ? mutedText : textColor,
+                backgroundColor: submitting
+                  ? cardBg
+                  : (hasSufficientBalance || data.paymentToken === "SOL")
+                    ? (isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)")
+                    : cardBg,
+                color: submitting
+                  ? mutedText
+                  : (hasSufficientBalance || data.paymentToken === "SOL")
+                    ? textColor
+                    : mutedText,
                 fontWeight: 600,
                 transition: "all 0.2s ease",
                 marginTop: "8px",
+                opacity: (data.paymentToken === "USDC" && !hasSufficientBalance) ? 0.5 : 1,
               }}
             >
-              {submitting ? "Creating Job..." : "Create Job"}
+              {submitting
+                ? escrowStep === "creating" ? "Locking Escrow & Creating Job..." : "Processing..."
+                : (data.paymentToken === "USDC" && !hasSufficientBalance)
+                  ? "Insufficient Balance"
+                  : `Approve ${data.amount} ${data.paymentToken} & Create Job`}
             </button>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-start", marginTop: "12px" }}>
@@ -773,19 +959,19 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
             <div style={{ marginBottom: "16px" }}>
               <div style={labelStyle}>Escrow Status</div>
               {result.txHash ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ fontSize: "12px", color: "#10b981" }}>Escrow locked on Solana &#10003;</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", justifyContent: "center" }}>
+                  <span style={{ fontSize: "12px", color: "#42BDFF" }}>Escrow locked on Solana &#10003;</span>
                   <a
                     href={`https://explorer.solana.com/tx/${result.txHash}?cluster=devnet`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ fontSize: "11px", color: "#5ba4f5", textDecoration: "none", fontFamily: "monospace" }}
+                    style={{ fontSize: "11px", color: "#42BDFF", textDecoration: "none", fontFamily: "monospace" }}
                   >
                     {result.txHash.slice(0, 20)}...
                   </a>
                 </div>
               ) : (
-                <div style={{ fontSize: "12px", color: "#10b981" }}>
+                <div style={{ fontSize: "12px", color: "#42BDFF" }}>
                   Job posted to marketplace &#10003; (escrow pending on-chain settlement)
                 </div>
               )}
@@ -824,6 +1010,9 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                   setStylePreference("");
                   setResult(null);
                   setError(null);
+                  setUsdcBalance(null);
+                  setFaucetSuccess(false);
+                  setEscrowStep("idle");
                 }}
                 style={{
                   fontFamily: "inherit",

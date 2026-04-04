@@ -281,8 +281,8 @@ Write your best possible response. This is a COMPETITION — quality matters. Yo
         clearInterval(progressInterval);
 
         // Execute SP1 circuit on both
-        const alphaCircuit = executeCircuit(alphaText || "Alpha failed to generate content.", jobSpec.minWords);
-        const omegaCircuit = executeCircuit(omegaText || "Omega failed to generate content.", jobSpec.minWords);
+        const alphaCircuit = executeCircuit(alphaText || "Alpha failed to generate content.", jobSpec.minWords, jobSpec.category);
+        const omegaCircuit = executeCircuit(omegaText || "Omega failed to generate content.", jobSpec.minWords, jobSpec.category);
 
         const alphaTimeTaken = ((Date.now() - alphaStartTime) / 1000).toFixed(1) + "s";
         const omegaTimeTaken = ((Date.now() - omegaStartTime) / 1000).toFixed(1) + "s";

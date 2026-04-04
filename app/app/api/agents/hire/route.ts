@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
         // Step 4: Compute proof via SP1 circuit
         send("proof_verifying", "Verifying zero-knowledge proof...");
 
-        const circuitResult = executeCircuit(deliverableText, config.minWords);
+        const circuitResult = executeCircuit(deliverableText, config.minWords, config.category);
         const wordCount = circuitResult.wordCount;
         const textHashBuffer = circuitResult.textHash;
         const passed = circuitResult.verified;

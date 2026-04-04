@@ -523,7 +523,7 @@ Write a thorough, professional response. Must be at least ${jobSpec.minWords} wo
             : "";
 
         // ===== SP1 CIRCUIT VERIFICATION =====
-        const circuitResult = executeCircuit(deliverableText, jobSpec.minWords);
+        const circuitResult = executeCircuit(deliverableText, jobSpec.minWords, jobSpec.category);
         const wordCount = circuitResult.wordCount;
 
         // ===== STEP 6: OMEGA SUBMITS =====

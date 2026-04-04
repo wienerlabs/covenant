@@ -228,7 +228,7 @@ Complete this job. Write at least ${job.minWords} words. Be thorough and profess
           const deliverableText = deliverable || `Autonomous output for round ${round}. The agent completed the task as specified.`;
 
           // SP1 circuit verification
-          const circuit = executeCircuit(deliverableText, job.minWords);
+          const circuit = executeCircuit(deliverableText, job.minWords, job.category);
 
           send("auto_working", `Generated ${circuit.wordCount} words, ZK verified: ${circuit.verified}`, {
             jobId: job.id,

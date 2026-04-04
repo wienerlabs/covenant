@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       cycleCount: result.cycleCount,
       executionTime: result.executionTime + "ms",
       hashMatch: result.hashMatch,
-      wordCountPass: result.wordCountPass,
+      wordCountPass: result.quantityPass,
     });
   } catch (error) {
     console.error("POST /api/proof/execute error:", error);

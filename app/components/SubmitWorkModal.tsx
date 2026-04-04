@@ -5,6 +5,7 @@ import { useState } from "react";
 interface SubmitWorkModalProps {
   jobId: string;
   minWords: number;
+  category?: string;
   takerWallet: string;
   onClose: () => void;
   onSuccess: () => void;
@@ -13,6 +14,7 @@ interface SubmitWorkModalProps {
 export default function SubmitWorkModal({
   jobId,
   minWords,
+  category = "text_writing",
   takerWallet,
   onClose,
   onSuccess,
@@ -23,7 +25,19 @@ export default function SubmitWorkModal({
 
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
   const meetsMinWords = wordCount >= minWords;
+  const wordsNeeded = minWords - wordCount;
   const progress = Math.min((wordCount / minWords) * 100, 100);
+
+  // Category-specific labels
+  const categoryLabels: Record<string, { unit: string; proof: string }> = {
+    data_labeling: { unit: "items", proof: "Data labeling verification" },
+    translation: { unit: "words", proof: "Translation output verification" },
+    code_review: { unit: "words", proof: "Code review analysis verification" },
+    bug_bounty: { unit: "words", proof: "Security report verification" },
+    design: { unit: "words", proof: "Design deliverable verification" },
+    text_writing: { unit: "words", proof: "Text output verification" },
+  };
+  const catLabel = categoryLabels[category] || categoryLabels.text_writing;
 
   const handleSubmit = async () => {
     if (!meetsMinWords) return;
@@ -147,9 +161,15 @@ export default function SubmitWorkModal({
           </div>
           <div>
             <span style={{ ...labelStyle, marginBottom: "0", marginRight: "8px" }}>
-              Min Words
+              Min {catLabel.unit}
             </span>
             <span style={{ fontSize: "12px" }}>{minWords.toLocaleString()}</span>
+          </div>
+          <div>
+            <span style={{ ...labelStyle, marginBottom: "0", marginRight: "8px" }}>
+              ZK Proof
+            </span>
+            <span style={{ fontSize: "12px" }}>{catLabel.proof}</span>
           </div>
         </div>
 
@@ -194,7 +214,7 @@ export default function SubmitWorkModal({
               }}
             >
               <span style={{ fontSize: "11px", color: "#555555" }}>
-                {wordCount.toLocaleString()} / {minWords.toLocaleString()} words
+                {wordCount.toLocaleString()} / {minWords.toLocaleString()} {catLabel.unit}
               </span>
               <span
                 style={{
@@ -219,12 +239,35 @@ export default function SubmitWorkModal({
                 style={{
                   width: `${progress}%`,
                   height: "100%",
-                  backgroundColor: "#000000",
-                  transition: "width 0.3s ease",
+                  backgroundColor: meetsMinWords ? "#42BDFF" : "#000000",
+                  transition: "width 0.3s ease, background-color 0.3s ease",
                 }}
               />
             </div>
           </div>
+
+          {/* ZK verification warning */}
+          {!meetsMinWords && wordCount > 0 && (
+            <div
+              style={{
+                border: "1px solid #FF425E",
+                borderRadius: "6px",
+                padding: "10px 12px",
+                fontSize: "12px",
+                color: "#FF425E",
+                marginBottom: "16px",
+                backgroundColor: "rgba(255,66,94,0.05)",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <span style={{ fontSize: "14px" }}>&#9888;</span>
+              <span>
+                Need <strong>{wordsNeeded.toLocaleString()}</strong> more {catLabel.unit} to pass ZK verification
+              </span>
+            </div>
+          )}
 
           {/* Error display */}
           {error && (
@@ -277,7 +320,7 @@ export default function SubmitWorkModal({
               }
             }}
           >
-            {isSubmitting ? "Submitting..." : "Submit Work"}
+            {isSubmitting ? "Verifying & Submitting..." : !meetsMinWords ? `Need ${wordsNeeded > 0 ? wordsNeeded : minWords} more ${catLabel.unit}` : "Submit Work"}
           </button>
         </div>
       </div>
