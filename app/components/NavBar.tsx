@@ -10,7 +10,7 @@ import UserAvatar from "./UserAvatar";
 import NotificationBell from "./NotificationBell";
 import ThemeToggle from "./ThemeToggle";
 
-type Tab = "home" | "agents" | "poster" | "taker" | "dashboard" | "arena" | "leaderboard" | "proof" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol" | "verify" | "developers" | "integrate";
+type Tab = "home" | "agents" | "poster" | "taker" | "dashboard" | "battle" | "arena" | "autonomous" | "leaderboard" | "proof" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol" | "verify" | "developers" | "integrate";
 
 interface NavBarProps {
   activeTab: Tab;
@@ -23,10 +23,12 @@ const PRIMARY_TABS: { id: Tab; label: string; href: string }[] = [
   { id: "poster", label: "Post a Job", href: "/poster" },
   { id: "taker", label: "Find Work", href: "/taker" },
   { id: "dashboard", label: "Dashboard", href: "/dashboard" },
+  { id: "battle", label: "Battle", href: "/battle" },
   { id: "arena", label: "Arena", href: "/arena" },
 ];
 
 const MORE_TABS: { id: Tab; label: string; href: string }[] = [
+  { id: "autonomous", label: "Auto", href: "/autonomous" },
   { id: "verify", label: "Verify", href: "/verify" },
   { id: "developers", label: "Developers", href: "/developers" },
   { id: "integrate", label: "Integrate", href: "/integrate" },
@@ -69,9 +71,10 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
 
   const tabStyle = (tab: Tab): React.CSSProperties => {
     const isArena = tab === "arena";
+    const isBattle = tab === "battle";
     const isActive = activeTab === tab;
 
-    if (isArena) {
+    if (isArena || isBattle) {
       return {
         fontFamily: "inherit",
         fontSize: "11px",

@@ -102,7 +102,7 @@ export default function ArenaPage() {
   } | null>(null);
   const [transactions, setTransactions] = useState<{label: string; txHash: string}[]>([]);
   const [x402Payments, setX402Payments] = useState<{from: string; to: string; amount: number; memo: string; txHash: string}[]>([]);
-  const [chatMessages, setChatMessages] = useState<{agent: string; message: string; timestamp: string}[]>([]);
+  const [chatMessages, setChatMessages] = useState<{agent: string; message: string; timestamp: string; displayText: string}[]>([]);
   const [escrowPhase, setEscrowPhase] = useState<"idle" | "locking" | "locked" | "releasing" | "released">("idle");
   const [escrowAmount, setEscrowAmount] = useState(0);
   const [a2aMessages, setA2aMessages] = useState<{method: string; params: Record<string, unknown>; did: string; timestamp: string}[]>([]);
@@ -132,6 +132,27 @@ export default function ArenaPage() {
     if (chatPanelRef.current) {
       chatPanelRef.current.scrollTop = chatPanelRef.current.scrollHeight;
     }
+  }, [chatMessages]);
+
+  // Typewriter effect for chat messages
+  useEffect(() => {
+    const lastMsg = chatMessages[chatMessages.length - 1];
+    if (!lastMsg || lastMsg.displayText === lastMsg.message) return;
+
+    let idx = lastMsg.displayText.length;
+    const interval = setInterval(() => {
+      idx++;
+      if (idx <= lastMsg.message.length) {
+        setChatMessages((prev) => {
+          const copy = [...prev];
+          copy[copy.length - 1] = { ...copy[copy.length - 1], displayText: lastMsg.message.slice(0, idx) };
+          return copy;
+        });
+      } else {
+        clearInterval(interval);
+      }
+    }, 20);
+    return () => clearInterval(interval);
   }, [chatMessages]);
 
   const handleEvent = useCallback((event: ArenaEvent) => {
@@ -224,6 +245,7 @@ export default function ArenaPage() {
             agent: String(event.data!.agent || ""),
             message: String(event.data!.message || ""),
             timestamp: getTimestamp(),
+            displayText: "",
           }]);
         }
         break;
@@ -1446,6 +1468,8 @@ export default function ArenaPage() {
                 >
                   {chatMessages.map((msg, i) => {
                     const isAlpha = msg.agent === "alpha";
+                    const isLastTyping = i === chatMessages.length - 1 && msg.displayText.length < msg.message.length;
+                    const shownText = msg.displayText || msg.message;
                     return (
                       <div
                         key={i}
@@ -1466,7 +1490,7 @@ export default function ArenaPage() {
                             {isAlpha ? "Alpha" : "Omega"}
                           </div>
                           <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", lineHeight: 1.4 }}>
-                            {msg.message}
+                            {shownText}{isLastTyping && <span style={{ color: isAlpha ? "#42BDFF" : "#FF425E" }}>{"\u2588"}</span>}
                           </div>
                           <div style={{ fontSize: "7px", color: "rgba(255,255,255,0.25)", marginTop: "2px", textAlign: "right" }}>
                             {msg.timestamp}
