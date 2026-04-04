@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { jobSpec?: { title?: string; description?: string; minWords?: number; category?: string } } = {};
+  let body: { jobSpec?: { title?: string; description?: string; minWords?: number; category?: string; amount?: number } } = {};
   try {
     body = await request.json();
   } catch {
@@ -92,20 +92,26 @@ export async function POST(request: NextRequest) {
         // ===== Generate or use provided job spec =====
         let jobSpec: { title: string; description: string; minWords: number; category: string; amount: number };
 
+        const requestedAmount = body.jobSpec?.amount || 25;
+        const stakeAmount = [10, 25, 50].includes(requestedAmount) ? requestedAmount : 25;
+
         if (body.jobSpec?.title && body.jobSpec?.description) {
           jobSpec = {
             title: body.jobSpec.title,
             description: body.jobSpec.description,
             minWords: body.jobSpec.minWords || 200,
             category: body.jobSpec.category || "text_writing",
-            amount: 25,
+            amount: stakeAmount,
           };
         } else {
           // Generate a challenge from user input or default
           const challengeText = body.jobSpec?.title || "";
+          const requestedCategory = body.jobSpec?.category || "text_writing";
+          const categoryInfo = getCategoryById(requestedCategory);
+
           const genPrompt = challengeText
-            ? `You are generating a battle challenge for two AI agents. The challenge topic is: "${challengeText}". Generate a job spec. Respond ONLY with JSON: {"title": "...", "description": "A detailed description...", "minWords": 200, "category": "text_writing"}`
-            : `You are generating a battle challenge for two AI agents. Pick an interesting, creative challenge. Respond ONLY with JSON: {"title": "...", "description": "A detailed description...", "minWords": 200, "category": "text_writing"}`;
+            ? `You are generating a battle challenge for two AI agents. The challenge topic is: "${challengeText}". Category: ${categoryInfo.label}. Generate a job spec. Respond ONLY with JSON: {"title": "...", "description": "A detailed description...", "minWords": 200, "category": "${requestedCategory}"}`
+            : `You are generating a battle challenge for two AI agents. Category: ${categoryInfo.label} (${categoryInfo.description}). Pick an interesting, creative challenge in this category. Respond ONLY with JSON: {"title": "...", "description": "A detailed description...", "minWords": 200, "category": "${requestedCategory}"}`;
 
           const genResponse = await callHaiku(client, genPrompt);
           try {
@@ -115,16 +121,16 @@ export async function POST(request: NextRequest) {
               title: parsed.title || "Write an Epic Technical Essay",
               description: parsed.description || "Write a compelling and insightful essay.",
               minWords: Math.max(100, Math.min(500, parsed.minWords || 200)),
-              category: parsed.category || "text_writing",
-              amount: 25,
+              category: requestedCategory,
+              amount: stakeAmount,
             };
           } catch {
             jobSpec = {
               title: challengeText || "Write an Epic Technical Essay",
               description: "Write a compelling and insightful essay on an interesting technical topic.",
               minWords: 200,
-              category: "text_writing",
-              amount: 25,
+              category: requestedCategory,
+              amount: stakeAmount,
             };
           }
         }
@@ -172,6 +178,7 @@ export async function POST(request: NextRequest) {
           console.error("[battle] create marker tx failed:", err);
         }
 
+        // === battle_start with full details ===
         send("battle_start", `Battle Challenge: ${jobSpec.title}`, {
           jobId: job.id,
           title: jobSpec.title,
@@ -180,31 +187,47 @@ export async function POST(request: NextRequest) {
           category: jobSpec.category,
           categoryTag: category.tag,
           amount: jobSpec.amount,
+          stakes: jobSpec.amount,
           txHash: createTxHash,
         });
 
-        // Agent chat: announcements
-        const alphaAnnounce = await callHaiku(client,
-          `You are Agent Alpha, a competitive AI on COVENANT. You're about to battle Agent Omega on: "${jobSpec.title}". Write a 1-sentence trash-talk announcement. Be confident and competitive.`,
+        // ===== PRE-BATTLE TRASH TALK =====
+        const alphaTrashTalk = await callHaiku(
+          client,
+          `You are Agent Alpha, about to compete in a coding battle on COVENANT protocol. Topic: "${jobSpec.title}". Write a 1-sentence competitive taunt. Be witty and confident. Keep it short and punchy.`,
           256
         );
-        send("agent_chat", `Alpha: ${alphaAnnounce || "Let's go. I was built for this."}`, {
+        send("battle_chat", `Alpha: ${alphaTrashTalk || "Let's go. I was built for this."}`, {
           agent: "alpha",
-          message: alphaAnnounce || "Let's go. I was built for this.",
+          message: alphaTrashTalk || "Let's go. I was built for this.",
+          phase: "pre_battle",
         });
 
-        const omegaAnnounce = await callHaiku(client,
-          `You are Agent Omega, a competitive AI defending your title on COVENANT. You're about to battle Agent Alpha on: "${jobSpec.title}". Write a 1-sentence response. Be confident and intimidating.`,
+        const omegaTrashTalk = await callHaiku(
+          client,
+          `You are Agent Omega, about to compete in a battle on COVENANT protocol. Topic: "${jobSpec.title}". Your opponent Agent Alpha just said: "${alphaTrashTalk}". Write a 1-sentence confident response. Be bold and intimidating.`,
           256
         );
-        send("agent_chat", `Omega: ${omegaAnnounce || "Bring it on. I never lose."}`, {
+        send("battle_chat", `Omega: ${omegaTrashTalk || "Bring it on. I never lose."}`, {
           agent: "omega",
-          message: omegaAnnounce || "Bring it on. I never lose.",
+          message: omegaTrashTalk || "Bring it on. I never lose.",
+          phase: "pre_battle",
         });
 
-        // ===== BOTH AGENTS WORK IN PARALLEL =====
-        send("battle_alpha_working", "Agent Alpha is writing...", { agent: "alpha" });
-        send("battle_omega_working", "Agent Omega is writing...", { agent: "omega" });
+        // ===== BOTH AGENTS START WORKING =====
+        const alphaStartTime = Date.now();
+        send("battle_alpha_start", "Agent Alpha begins writing...", {
+          agent: "alpha",
+          startTime: alphaStartTime,
+          minWords: jobSpec.minWords,
+        });
+
+        const omegaStartTime = Date.now();
+        send("battle_omega_start", "Agent Omega begins writing...", {
+          agent: "omega",
+          startTime: omegaStartTime,
+          minWords: jobSpec.minWords,
+        });
 
         const alphaWorkPrompt = `You are Agent Alpha, competing in a battle on COVENANT protocol.
 
@@ -222,16 +245,49 @@ MINIMUM WORDS: ${jobSpec.minWords}
 
 Write your best possible response. This is a COMPETITION — quality matters. You must beat Agent Alpha. Write at least ${jobSpec.minWords} words. Be thorough, creative, and excellent.`;
 
+        // Send progress updates while agents work
+        // We simulate progress updates since Haiku doesn't stream word counts mid-generation
+        let alphaProgressSent = false;
+        let omegaProgressSent = false;
+        const progressInterval = setInterval(() => {
+          if (!alphaProgressSent) {
+            const elapsed = ((Date.now() - alphaStartTime) / 1000).toFixed(1);
+            const estimatedWords = Math.min(jobSpec.minWords, Math.floor(Number(elapsed) * 25));
+            send("battle_alpha_progress", "Alpha writing...", {
+              agent: "alpha",
+              wordCount: estimatedWords,
+              minWords: jobSpec.minWords,
+              elapsed: elapsed + "s",
+            });
+          }
+          if (!omegaProgressSent) {
+            const elapsed = ((Date.now() - omegaStartTime) / 1000).toFixed(1);
+            const estimatedWords = Math.min(jobSpec.minWords, Math.floor(Number(elapsed) * 22));
+            send("battle_omega_progress", "Omega writing...", {
+              agent: "omega",
+              wordCount: estimatedWords,
+              minWords: jobSpec.minWords,
+              elapsed: elapsed + "s",
+            });
+          }
+        }, 2000);
+
         // Run both in parallel
         const [alphaText, omegaText] = await Promise.all([
           callHaiku(client, alphaWorkPrompt, 2048),
           callHaiku(client, omegaWorkPrompt, 2048),
         ]);
 
+        clearInterval(progressInterval);
+
         // Execute SP1 circuit on both
         const alphaCircuit = executeCircuit(alphaText || "Alpha failed to generate content.", jobSpec.minWords);
         const omegaCircuit = executeCircuit(omegaText || "Omega failed to generate content.", jobSpec.minWords);
 
+        const alphaTimeTaken = ((Date.now() - alphaStartTime) / 1000).toFixed(1) + "s";
+        const omegaTimeTaken = ((Date.now() - omegaStartTime) / 1000).toFixed(1) + "s";
+
+        alphaProgressSent = true;
         send("battle_alpha_done", "Agent Alpha finished writing", {
           agent: "alpha",
           text: alphaText,
@@ -239,8 +295,10 @@ Write your best possible response. This is a COMPETITION — quality matters. Yo
           textHash: alphaCircuit.textHash.slice(0, 16),
           verified: alphaCircuit.verified,
           cycleCount: alphaCircuit.cycleCount,
+          timeTaken: alphaTimeTaken,
         });
 
+        omegaProgressSent = true;
         send("battle_omega_done", "Agent Omega finished writing", {
           agent: "omega",
           text: omegaText,
@@ -248,10 +306,14 @@ Write your best possible response. This is a COMPETITION — quality matters. Yo
           textHash: omegaCircuit.textHash.slice(0, 16),
           verified: omegaCircuit.verified,
           cycleCount: omegaCircuit.cycleCount,
+          timeTaken: omegaTimeTaken,
         });
 
         // ===== JUDGING =====
-        send("battle_judging", "AI Judge is evaluating both submissions...", null);
+        send("battle_judging", "AI Judge is evaluating both submissions...", {
+          alphaWordCount: alphaCircuit.wordCount,
+          omegaWordCount: omegaCircuit.wordCount,
+        });
 
         const judgePrompt = `You are an impartial AI judge on the COVENANT protocol. Two agents competed on this challenge:
 
@@ -286,36 +348,52 @@ Respond ONLY with JSON: {"winner": "alpha" or "omega", "reason": "2-3 sentence e
           };
         }
 
+        // === battle_scores ===
+        send("battle_scores", "Scores calculated", {
+          alphaScore: judgeResult.alphaScore,
+          omegaScore: judgeResult.omegaScore,
+          reason: judgeResult.reason,
+        });
+
         const winnerWallet = judgeResult.winner === "alpha" ? AGENT_ALPHA.wallet : AGENT_OMEGA.wallet;
         const loserWallet = judgeResult.winner === "alpha" ? AGENT_OMEGA.wallet : AGENT_ALPHA.wallet;
 
+        // === battle_winner ===
         send("battle_winner", `${judgeResult.winner === "alpha" ? "AGENT ALPHA" : "AGENT OMEGA"} WINS!`, {
           winner: judgeResult.winner,
           reason: judgeResult.reason,
           alphaScore: judgeResult.alphaScore,
           omegaScore: judgeResult.omegaScore,
           winnerWallet,
+          amount: jobSpec.amount,
         });
 
-        // Agent chat: winner reaction
+        // ===== POST-BATTLE REACTIONS =====
         const winnerName = judgeResult.winner === "alpha" ? "Alpha" : "Omega";
         const loserName = judgeResult.winner === "alpha" ? "Omega" : "Alpha";
-        const winnerChat = await callHaiku(client,
-          `You are Agent ${winnerName} and you just WON a battle on COVENANT! Score: ${judgeResult.winner === "alpha" ? judgeResult.alphaScore : judgeResult.omegaScore}/10. Write a 1-sentence victory message. Be excited but gracious.`,
+        const winnerScoreVal = judgeResult.winner === "alpha" ? judgeResult.alphaScore : judgeResult.omegaScore;
+        const loserScoreVal = judgeResult.winner === "alpha" ? judgeResult.omegaScore : judgeResult.alphaScore;
+
+        const winnerChat = await callHaiku(
+          client,
+          `You won the battle ${winnerScoreVal}-${loserScoreVal}. Write a 1-sentence victory celebration. Be excited but gracious.`,
           256
         );
-        send("agent_chat", `${winnerName}: ${winnerChat || "Victory is mine! Great battle."}`, {
+        send("battle_chat", `${winnerName}: ${winnerChat || "Victory is mine! Great battle."}`, {
           agent: judgeResult.winner,
           message: winnerChat || "Victory is mine! Great battle.",
+          phase: "post_battle",
         });
 
-        const loserChat = await callHaiku(client,
-          `You are Agent ${loserName} and you just LOST a battle on COVENANT. Score: ${judgeResult.winner === "alpha" ? judgeResult.omegaScore : judgeResult.alphaScore}/10. Write a 1-sentence response. Be gracious but determined to win next time.`,
+        const loserChat = await callHaiku(
+          client,
+          `You lost the battle ${loserScoreVal}-${winnerScoreVal}. Write a 1-sentence graceful defeat message. Be determined to win next time.`,
           256
         );
-        send("agent_chat", `${loserName}: ${loserChat || "Good fight. I'll be back stronger."}`, {
+        send("battle_chat", `${loserName}: ${loserChat || "Good fight. I'll be back stronger."}`, {
           agent: judgeResult.winner === "alpha" ? "omega" : "alpha",
           message: loserChat || "Good fight. I'll be back stronger.",
+          phase: "post_battle",
         });
 
         // ===== PAYMENT + DB UPDATES =====
@@ -394,6 +472,10 @@ Respond ONLY with JSON: {"winner": "alpha" or "omega", "reason": "2-3 sentence e
           amount: jobSpec.amount,
           alphaDID: generateDID(AGENT_ALPHA.wallet),
           omegaDID: generateDID(AGENT_OMEGA.wallet),
+          alphaWordCount: alphaCircuit.wordCount,
+          omegaWordCount: omegaCircuit.wordCount,
+          alphaTimeTaken,
+          omegaTimeTaken,
         });
       } catch (err) {
         console.error("[battle] Error:", err);
