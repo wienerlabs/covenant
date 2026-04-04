@@ -133,15 +133,15 @@ export default function TakerPage() {
           className="taker-grid"
           style={{
             display: "grid",
-            gridTemplateColumns: "65% 35%",
+            gridTemplateColumns: "1fr 300px",
             maxWidth: "1200px",
             margin: "0 auto",
             padding: "32px 24px",
-            gap: "32px",
+            gap: "24px",
           }}
         >
         {/* Left column */}
-        <div>
+        <div style={{ minWidth: 0, overflow: "hidden" }}>
           {/* View toggle + filter tabs */}
           <div style={{ display: "flex", gap: "8px", marginBottom: "16px", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", gap: "8px" }}>
@@ -422,7 +422,7 @@ export default function TakerPage() {
         </div>
 
         {/* Right column - sticky sidebar */}
-        <div>
+        <div style={{ minWidth: 0, overflow: "hidden" }}>
           <div style={{ position: "sticky", top: "24px" }}>
             <div style={{ marginBottom: "24px" }}>
               <div
