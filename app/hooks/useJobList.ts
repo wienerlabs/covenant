@@ -25,12 +25,28 @@ interface UseJobListOptions {
   search?: string;
   minAmount?: number;
   maxAmount?: number;
+  page?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
 }
 
-export default function useJobList({ filter, walletPubkey, category, search, minAmount, maxAmount }: UseJobListOptions) {
+export default function useJobList({
+  filter,
+  walletPubkey,
+  category,
+  search,
+  minAmount,
+  maxAmount,
+  page = 1,
+  sortBy = "createdAt",
+  sortOrder = "desc",
+}: UseJobListOptions) {
   const [jobs, setJobs] = useState<JobData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(page);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchJobs = useCallback(async () => {
@@ -48,6 +64,9 @@ export default function useJobList({ filter, walletPubkey, category, search, min
       if (search) params.set("search", search);
       if (minAmount !== undefined && minAmount > 0) params.set("minAmount", String(minAmount));
       if (maxAmount !== undefined && maxAmount > 0) params.set("maxAmount", String(maxAmount));
+      params.set("page", String(page));
+      params.set("sortBy", sortBy);
+      params.set("sortOrder", sortOrder);
 
       const url = `/api/jobs${params.toString() ? `?${params.toString()}` : ""}`;
       const response = await fetch(url);
@@ -56,7 +75,21 @@ export default function useJobList({ filter, walletPubkey, category, search, min
         throw new Error("Failed to fetch jobs");
       }
 
-      let data: JobData[] = await response.json();
+      const result = await response.json();
+
+      // Support both paginated { jobs, total, ... } and legacy array responses
+      let data: JobData[];
+      if (Array.isArray(result)) {
+        data = result;
+        setTotal(result.length);
+        setTotalPages(1);
+        setCurrentPage(1);
+      } else {
+        data = result.jobs || [];
+        setTotal(result.total || data.length);
+        setTotalPages(result.totalPages || 1);
+        setCurrentPage(result.page || 1);
+      }
 
       // For "mine" filter, we also need to fetch jobs where the user is the taker
       if (filter === "mine" && walletPubkey) {
@@ -64,7 +97,8 @@ export default function useJobList({ filter, walletPubkey, category, search, min
         takerParams.set("taker", walletPubkey);
         const takerResponse = await fetch(`/api/jobs?${takerParams.toString()}`);
         if (takerResponse.ok) {
-          const takerData: JobData[] = await takerResponse.json();
+          const takerResult = await takerResponse.json();
+          const takerData: JobData[] = Array.isArray(takerResult) ? takerResult : (takerResult.jobs || []);
           // Merge and deduplicate
           const allJobs = [...data, ...takerData];
           const seen = new Set<string>();
@@ -82,7 +116,7 @@ export default function useJobList({ filter, walletPubkey, category, search, min
     } finally {
       setLoading(false);
     }
-  }, [filter, walletPubkey, category, search, minAmount, maxAmount]);
+  }, [filter, walletPubkey, category, search, minAmount, maxAmount, page, sortBy, sortOrder]);
 
   const refetch = useCallback(() => {
     setLoading(true);
@@ -103,5 +137,5 @@ export default function useJobList({ filter, walletPubkey, category, search, min
     };
   }, [fetchJobs]);
 
-  return { jobs, loading, error, refetch };
+  return { jobs, loading, error, refetch, total, totalPages, page: currentPage };
 }

@@ -81,6 +81,7 @@ export default function PosterPage() {
         <NavBar activeTab="poster" variant="dark" />
 
         <div
+          className="poster-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "40% 60%",

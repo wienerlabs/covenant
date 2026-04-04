@@ -9,6 +9,8 @@ import StatusBadge from "@/components/StatusBadge";
 import { StatCardSkeleton, JobCardSkeleton } from "@/components/LoadingSkeleton";
 import useProfile from "@/hooks/useProfile";
 import useReputation from "@/hooks/useReputation";
+import CopyButton from "@/components/CopyButton";
+import EmptyState from "@/components/EmptyState";
 import { formatAddress } from "@/lib/format";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
@@ -58,11 +60,17 @@ export default function DashboardPage() {
         fetch(`/api/transactions?wallet=${wallet}`),
       ]);
 
-      if (posterRes.ok) setPostedJobs(await posterRes.json());
-      if (takerRes.ok) setTakenJobs(await takerRes.json());
+      if (posterRes.ok) {
+        const posterData = await posterRes.json();
+        setPostedJobs(Array.isArray(posterData) ? posterData : (posterData.jobs || []));
+      }
+      if (takerRes.ok) {
+        const takerData = await takerRes.json();
+        setTakenJobs(Array.isArray(takerData) ? takerData : (takerData.jobs || []));
+      }
       if (txRes.ok) {
         const txData = await txRes.json();
-        setTransactions(Array.isArray(txData) ? txData.slice(0, 10) : []);
+        setTransactions(Array.isArray(txData) ? txData.slice(0, 20) : []);
       }
     } catch {
       // silent
@@ -149,6 +157,7 @@ export default function DashboardPage() {
 
           {/* Stats row */}
           <div
+            className="dashboard-stats"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(4, 1fr)",
@@ -200,9 +209,11 @@ export default function DashboardPage() {
               {[1, 2, 3].map((i) => <JobCardSkeleton key={i} />)}
             </div>
           ) : jobs.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "48px", color: "rgba(255,255,255,0.4)", fontSize: "12px", textTransform: "uppercase" }}>
-              No jobs found
-            </div>
+            <EmptyState
+              title="No Jobs Yet"
+              subtitle="Jobs you post or take will appear here."
+              type="jobs"
+            />
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {jobs.map((job) => {
@@ -247,46 +258,88 @@ export default function DashboardPage() {
           )}
 
           {/* Recent transactions */}
-          {transactions.length > 0 && (
-            <div style={{ marginTop: "40px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 700, color: "#ffffff", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "16px" }}>
-                Recent Transactions
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {transactions.map((tx) => (
-                  <div
-                    key={tx.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      padding: "10px 16px",
-                      borderRadius: "8px",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      backgroundColor: "rgba(0,0,0,0.2)",
-                      fontSize: "11px",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span style={{ color: "rgba(255,255,255,0.5)", textTransform: "uppercase" }}>{tx.type.replace("_", " ")}</span>
-                      {tx.amount > 0 && (
-                        <span style={{ color: "#86efac", fontWeight: 600 }}>${tx.amount.toFixed(2)}</span>
-                      )}
-                    </div>
-                    <a
-                      href={`https://explorer.solana.com/tx/${tx.txHash}?cluster=devnet`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: "#5ba4f5", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                    >
-                      <img src={SOL_LOGO_URL} alt="SOL" width={10} height={10} style={{ borderRadius: "50%" }} />
-                      {formatAddress(tx.txHash)}
-                    </a>
-                  </div>
-                ))}
-              </div>
+          <div style={{ marginTop: "40px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#ffffff", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "16px" }}>
+              Recent Transactions
             </div>
-          )}
+            {transactions.length === 0 ? (
+              <EmptyState
+                title="No Transactions"
+                subtitle="Your wallet transactions will appear here once you start using the protocol."
+                type="transactions"
+              />
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {transactions.map((tx) => {
+                  const typeColors: Record<string, string> = {
+                    create_job: "#3b82f6",
+                    accept_job: "#f59e0b",
+                    submit_completion: "#10b981",
+                    escrow_lock: "#8b5cf6",
+                    escrow_release: "#06b6d4",
+                    payment_released: "#22c55e",
+                    x402_payment: "#ec4899",
+                  };
+                  const badgeColor = typeColors[tx.type] || "rgba(255,255,255,0.5)";
+
+                  return (
+                    <div
+                      key={tx.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "10px 16px",
+                        borderRadius: "8px",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        backgroundColor: "rgba(0,0,0,0.2)",
+                        backdropFilter: "blur(8px)",
+                        fontSize: "11px",
+                        flexWrap: "wrap",
+                        gap: "8px",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span
+                          style={{
+                            fontSize: "9px",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                            backgroundColor: `${badgeColor}20`,
+                            border: `1px solid ${badgeColor}40`,
+                            color: badgeColor,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {tx.type.replace(/_/g, " ")}
+                        </span>
+                        {tx.amount > 0 && (
+                          <span style={{ color: "#86efac", fontWeight: 600 }}>${tx.amount.toFixed(2)}</span>
+                        )}
+                        <span style={{ color: "rgba(255,255,255,0.25)", fontSize: "9px" }}>
+                          {new Date(tx.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <a
+                          href={`https://explorer.solana.com/tx/${tx.txHash}?cluster=devnet`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "#5ba4f5", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                        >
+                          <img src={SOL_LOGO_URL} alt="SOL" width={10} height={10} style={{ borderRadius: "50%" }} />
+                          {formatAddress(tx.txHash)}
+                        </a>
+                        <CopyButton text={tx.txHash} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

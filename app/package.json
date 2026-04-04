@@ -17,9 +17,11 @@
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
     "@types/bn.js": "^5.2.0",
+    "@types/nprogress": "^0.2.3",
     "@walletconnect/universal-provider": "^2.23.9",
     "bn.js": "^5.2.3",
     "next": "14.2.35",
+    "nprogress": "^0.2.0",
     "prisma": "^6.0.0",
     "react": "^18",
     "react-dom": "^18"

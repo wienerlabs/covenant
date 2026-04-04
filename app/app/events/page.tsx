@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import NavBar from "@/components/NavBar";
+import EmptyState from "@/components/EmptyState";
 import { SOL_LOGO_URL } from "@/lib/constants";
 
 interface EventItem {
@@ -84,7 +85,11 @@ export default function EventsPage() {
             {loading ? (
               <div style={{ textAlign: "center", color: "rgba(255,255,255,0.4)", padding: "40px 0" }}>Loading events...</div>
             ) : events.length === 0 ? (
-              <div style={{ textAlign: "center", color: "rgba(255,255,255,0.4)", padding: "40px 0" }}>No events yet.</div>
+              <EmptyState
+                title="No Events Yet"
+                subtitle="Protocol activity will appear here as jobs are created and completed."
+                type="history"
+              />
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
                 {events.map((ev, i) => {

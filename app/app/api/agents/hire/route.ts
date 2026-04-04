@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { lockFundsInEscrow, releaseFundsToTaker } from "@/lib/escrow";
 import { rateLimit } from "@/lib/rateLimit";
+import { executeCircuit } from "@/lib/sp1-circuit";
 import crypto from "crypto";
 import { NextRequest } from "next/server";
 
@@ -179,18 +180,20 @@ export async function POST(request: NextRequest) {
 
         send("generating", `Generated ${deliverableText.trim().split(/\s+/).length} words`);
 
-        // Step 4: Compute proof
+        // Step 4: Compute proof via SP1 circuit
         send("proof_verifying", "Verifying zero-knowledge proof...");
 
-        const wordCount = deliverableText.trim().split(/\s+/).length;
-        const textHashBuffer = crypto.createHash("sha256").update(deliverableText).digest("hex");
-        const passed = wordCount >= config.minWords;
+        const circuitResult = executeCircuit(deliverableText, config.minWords);
+        const wordCount = circuitResult.wordCount;
+        const textHashBuffer = circuitResult.textHash;
+        const passed = circuitResult.verified;
 
         send("proof_verified", `Proof verified: ${wordCount} words, hash: ${textHashBuffer.slice(0, 16)}...`, {
           wordCount,
           textHash: textHashBuffer,
           passed,
-          cycleCount: 237583,
+          cycleCount: circuitResult.cycleCount,
+          executionTime: circuitResult.executionTime,
         });
 
         // Step 5: Submit & complete

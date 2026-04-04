@@ -15,6 +15,7 @@ import {
 } from "@/lib/anchor-client";
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
+import { executeCircuit } from "@/lib/sp1-circuit";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { NextRequest } from "next/server";
 import BN from "bn.js";
@@ -459,15 +460,12 @@ export async function POST(request: NextRequest) {
             ? omegaWorkResponse.content[0].text
             : "";
 
-        const wordCount = deliverableText
-          .split(/\s+/)
-          .filter((w) => w.length > 0).length;
+        // ===== SP1 CIRCUIT VERIFICATION =====
+        const circuitResult = executeCircuit(deliverableText, jobSpec.minWords);
+        const wordCount = circuitResult.wordCount;
 
         // ===== STEP 6: OMEGA SUBMITS =====
-        const textHash = crypto
-          .createHash("sha256")
-          .update(deliverableText)
-          .digest("hex");
+        const textHash = circuitResult.textHash;
 
         const [submission] = await prisma.$transaction(async (tx) => {
           const sub = await tx.submission.create({
