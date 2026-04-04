@@ -166,10 +166,22 @@ export async function POST(request: NextRequest) {
           description: jobSpec.description,
         });
 
-        // Agent Chat: Alpha announces job
-        send("agent_chat", `Alpha: I need someone to ${jobSpec.title.toLowerCase()}. Paying ${jobSpec.amount} USDC for at least ${jobSpec.minWords} words.`, {
+        // Agent Chat: Alpha announces job (REAL Haiku)
+        let alphaChatAnnounce = `I need someone to ${jobSpec.title.toLowerCase()}. Paying ${jobSpec.amount} USDC for at least ${jobSpec.minWords} words.`;
+        try {
+          const alphaChatResp = await client.messages.create({
+            model: HAIKU_MODEL,
+            max_tokens: 256,
+            messages: [{ role: "user", content: `You are Agent Alpha, a job poster on COVENANT. You just posted: "${jobSpec.title}". Write a 1-sentence announcement to attract workers. Be professional but enthusiastic.` }],
+          });
+          const chatText = alphaChatResp.content[0].type === "text" ? alphaChatResp.content[0].text : "";
+          if (chatText) alphaChatAnnounce = chatText;
+        } catch (err) {
+          console.error("[arena] Alpha chat Haiku failed:", err);
+        }
+        send("agent_chat", `Alpha: ${alphaChatAnnounce}`, {
           agent: "alpha",
-          message: `I need someone to ${jobSpec.title.toLowerCase()}. Paying ${jobSpec.amount} USDC for at least ${jobSpec.minWords} words.`,
+          message: alphaChatAnnounce,
         });
 
         // ===== x402 PAYMENT: Omega pays Alpha for API access =====
@@ -408,10 +420,22 @@ export async function POST(request: NextRequest) {
           did: generateDID(AGENT_OMEGA.wallet),
         });
 
-        // Agent Chat: Omega accepts
-        send("agent_chat", `Omega: I'll take this job. ${evalResult.reason} Starting work now.`, {
+        // Agent Chat: Omega accepts (REAL Haiku)
+        let omegaChatAccept = `I'll take this job. ${evalResult.reason} Starting work now.`;
+        try {
+          const omegaChatResp = await client.messages.create({
+            model: HAIKU_MODEL,
+            max_tokens: 256,
+            messages: [{ role: "user", content: `You are Agent Omega, a freelance worker. You see this job: "${jobSpec.title}" for ${jobSpec.amount} USDC. Write a 1-sentence response saying you'll take it. Be confident.` }],
+          });
+          const chatText = omegaChatResp.content[0].type === "text" ? omegaChatResp.content[0].text : "";
+          if (chatText) omegaChatAccept = chatText;
+        } catch (err) {
+          console.error("[arena] Omega accept chat Haiku failed:", err);
+        }
+        send("agent_chat", `Omega: ${omegaChatAccept}`, {
           agent: "omega",
-          message: `I'll take this job. ${evalResult.reason} Starting work now.`,
+          message: omegaChatAccept,
         });
 
         // ===== ANCHOR CPI: accept_job on-chain =====
@@ -693,10 +717,22 @@ Write a thorough, professional response. Must be at least ${jobSpec.minWords} wo
 
         const textPreview = deliverableText.slice(0, 200);
 
-        // Agent Chat: Omega completes
-        send("agent_chat", `Omega: Done! ${wordCount} words, verified by ZK proof. Hash: ${textHash.slice(0, 12)}...`, {
+        // Agent Chat: Omega completes (REAL Haiku)
+        let omegaChatComplete = `Done! ${wordCount} words, verified by ZK proof. Hash: ${textHash.slice(0, 12)}...`;
+        try {
+          const omegaCompleteResp = await client.messages.create({
+            model: HAIKU_MODEL,
+            max_tokens: 256,
+            messages: [{ role: "user", content: `You completed the job "${jobSpec.title}" with ${wordCount} words. Write a 1-sentence delivery message. Be proud.` }],
+          });
+          const chatText = omegaCompleteResp.content[0].type === "text" ? omegaCompleteResp.content[0].text : "";
+          if (chatText) omegaChatComplete = chatText;
+        } catch (err) {
+          console.error("[arena] Omega complete chat Haiku failed:", err);
+        }
+        send("agent_chat", `Omega: ${omegaChatComplete}`, {
           agent: "omega",
-          message: `Done! ${wordCount} words, verified by ZK proof. Hash: ${textHash.slice(0, 12)}...`,
+          message: omegaChatComplete,
         });
 
         send("omega_completed", "Work submitted and verified", {
@@ -719,10 +755,22 @@ Write a thorough, professional response. Must be at least ${jobSpec.minWords} wo
         });
 
         // ===== COMPLETE =====
-        // Agent Chat: Alpha acknowledges
-        send("agent_chat", `Alpha: Payment released. Great work on "${jobSpec.title}"!`, {
+        // Agent Chat: Alpha acknowledges (REAL Haiku)
+        let alphaChatAcknowledge = `Payment released. Great work on "${jobSpec.title}"!`;
+        try {
+          const alphaAckResp = await client.messages.create({
+            model: HAIKU_MODEL,
+            max_tokens: 256,
+            messages: [{ role: "user", content: `Worker delivered your job "${jobSpec.title}". Quality was good. Write a 1-sentence thank you. Be appreciative.` }],
+          });
+          const chatText = alphaAckResp.content[0].type === "text" ? alphaAckResp.content[0].text : "";
+          if (chatText) alphaChatAcknowledge = chatText;
+        } catch (err) {
+          console.error("[arena] Alpha acknowledge chat Haiku failed:", err);
+        }
+        send("agent_chat", `Alpha: ${alphaChatAcknowledge}`, {
           agent: "alpha",
-          message: `Payment released. Great work on "${jobSpec.title}"!`,
+          message: alphaChatAcknowledge,
         });
 
         const totalTime =
