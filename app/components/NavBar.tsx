@@ -10,7 +10,7 @@ import PixelAvatar from "./PixelAvatar";
 import NotificationBell from "./NotificationBell";
 import ThemeToggle from "./ThemeToggle";
 
-type Tab = "home" | "agents" | "poster" | "taker" | "dashboard" | "arena" | "leaderboard" | "proof" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs";
+type Tab = "home" | "agents" | "poster" | "taker" | "dashboard" | "arena" | "leaderboard" | "proof" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol";
 
 interface NavBarProps {
   activeTab: Tab;
@@ -36,6 +36,7 @@ const MORE_TABS: { id: Tab; label: string; href: string }[] = [
   { id: "architecture", label: "Architecture", href: "/architecture" },
   { id: "admin", label: "DB Explorer", href: "/admin" },
   { id: "api-docs", label: "API", href: "/api-docs" },
+  { id: "protocol", label: "Protocol (AIP)", href: "/protocol" },
 ];
 
 export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {

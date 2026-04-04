@@ -10,6 +10,7 @@ import ReputationScore from "@/components/ReputationScore";
 import WalletButton from "@/components/WalletButton";
 import { USDC_LOGO_URL } from "@/lib/constants";
 import { formatAddress } from "@/lib/format";
+import DIDBadge from "@/components/DIDBadge";
 
 export default function ProfilePage() {
   const { isConnected, account } = useConnector();
@@ -280,7 +281,7 @@ export default function ProfilePage() {
                             Edit
                           </button>
                         </div>
-                        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "12px", display: "flex", gap: "12px", alignItems: "center" }}>
+                        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "8px", display: "flex", gap: "12px", alignItems: "center" }}>
                           <span>{formatAddress(wallet!)}</span>
                           <span style={{
                             padding: "2px 8px",
@@ -291,6 +292,9 @@ export default function ProfilePage() {
                           }}>
                             {profile.role}
                           </span>
+                        </div>
+                        <div style={{ marginBottom: "12px" }}>
+                          <DIDBadge walletAddress={wallet!} compact />
                         </div>
                         {profile.bio && (
                           <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", lineHeight: 1.6 }}>
