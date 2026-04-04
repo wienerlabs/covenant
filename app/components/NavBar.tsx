@@ -114,7 +114,9 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         padding: isTransparent ? "0 32px" : "0 20px",
         backgroundColor: "transparent",
         position: "relative",
-        gap: "16px",
+        gap: "12px",
+        flexWrap: "nowrap",
+        overflow: "hidden",
       }}
     >
       <Link
@@ -297,24 +299,21 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+      {/* Right side — all in one flex row */}
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0, whiteSpace: "nowrap" }}>
         <span
           style={{
             fontSize: "9px",
-            color: isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)",
-            border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(0,0,0,0.15)",
+            color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.25)",
+            border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)",
             borderRadius: "4px",
-            padding: "2px 6px",
+            padding: "2px 5px",
             cursor: "default",
-            letterSpacing: "0.05em",
           }}
           title="Command Palette"
         >
           {"\u2318"}K
         </span>
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
         {isConnected && profile && (
           <Link
             href="/profile"
@@ -322,38 +321,17 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
               textDecoration: "none",
               display: "flex",
               alignItems: "center",
-              gap: "8px",
-              padding: "4px 10px",
+              gap: "5px",
+              padding: "3px 8px",
               borderRadius: "6px",
-              border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #e0e0e0",
-              transition: "all 0.15s ease",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = isDark ? "rgba(255,255,255,0.4)" : "#000";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = isDark ? "rgba(255,255,255,0.15)" : "#e0e0e0";
+              border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #e0e0e0",
             }}
           >
-            <UserAvatar seed={profile.avatarSeed} avatarUrl={profile.avatarUrl ?? null} size={24} />
-            <span style={{
-              fontSize: "10px",
-              color: isDark ? "rgba(255,255,255,0.7)" : "#555",
-              maxWidth: "70px",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}>
-              {profile.displayName}
-            </span>
+            <UserAvatar seed={profile.avatarSeed} avatarUrl={profile.avatarUrl ?? null} size={20} />
           </Link>
         )}
-        {isConnected && account && (
-          <WalletBalance />
-        )}
-        {isConnected && account && (
-          <NotificationBell wallet={account} variant={isDark ? "dark" : "light"} />
-        )}
+        {isConnected && account && <WalletBalance />}
+        {isConnected && account && <NotificationBell wallet={account} variant={isDark ? "dark" : "light"} />}
         <ThemeToggle />
         <WalletButton />
       </div>
