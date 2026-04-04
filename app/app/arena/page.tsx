@@ -926,7 +926,7 @@ export default function ArenaPage() {
           position: "fixed",
           inset: 0,
           zIndex: 0,
-          backgroundImage: "url('/poster-bg.png')",
+          backgroundImage: "url('/arena-bg.png')",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
