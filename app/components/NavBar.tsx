@@ -107,35 +107,33 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
   return (
     <nav
       style={{
-        height: "52px",
+        height: "48px",
         borderBottom: isTransparent ? "none" : (isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #e0e0e0"),
-        display: "grid",
-        gridTemplateColumns: "140px 1fr auto",
+        display: "flex",
         alignItems: "center",
-        padding: isTransparent ? "0 40px" : "0 24px",
+        padding: isTransparent ? "0 32px" : "0 20px",
         backgroundColor: "transparent",
         position: "relative",
-        maxWidth: "1400px",
-        margin: "0 auto",
-        width: "100%",
+        gap: "16px",
       }}
     >
       <Link
         href="/"
         style={{
-          fontSize: "12px",
+          fontSize: "11px",
           textTransform: "uppercase",
-          letterSpacing: "0.15em",
+          letterSpacing: "0.12em",
           textDecoration: "none",
           color: isDark ? "#ffffff" : "#000000",
           fontWeight: 700,
           flexShrink: 0,
+          marginRight: "8px",
         }}
       >
         Covenant
       </Link>
 
-      <div className="nav-tabs" style={{ display: "flex", gap: "18px", alignItems: "center", justifyContent: "center" }}>
+      <div className="nav-tabs" style={{ display: "flex", gap: "16px", alignItems: "center", flex: 1 }}>
         {visibleTabs.map((tab) => (
           <Link key={tab.id} href={tab.href} style={tabStyle(tab.id)}>
             {tab.label}
@@ -299,7 +297,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, justifyContent: "flex-end" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
         <span
           style={{
             fontSize: "9px",
@@ -316,7 +314,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         </span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, justifyContent: "flex-end" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
         {isConnected && profile && (
           <Link
             href="/profile"
