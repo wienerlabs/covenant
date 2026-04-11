@@ -8,12 +8,24 @@ import {
 
 const DEVNET_RPC = "https://api.devnet.solana.com";
 
+/**
+ * Resolve the RPC URL: prefer Helius (enhanced RPC, higher rate limits,
+ * better latency) when configured, fall back to public devnet otherwise.
+ */
+function resolveRpcUrl(): string {
+  if (process.env.HELIUS_RPC_URL) return process.env.HELIUS_RPC_URL;
+  if (process.env.HELIUS_API_KEY) {
+    return `https://devnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`;
+  }
+  return process.env.NEXT_PUBLIC_RPC_URL || DEVNET_RPC;
+}
+
 let _connection: Connection | null = null;
 let _deployerKeypair: Keypair | null = null;
 
 export function getConnection(): Connection {
   if (!_connection) {
-    _connection = new Connection(DEVNET_RPC, "confirmed");
+    _connection = new Connection(resolveRpcUrl(), "confirmed");
   }
   return _connection;
 }
