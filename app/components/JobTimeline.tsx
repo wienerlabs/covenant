@@ -73,23 +73,62 @@ export default function JobTimeline({ job, submissions }: JobTimelineProps) {
     });
   }
 
-  // SUBMITTED — if there are submissions
-  if (submissions.length > 0) {
+  // DELIVERED — submit_work has landed
+  const isDelivered =
+    ["Delivered", "Disputed", "Finalized", "Resolved"].includes(job.status) ||
+    submissions.length > 0;
+  if (isDelivered) {
     const totalWords = submissions.reduce((s, sub) => s + sub.wordCount, 0);
     const latestSub = submissions[submissions.length - 1];
     steps.push({
-      key: "submitted",
-      label: "Submitted",
+      key: "delivered",
+      label: "Delivered",
       active: true,
       color: "#93c5fd",
       icon: "\u25CF",
-      timestamp: latestSub.createdAt,
-      detail: `${totalWords.toLocaleString()} words`,
-      txHash: latestSub.txHash,
+      timestamp: latestSub?.createdAt ?? job.updatedAt,
+      detail: latestSub ? `${totalWords.toLocaleString()} words` : undefined,
+      txHash: latestSub?.txHash,
     });
   }
 
-  // COMPLETED
+  // CHALLENGE PERIOD / DISPUTE PATH
+  if (job.status === "Disputed") {
+    steps.push({
+      key: "disputed",
+      label: "Disputed",
+      active: true,
+      color: "#FF425E",
+      icon: "\u26A0",
+      timestamp: job.updatedAt,
+      detail: "Under review by arbitrator",
+    });
+  }
+
+  // TERMINAL STATES
+  if (job.status === "Finalized") {
+    steps.push({
+      key: "finalized",
+      label: "Finalized",
+      active: true,
+      color: "#1E9E5F",
+      icon: "\u2713",
+      timestamp: job.updatedAt,
+      detail: "Payment auto-released",
+    });
+  }
+  if (job.status === "Resolved") {
+    steps.push({
+      key: "resolved",
+      label: "Resolved",
+      active: true,
+      color: "#FFE342",
+      icon: "\u2713",
+      timestamp: job.updatedAt,
+      detail: "Arbitrator decision applied",
+    });
+  }
+  // Legacy "Completed" status from pre-pivot data
   if (job.status === "Completed") {
     steps.push({
       key: "completed",
