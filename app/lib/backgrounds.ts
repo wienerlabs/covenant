@@ -51,6 +51,7 @@ function imageSet(basename: string): string {
 export const BG_POSTER = imageSet("poster-bg");
 export const BG_COVENANT = imageSet("covenant-bg");
 export const BG_ARENA = imageSet("arena-bg");
+export const BG_DEVELOPERS = imageSet("developers-bg");
 
 /**
  * For layouts that need to pass a plain `url()` string (e.g. older React
@@ -60,3 +61,4 @@ export const BG_ARENA = imageSet("arena-bg");
 export const BG_POSTER_PNG = "url('/poster-bg.png')";
 export const BG_COVENANT_PNG = "url('/covenant-bg.png')";
 export const BG_ARENA_PNG = "url('/arena-bg.png')";
+export const BG_DEVELOPERS_PNG = "url('/developers-bg.png')";

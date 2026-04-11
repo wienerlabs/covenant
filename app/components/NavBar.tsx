@@ -65,8 +65,8 @@ interface NavBarProps {
   variant?: "light" | "dark" | "transparent";
 }
 
+// Home is reached by clicking the logo; we don't duplicate it as a tab.
 const PRIMARY_TABS: { id: Tab; label: string; href: string }[] = [
-  { id: "home", label: "Home", href: "/" },
   { id: "agents", label: "Agents", href: "/agents" },
   { id: "poster", label: "Post a Job", href: "/poster" },
   { id: "taker", label: "Find Work", href: "/taker" },
@@ -104,8 +104,10 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
 
-  // Filter out "home" tab on the landing page (transparent variant)
-  const visibleTabs = isTransparent ? PRIMARY_TABS.filter(t => t.id !== "home") : PRIMARY_TABS;
+  // Home is reached by clicking the logo; PRIMARY_TABS no longer contains
+  // a "home" entry so the filter is a no-op kept for future per-variant
+  // hiding rules.
+  const visibleTabs = PRIMARY_TABS;
 
   // Close dropdown when clicking outside
   useEffect(() => {

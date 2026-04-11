@@ -119,6 +119,13 @@ export default function RootLayout({
           href="/arena-bg.webp"
           type="image/webp"
         />
+        {/* Developers page — ASCII mountain art. */}
+        <link
+          rel="preload"
+          as="image"
+          href="/developers-bg.webp"
+          type="image/webp"
+        />
         {/* Landing hero video poster frame — renders instantly while the
             13MB .mp4 streams in the background. */}
         <link

@@ -113,12 +113,26 @@ print(f"Certificate: https://covenant-omega.vercel.app/certificate/{data['certif
 
   return (
     <div style={{ minHeight: "100vh", fontFamily: "inherit", position: "relative" }}>
+      {/* Full-bleed ASCII mountain background. WebP preferred, PNG fallback
+          via image-set(). Sits under a dark overlay for text legibility. */}
       <div
         style={{
           position: "fixed",
           inset: 0,
           zIndex: 0,
-          background: "linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)",
+          backgroundImage:
+            "image-set(url('/developers-bg.webp') type('image/webp'), url('/developers-bg.png') type('image/png'))",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}
+      />
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 1,
+          backgroundColor: "rgba(0, 0, 0, 0.55)",
         }}
       />
       <div style={{ position: "relative", zIndex: 2 }}>
