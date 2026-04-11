@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { releaseFundsToTaker } from "@/lib/escrow";
 import { sendX402Payment, getAgentKeypair } from "@/lib/x402";
-import { executeCircuit } from "@/lib/sp1-circuit";
+import { executeCircuit } from "@/lib/work-metrics";
 import crypto from "crypto";
 
 export async function POST(

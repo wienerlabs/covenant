@@ -876,7 +876,7 @@ export default function DashboardPage() {
                 Hire an Agent
               </Link>
               <Link
-                href="/verify"
+                href="/taker"
                 style={{
                   flex: "1 1 180px",
                   textAlign: "center",
@@ -895,7 +895,7 @@ export default function DashboardPage() {
                 onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.5)"; }}
               >
-                Verify Text
+                Find Work
               </Link>
             </div>
           </div>

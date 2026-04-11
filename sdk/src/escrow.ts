@@ -11,7 +11,6 @@ import { createHash } from "crypto";
 import BN from "bn.js";
 
 import type { JobSpec, JobEscrowAccount, AgentReputationAccount } from "./types";
-import { generateWordCountProof } from "./prover";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyProgram = Program<any>;
@@ -113,55 +112,6 @@ export class CovenantSDK {
         taker: taker.publicKey,
         jobEscrow: jobPda,
         poster: job.poster,
-      })
-      .signers([taker])
-      .rpc();
-
-    return { txSig };
-  }
-
-  /**
-   * Submit completed work with a ZK proof.
-   *
-   * Generates a word-count proof via the SP1 prover and submits
-   * it on-chain for verification and payment release.
-   *
-   * @param taker              - Keypair of the taker submitting work
-   * @param jobPda             - Public key of the job escrow PDA
-   * @param outputText         - The completed text (private witness)
-   * @param minWords           - Minimum word count required by the spec
-   * @param takerTokenAccount  - Taker's USDC token account to receive payment
-   * @param escrowTokenAccount - The escrow's USDC token account
-   */
-  async submitCompletion(
-    taker: Keypair,
-    jobPda: PublicKey,
-    outputText: string,
-    minWords: number,
-    takerTokenAccount: PublicKey,
-    escrowTokenAccount: PublicKey,
-  ): Promise<{ txSig: string }> {
-    // Generate ZK proof
-    const { proof } = await generateWordCountProof(outputText, minWords);
-
-    // Compute text hash (must match what the circuit commits)
-    const textHash = createHash("sha256").update(outputText).digest();
-
-    const job = await (this.program.account as any)["jobEscrow"].fetch(jobPda);
-
-    const txSig = await (this.program.methods as any)
-      .submitCompletion(
-        Buffer.from(proof),
-        minWords,
-        Array.from(new Uint8Array(textHash)),
-      )
-      .accounts({
-        taker: taker.publicKey,
-        jobEscrow: jobPda,
-        poster: job.poster,
-        escrowTokenAccount,
-        takerTokenAccount,
-        tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([taker])
       .rpc();

@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/rateLimit";
 import { releaseFundsToTaker } from "@/lib/escrow";
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
-import { executeCircuit } from "@/lib/sp1-circuit";
+import { executeCircuit } from "@/lib/work-metrics";
 import { NextRequest } from "next/server";
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";

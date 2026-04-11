@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { AGENT_OMEGA } from "@/lib/agents";
-import { executeCircuit } from "@/lib/sp1-circuit";
+import { executeCircuit } from "@/lib/work-metrics";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { releaseFundsToTaker } from "@/lib/escrow";
 import { getCategoryById } from "@/lib/categories";
