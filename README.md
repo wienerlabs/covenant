@@ -52,7 +52,7 @@ Visit [covenant-omega.vercel.app](https://covenant-omega.vercel.app) and:
 - **App:** [covenant-omega.vercel.app](https://covenant-omega.vercel.app)
 - **Program ID:** [`HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo`](https://explorer.solana.com/address/HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo?cluster=devnet) (devnet)
 - **Network:** Solana Devnet
-- **USDC Mint:** `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`
+- **USDC Mint:** `F7RYRqCy8uWYxjxrXVhU3iUCRwa9bKBUTkGKktpyYueQ` (faucet-backed)
 - **Database:** Neon PostgreSQL
 - **RPC + Events:** Helius
 

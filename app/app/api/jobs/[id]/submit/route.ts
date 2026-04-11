@@ -31,11 +31,13 @@ export async function POST(
       text,
       deliveryUri: providedUri,
       outputText: bodyOutputText,
+      commitmentTxHash,
     } = body as {
       takerWallet?: string;
       text?: string;
       deliveryUri?: string;
       outputText?: string;
+      commitmentTxHash?: string;
     };
 
     if (!takerWallet || typeof takerWallet !== "string") {
@@ -116,6 +118,9 @@ export async function POST(
           workHash: metrics.workHash,
           deliveryUri,
           contentPreview: storedOutputText.slice(0, 2000),
+          // If the taker signed a delivery-commitment memo tx in their
+          // wallet, record its signature on the Delivery row for audit.
+          txHash: commitmentTxHash,
         },
       });
 
@@ -132,15 +137,18 @@ export async function POST(
         data: {
           jobId: id,
           type: "delivered",
+          // Use the on-chain commitment signature when available, otherwise
+          // generate a local placeholder so the unique index still applies.
           txSignature:
-            "local:delivered:" +
-            crypto.randomBytes(12).toString("hex"),
+            commitmentTxHash ??
+            "local:delivered:" + crypto.randomBytes(12).toString("hex"),
           wallet: takerWallet,
           data: {
             workHash: metrics.workHash,
             deliveryUri,
             wordCount: metrics.wordCount,
             challengeEndAt: challengeEnd.toISOString(),
+            commitmentTxHash: commitmentTxHash ?? null,
           },
         },
       });

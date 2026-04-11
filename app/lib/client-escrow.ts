@@ -6,11 +6,12 @@ import {
   getAccount,
   createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
-
-const DEVNET_RPC = "https://api.devnet.solana.com";
-const TEST_USDC_MINT = new PublicKey("F7RYRqCy8uWYxjxrXVhU3iUCRwa9bKBUTkGKktpyYueQ");
-const ESCROW_WALLET = new PublicKey("Gy5cU3bNH1DKsff6rp91H1BmtEfwspziR52WfmMVfbPZ"); // deployer = escrow
-const USDC_DECIMALS = 6;
+import {
+  DEVNET_ENDPOINT as DEVNET_RPC,
+  USDC_MINT as TEST_USDC_MINT,
+  ESCROW_WALLET,
+  USDC_DECIMALS,
+} from "./constants";
 
 /**
  * Build a SPL token transfer transaction for the user to sign.

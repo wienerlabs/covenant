@@ -5,6 +5,8 @@ import { useConnector } from "@solana/connector/react";
 import AsciiAnimation from "./AsciiAnimation";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { JOB_CATEGORIES, type CategoryId } from "@/lib/categories";
+import { signAndSendTransaction, deserializeTx } from "@/lib/wallet-sign";
+import { triggerBalanceRefresh } from "@/lib/balance-bus";
 
 interface CreateJobFormProps {
   variant?: "light" | "dark";
@@ -13,7 +15,10 @@ interface CreateJobFormProps {
 
 export default function CreateJobForm({ variant = "light", onJobCreated }: CreateJobFormProps) {
   const isDark = variant === "dark";
-  const { account } = useConnector();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const connector = useConnector() as any;
+  const account = connector.account as string | undefined;
+  const selectedWallet = connector.selectedWallet;
   const [category, setCategory] = useState<CategoryId>("text_writing");
   const [paymentToken, setPaymentToken] = useState<"USDC" | "SOL">("USDC");
   const [amount, setAmount] = useState("");
@@ -74,22 +79,64 @@ export default function CreateJobForm({ variant = "light", onJobCreated }: Creat
       setError("Deadline is required.");
       return;
     }
+    if (!account) {
+      setError("Connect your wallet first.");
+      return;
+    }
 
     setIsSubmitting(true);
 
     try {
-      const posterWallet = account || "anonymous";
+      const posterWallet = account;
+      const amountUsdc = parseFloat(amount);
+      let escrowTxHash: string | undefined;
+      let escrowAta: string | undefined;
+
+      if (paymentToken === "USDC") {
+        // 1. Ask the server to build an unsigned escrow-lock transaction.
+        //    The server never signs -- it just stitches the SPL transfer
+        //    instruction with a recent blockhash and feePayer = posterWallet.
+        const buildRes = await fetch("/api/escrow/build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ posterWallet, amount: amountUsdc }),
+        });
+        if (!buildRes.ok) {
+          const data = await buildRes.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to build escrow transaction");
+        }
+        const build = (await buildRes.json()) as {
+          transaction: string;
+          escrowAta: string;
+        };
+        escrowAta = build.escrowAta;
+
+        // 2. Deserialize + prompt the user's wallet to sign & broadcast.
+        //    This is the step that makes the wallet popup appear and
+        //    debits the user's actual USDC balance.
+        const tx = deserializeTx(build.transaction);
+        escrowTxHash = await signAndSendTransaction(
+          selectedWallet,
+          posterWallet,
+          tx,
+        );
+      }
+
+      // 3. Record the job in the DB. The server verifies escrowTxHash
+      //    against on-chain state before persisting; see /api/jobs POST.
       const response = await fetch("/api/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           posterWallet,
-          amount: parseFloat(amount),
+          amount: amountUsdc,
           minWords: parseInt(minWords),
           language: "en",
           deadline: new Date(deadline).toISOString(),
           category,
           paymentToken,
+          escrowTxHash,
+          escrowAta,
         }),
       });
 
@@ -101,6 +148,8 @@ export default function CreateJobForm({ variant = "light", onJobCreated }: Creat
       const job = await response.json();
       setSuccess(job.id);
       onJobCreated?.();
+      // 4. Flash the NavBar balance so the user sees the decrease immediately.
+      triggerBalanceRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create job");
     } finally {

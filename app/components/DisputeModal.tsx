@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useConnector } from "@solana/connector/react";
+import { signAndSendTransaction, deserializeTx } from "@/lib/wallet-sign";
+import { triggerBalanceRefresh } from "@/lib/balance-bus";
 
 interface DisputeModalProps {
   open: boolean;
@@ -35,7 +38,11 @@ export default function DisputeModal({
   const [reason, setReason] = useState("");
   const [bond, setBond] = useState(minBond);
   const [loading, setLoading] = useState(false);
+  const [stepLabel, setStepLabel] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const connector = useConnector() as any;
+  const selectedWallet = connector.selectedWallet;
 
   const isDark = variant === "dark";
 
@@ -49,6 +56,31 @@ export default function DisputeModal({
     setLoading(true);
     setError(null);
     try {
+      // 1. Ask the server to build an unsigned USDC transfer to the
+      //    escrow wallet for the dispute bond amount.
+      setStepLabel("Building bond transaction...");
+      const buildRes = await fetch("/api/escrow/build", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ posterWallet, amount: bond }),
+      });
+      if (!buildRes.ok) {
+        const err = await buildRes.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to build bond transaction");
+      }
+      const build = (await buildRes.json()) as { transaction: string };
+
+      // 2. Sign + broadcast via the poster's wallet. Wallet popup appears.
+      setStepLabel("Please approve the bond transfer in your wallet...");
+      const tx = deserializeTx(build.transaction);
+      const bondTxHash = await signAndSendTransaction(
+        selectedWallet,
+        posterWallet,
+        tx,
+      );
+
+      // 3. Record the dispute on the server with the confirmed tx hash.
+      setStepLabel("Recording dispute...");
       const res = await fetch(`/api/jobs/${jobId}/dispute`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -56,6 +88,7 @@ export default function DisputeModal({
           posterWallet,
           reasonText: reason,
           bond,
+          txHash: bondTxHash,
         }),
       });
       const body = await res.json();
@@ -63,11 +96,13 @@ export default function DisputeModal({
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
       onRaised?.(body.dispute);
+      triggerBalanceRefresh();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+      setStepLabel("");
     }
   }
 
@@ -216,6 +251,21 @@ export default function DisputeModal({
             }}
           >
             {error}
+          </div>
+        )}
+        {stepLabel && !error && (
+          <div
+            style={{
+              padding: "10px 12px",
+              borderRadius: "6px",
+              backgroundColor: isDark
+                ? "rgba(255,227,66,0.1)"
+                : "rgba(255,227,66,0.15)",
+              color: "#B38F00",
+              fontSize: "12px",
+            }}
+          >
+            {stepLabel}
           </div>
         )}
 

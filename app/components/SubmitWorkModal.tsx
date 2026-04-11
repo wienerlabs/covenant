@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useConnector } from "@solana/connector/react";
+import { signAndSendTransaction } from "@/lib/wallet-sign";
+import { buildMemoTransaction } from "@/lib/memo-tx";
 
 interface SubmitWorkModalProps {
   open: boolean;
@@ -37,6 +40,9 @@ export default function SubmitWorkModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const connector = useConnector() as any;
+  const selectedWallet = connector.selectedWallet;
 
   const isDark = variant === "dark";
   const wordCount = content.trim().split(/\s+/).filter((w) => w.length > 0).length;
@@ -75,8 +81,31 @@ export default function SubmitWorkModal({
         console.warn("[submit-work] blob upload error, falling back to inline:", upErr);
       }
 
-      // Step 2: server-side record
-      setUploadProgress("Recording delivery on-chain...");
+      // Step 2: delivery commitment — taker signs a memo tx binding
+      //   their wallet to the work_hash + delivery_uri. This doesn't
+      //   move any tokens, just creates a signed audit trail so the
+      //   poster (and any arbitrator later) can prove who submitted.
+      let commitmentTxHash: string | undefined;
+      try {
+        setUploadProgress("Please sign the delivery commitment in your wallet...");
+        const memo = `covenant:submit_work job=${jobId} hash=${
+          workHash ? workHash.slice(0, 16) : "inline"
+        }`;
+        const memoTx = await buildMemoTransaction(takerWallet, memo);
+        commitmentTxHash = await signAndSendTransaction(
+          selectedWallet,
+          takerWallet,
+          memoTx,
+        );
+      } catch (memoErr) {
+        // Memo signing is nice-to-have; if the wallet declines or fails
+        // we still record the delivery off-chain so the demo doesn't
+        // deadlock. Surface the error but continue.
+        console.warn("[submit-work] memo signing skipped:", memoErr);
+      }
+
+      // Step 3: server-side record
+      setUploadProgress("Recording delivery...");
       const submitRes = await fetch(`/api/jobs/${jobId}/submit`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -86,6 +115,7 @@ export default function SubmitWorkModal({
           deliveryUri,
           workHash,
           outputText: content,
+          commitmentTxHash,
         }),
       });
       const submitBody = await submitRes.json();

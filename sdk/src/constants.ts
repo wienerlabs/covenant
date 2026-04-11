@@ -7,7 +7,7 @@ export const COVENANT_PROGRAM_ID = new PublicKey(
 
 /** Devnet USDC mint (faucet-backed test mint used by covenant demos). */
 export const DEVNET_USDC_MINT = new PublicKey(
-  "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+  "F7RYRqCy8uWYxjxrXVhU3iUCRwa9bKBUTkGKktpyYueQ",
 );
 
 /** Mainnet USDC mint (the real Circle USDC). */

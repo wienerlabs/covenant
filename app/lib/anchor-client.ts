@@ -1,16 +1,16 @@
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { AnchorProvider, Program, Idl } from "@coral-xyz/anchor";
 import idl from "./covenant-idl.json";
+import {
+  PROGRAM_ID,
+  USDC_MINT,
+  DEVNET_ENDPOINT,
+} from "./constants";
 
-const PROGRAM_ID = new PublicKey(
-  "HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo"
-);
-const DEVNET_RPC = "https://api.devnet.solana.com";
-const DEVNET_USDC_MINT = new PublicKey(
-  "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
-);
-
-export { PROGRAM_ID, DEVNET_USDC_MINT };
+// Re-export canonical names for backwards-compat with existing callers.
+export { PROGRAM_ID };
+export const DEVNET_USDC_MINT = USDC_MINT;
+const DEVNET_RPC = DEVNET_ENDPOINT;
 
 /**
  * Minimal wallet interface for AnchorProvider (server-side only).
