@@ -9,11 +9,11 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        // --font-pixelify now maps to PPMondwest (see app/app/layout.tsx).
-        // Fallback chain matches globals.css so a hydration-time swap
-        // doesn't shift layouts.
-        sans: ["var(--font-pixelify)", "Courier New", "monospace"],
-        mono: ["var(--font-pixelify)", "Courier New", "monospace"],
+        // Body face — Pixelify Sans via --font-pixelify.
+        sans: ["var(--font-pixelify)", "Pixelify Sans", "sans-serif"],
+        // Display face — PPMondwest via --font-display, used on h1-h6
+        // and anything tagged `.font-display`.
+        display: ["var(--font-display)", "Courier New", "monospace"],
       },
       colors: {
         background: "var(--background)",

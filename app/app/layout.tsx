@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Pixelify_Sans } from "next/font/google";
 import localFont from "next/font/local";
 import dynamic from "next/dynamic";
 import "./globals.css";
@@ -10,14 +11,28 @@ const Providers = dynamic(() => import("@/components/Providers"), {
 });
 
 /**
- * PPMondwest — the chunky pixel-bitmap display face we use as the site's
- * single typeface. Self-hosted via next/font/local so it ships with the
- * critical CSS and never blocks first paint waiting on Google Fonts.
+ * Two-face type system:
  *
- * The variable name stays `--font-pixelify` for backwards compatibility
- * with everything that already references it in globals.css and inline
- * styles. Only the source file and displayed identity change.
+ *   --font-pixelify  → Pixelify Sans (Google Fonts) — the BODY face.
+ *                      Used everywhere by default. Most existing inline
+ *                      styles already reference this variable, so they
+ *                      keep rendering in the same face they did before
+ *                      the PPMondwest experiment.
+ *
+ *   --font-display   → PPMondwest (self-hosted .otf) — the DISPLAY face.
+ *                      Used only on headings (h1-h6) via a rule in
+ *                      globals.css and on anything with class
+ *                      `font-display`. Chunkier pixel bitmap that
+ *                      carries the brand feel without flattening body
+ *                      text legibility.
  */
+const pixelifySans = Pixelify_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-pixelify",
+  display: "swap",
+});
+
 const mondwest = localFont({
   src: [
     {
@@ -26,13 +41,9 @@ const mondwest = localFont({
       style: "normal",
     },
   ],
-  variable: "--font-pixelify",
+  variable: "--font-display",
   display: "swap",
-  // Use Courier (monospaced, pre-installed everywhere) as the fallback
-  // so the pre-font-load flash keeps roughly the same glyph width and
-  // layouts don't jump when the pixel face hydrates.
   fallback: ["Courier New", "Courier", "monospace"],
-  // Adjust metrics to keep vertical rhythm stable across the swap.
   adjustFontFallback: false,
 });
 
@@ -67,7 +78,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${mondwest.variable} ${mondwest.className}`}>
+    <html
+      lang="en"
+      className={`${pixelifySans.variable} ${mondwest.variable} ${pixelifySans.className}`}
+    >
       <head>
         {/*
           Critical backgrounds — kick off fetches in parallel with HTML so

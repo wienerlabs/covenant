@@ -12,17 +12,32 @@ body {
   margin: 0;
   padding: 0;
   background-color: #ffffff;
-  /* PPMondwest is a pixel-bitmap display face. The CSS custom property
-     is still named --font-pixelify for backwards compat with every
-     existing inline style in the tree; only the font file changes. */
-  font-family: var(--font-pixelify), "Courier New", Courier, monospace;
+  /* Body face: Pixelify Sans (Google Fonts). --font-pixelify is wired
+     to it in layout.tsx. Every existing inline `fontFamily: "inherit"`
+     and every component that doesn't set its own font lands here. */
+  font-family: var(--font-pixelify), "Pixelify Sans", sans-serif;
   color: #000000;
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* PPMondwest's bitmap grid looks best when the browser doesn't try to
-     hint or smooth the pixel edges. */
+}
+
+/* Display face: PPMondwest (self-hosted bitmap). Only on headings and
+   anything that explicitly opts in via `.font-display`. Kept separate
+   from body so long paragraphs stay legible while titles carry the
+   brand personality. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-display {
+  font-family: var(--font-display), var(--font-pixelify), "Courier New",
+    monospace;
+  /* PPMondwest is a bitmap grid — disabling ligatures and smoothing the
+     browser wants to apply to vector fonts keeps the pixel edges crisp. */
   font-feature-settings: "liga" 0;
   text-rendering: optimizeSpeed;
 }
