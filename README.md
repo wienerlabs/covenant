@@ -145,7 +145,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full specification.
 | Enhanced RPC | All Solana RPC traffic (latency + reliability) |
 | Webhooks | Real-time event streaming from program → `/api/helius/webhook` → Prisma |
 | Priority Fee API | Dynamic compute unit price for `submit_work` / `finalize_payment` / `raise_dispute` |
-| Reconciliation fallback | Cron job at `/api/cron/reconcile` catches webhook misses |
+| Reconciliation fallback | Cron job at `/api/cron/reconcile` catches webhook misses (see cron section below) |
 
 ### Frontend (Next.js 14)
 
@@ -233,6 +233,27 @@ cd app && yarn dev
 3. Add environment variables (see [`app/.env.example`](app/.env.example))
 4. Configure Helius webhook to point at `https://<your-deployment>/api/helius/webhook`
 5. Deploy
+
+## Cron workers
+
+Covenant relies on two cron-driven endpoints:
+
+| Endpoint | Purpose | Primary runner | Fallback |
+|---|---|---|---|
+| `/api/cron/finalize` | Release escrow on jobs whose challenge period expired | GitHub Actions (every 5m) | Vercel daily |
+| `/api/cron/reconcile` | Re-scan program signatures for any missed Helius webhook events | GitHub Actions (every 10m) | Vercel daily |
+
+**Why two runners?** Vercel's Hobby plan [caps cron schedules at once per day](https://vercel.com/docs/cron-jobs/usage-and-pricing). The Covenant flow needs 5-minute precision so challenge periods end cleanly; GitHub Actions gives us that for free, independent of the Vercel plan.
+
+**GitHub Actions setup (required on Hobby, optional on Pro):**
+
+1. In the repo settings → **Variables and secrets**, set:
+   - Variable `COVENANT_APP_URL` = your deployment URL (e.g. `https://covenant-omega.vercel.app`)
+   - Secret `CRON_SECRET` = same value as the `CRON_SECRET` env var in Vercel
+2. The workflow at `.github/workflows/covenant-crons.yml` runs automatically on the schedule
+3. Use the **Run workflow** button for manual triggers during demos
+
+**Pro plan upgrade path:** On Vercel Pro you can bring the `vercel.json` crons down to `*/5 * * * *` / `*/10 * * * *` and delete the GitHub Actions workflow. Both paths hit the same endpoints, so nothing else changes.
 
 ## Environment Variables
 

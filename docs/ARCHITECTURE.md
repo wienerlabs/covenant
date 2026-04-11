@@ -229,12 +229,21 @@ We do not claim to be decentralized in v1. We claim to be a settlement protocol 
 
 - **Enhanced RPC**: all Solana RPC traffic through Helius for latency + reliability
 - **Webhooks**: Helius pushes every Covenant program transaction to `/api/helius/webhook`; endpoint verifies the auth header, extracts instruction + accounts, and upserts to Prisma. Idempotent via `txSignature` unique constraint.
-- **Reconciliation cron**: `/api/cron/reconcile` runs every 5 minutes to catch webhook misses by scanning recent program transactions via `getSignaturesForAddress`
+- **Reconciliation cron**: `/api/cron/reconcile` runs every 10 minutes to catch webhook misses by scanning recent program transactions via `getSignaturesForAddress`
 - **Priority fee API**: transaction builders query `/v1/priority-fee-estimate` and attach a `ComputeBudgetProgram.setComputeUnitPrice` instruction
 
 ### Finalize worker
 
-A `/api/cron/finalize` job scans for `JobStatus::Delivered` rows with expired challenge periods and submits `finalize_payment` transactions. This is a convenience — anyone can call finalize_payment directly — but guarantees progress even if no party wakes up to push the button.
+A `/api/cron/finalize` endpoint scans for `JobStatus::Delivered` rows with expired challenge periods and submits `finalize_payment` transactions. It's a convenience — anyone can call `finalize_payment` directly — but guarantees progress even if no party wakes up to push the button.
+
+**Scheduling:** the endpoint is driven by two independent cron paths for reliability:
+
+1. **GitHub Actions** (primary) — `.github/workflows/covenant-crons.yml` runs every 5 minutes, 10 minutes via `curl` with a `CRON_SECRET` bearer token. Free, frequency-unlimited, works on any Vercel plan.
+2. **Vercel Cron** (fallback) — `app/vercel.json` defines daily schedules at 03:00 and 03:30. This is the daily-only cap on Vercel's **Hobby** tier; upgrading to **Pro** unlocks per-minute precision and the `vercel.json` schedules can be tightened to match the GitHub Actions cadence.
+
+Both paths hit the same endpoint; the endpoint is idempotent so double-runs are safe. The manual "Finalize now" button on the job detail page is the third path — humans can always finalize themselves.
+
+> Vercel Hobby cron pricing: 100 cron jobs per project, **once per day only**. See `https://vercel.com/docs/cron-jobs/usage-and-pricing`. This is why the repo ships both a GitHub Actions runner and a daily `vercel.json` fallback.
 
 ## Deployment
 

@@ -1,0 +1,96 @@
+name: Covenant Crons
+
+# Real-frequency cron runner for the Covenant optimistic settlement
+# protocol. Runs independent of the Vercel plan — works on Hobby tier
+# where Vercel's own crons are capped at once-per-day.
+#
+# What runs here:
+#   - /api/cron/finalize   (every 5 minutes) — finalizes Delivered jobs
+#                          whose challenge period has expired and
+#                          releases escrow to the taker
+#   - /api/cron/reconcile  (every 10 minutes) — fallback for any Helius
+#                          webhook deliveries that were missed, by
+#                          scanning recent program signatures
+#
+# Setup:
+#   1. Set the `COVENANT_APP_URL` repository variable to the deployment URL
+#      (e.g. https://covenant-omega.vercel.app)
+#   2. Set the `CRON_SECRET` repository secret to the value used in the
+#      Vercel env var of the same name
+#   3. Ensure both endpoints accept Authorization: Bearer <CRON_SECRET>
+#
+# Latency characteristics:
+#   GitHub Actions scheduled workflows are best-effort; actual trigger
+#   time can drift up to ~15 minutes during GitHub load spikes. For the
+#   hackathon demo this is acceptable — combined with the daily Vercel
+#   fallback cron and the manual "Finalize now" button, the protocol is
+#   guaranteed to make progress under every failure mode.
+
+on:
+  schedule:
+    # Every 5 minutes: finalize
+    - cron: "*/5 * * * *"
+    # Every 10 minutes: reconcile
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      endpoint:
+        description: "Which endpoint to hit (finalize or reconcile)"
+        required: true
+        default: "finalize"
+        type: choice
+        options:
+          - finalize
+          - reconcile
+
+jobs:
+  finalize:
+    # Run on the */5 schedule and manual dispatch when selected
+    if: github.event_name != 'schedule' || github.event.schedule == '*/5 * * * *' || github.event.inputs.endpoint == 'finalize'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Hit finalize endpoint
+        env:
+          APP_URL: ${{ vars.COVENANT_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "::warning::COVENANT_APP_URL variable not set; skipping"
+            exit 0
+          fi
+          echo "POST $APP_URL/api/cron/finalize"
+          response=$(curl --fail-with-body --show-error --silent \
+            --max-time 60 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Accept: application/json" \
+            "$APP_URL/api/cron/finalize" || echo '{"error":"curl failed"}')
+          echo "$response"
+          # Surface any failure counts so we see them in the Actions UI
+          failed=$(echo "$response" | grep -o '"failed":[0-9]*' | head -1 || echo "")
+          if [ -n "$failed" ] && [ "$failed" != '"failed":0' ]; then
+            echo "::warning::finalize cron reports $failed"
+          fi
+
+  reconcile:
+    # Run on the */10 schedule and manual dispatch when selected
+    if: github.event_name != 'schedule' || github.event.schedule == '*/10 * * * *' || github.event.inputs.endpoint == 'reconcile'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Hit reconcile endpoint
+        env:
+          APP_URL: ${{ vars.COVENANT_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "::warning::COVENANT_APP_URL variable not set; skipping"
+            exit 0
+          fi
+          echo "GET $APP_URL/api/cron/reconcile"
+          response=$(curl --fail-with-body --show-error --silent \
+            --max-time 60 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Accept: application/json" \
+            "$APP_URL/api/cron/reconcile" || echo '{"error":"curl failed"}')
+          echo "$response"
