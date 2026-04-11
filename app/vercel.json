@@ -2,15 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "buildCommand": "prisma generate && next build",
-  "outputDirectory": ".next",
-  "crons": [
-    {
-      "path": "/api/cron/finalize",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/reconcile",
-      "schedule": "30 3 * * *"
-    }
-  ]
+  "outputDirectory": ".next"
 }

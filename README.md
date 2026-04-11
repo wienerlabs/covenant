@@ -238,22 +238,22 @@ cd app && yarn dev
 
 Covenant relies on two cron-driven endpoints:
 
-| Endpoint | Purpose | Primary runner | Fallback |
-|---|---|---|---|
-| `/api/cron/finalize` | Release escrow on jobs whose challenge period expired | GitHub Actions (every 5m) | Vercel daily |
-| `/api/cron/reconcile` | Re-scan program signatures for any missed Helius webhook events | GitHub Actions (every 10m) | Vercel daily |
+| Endpoint | Purpose | Frequency |
+|---|---|---|
+| `/api/cron/finalize` | Release escrow on jobs whose challenge period expired | 5 minutes |
+| `/api/cron/reconcile` | Re-scan program signatures for any missed Helius webhook events | 10 minutes |
 
-**Why two runners?** Vercel's Hobby plan [caps cron schedules at once per day](https://vercel.com/docs/cron-jobs/usage-and-pricing). The Covenant flow needs 5-minute precision so challenge periods end cleanly; GitHub Actions gives us that for free, independent of the Vercel plan.
+Both are driven by **GitHub Actions** (`.github/workflows/covenant-crons.yml`), not Vercel. Vercel Hobby [caps cron schedules at once per day](https://vercel.com/docs/cron-jobs/usage-and-pricing) which is too slow for our 24h challenge periods; GitHub Actions is free, runs at any interval, and is plan-agnostic.
 
-**GitHub Actions setup (required on Hobby, optional on Pro):**
+**Setup:**
 
-1. In the repo settings → **Variables and secrets**, set:
+1. In the GitHub repo → **Settings** → **Secrets and variables** → **Actions**:
    - Variable `COVENANT_APP_URL` = your deployment URL (e.g. `https://covenant-omega.vercel.app`)
    - Secret `CRON_SECRET` = same value as the `CRON_SECRET` env var in Vercel
-2. The workflow at `.github/workflows/covenant-crons.yml` runs automatically on the schedule
-3. Use the **Run workflow** button for manual triggers during demos
+2. The workflow runs automatically on schedule after the branch merges
+3. Use **Run workflow** in the Actions tab for manual triggers during demos
 
-**Pro plan upgrade path:** On Vercel Pro you can bring the `vercel.json` crons down to `*/5 * * * *` / `*/10 * * * *` and delete the GitHub Actions workflow. Both paths hit the same endpoints, so nothing else changes.
+**Not a cron dependency:** `/api/cron/finalize` is also a plain HTTP endpoint. The job detail page has a "Finalize now" button that anyone can press once the countdown hits zero, so even if the cron runner is down, users can push the protocol forward themselves. The cron is a convenience, not a single point of failure.
 
 ## Environment Variables
 

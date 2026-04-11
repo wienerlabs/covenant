@@ -236,14 +236,17 @@ We do not claim to be decentralized in v1. We claim to be a settlement protocol 
 
 A `/api/cron/finalize` endpoint scans for `JobStatus::Delivered` rows with expired challenge periods and submits `finalize_payment` transactions. It's a convenience — anyone can call `finalize_payment` directly — but guarantees progress even if no party wakes up to push the button.
 
-**Scheduling:** the endpoint is driven by two independent cron paths for reliability:
+**Scheduling:** driven entirely by GitHub Actions (`.github/workflows/covenant-crons.yml`), which runs `curl` against the endpoint every 5 minutes (finalize) and every 10 minutes (reconcile) with a `CRON_SECRET` bearer token.
 
-1. **GitHub Actions** (primary) — `.github/workflows/covenant-crons.yml` runs every 5 minutes, 10 minutes via `curl` with a `CRON_SECRET` bearer token. Free, frequency-unlimited, works on any Vercel plan.
-2. **Vercel Cron** (fallback) — `app/vercel.json` defines daily schedules at 03:00 and 03:30. This is the daily-only cap on Vercel's **Hobby** tier; upgrading to **Pro** unlocks per-minute precision and the `vercel.json` schedules can be tightened to match the GitHub Actions cadence.
+**Why not Vercel Cron?** Vercel's Hobby plan caps cron schedules to [once per day](https://vercel.com/docs/cron-jobs/usage-and-pricing), which is useless for 24h challenge periods. On Pro you'd get per-minute precision, but then you'd be running two cron systems doing identical work — configuration noise without resilience benefit, because both runners hit the same idempotent endpoint and the failure modes are correlated (neither runner protects against an application-layer bug). Picking one clear source of truth is simpler. If you upgrade to Pro, move the schedule into `vercel.json` and delete the GitHub Actions workflow; don't run both.
 
-Both paths hit the same endpoint; the endpoint is idempotent so double-runs are safe. The manual "Finalize now" button on the job detail page is the third path — humans can always finalize themselves.
+**Three layers of progress guarantee:**
 
-> Vercel Hobby cron pricing: 100 cron jobs per project, **once per day only**. See `https://vercel.com/docs/cron-jobs/usage-and-pricing`. This is why the repo ships both a GitHub Actions runner and a daily `vercel.json` fallback.
+1. Cron runner hits `/api/cron/finalize` every 5 minutes
+2. The job detail page has a "Finalize now" button that any wallet can press once the countdown hits zero
+3. The on-chain `finalize_payment` instruction is permissionless — anyone running an SDK can build the transaction themselves
+
+Even if all cron infrastructure fails, the protocol never enters a stuck state: a user can always walk up and finalize manually.
 
 ## Deployment
 
