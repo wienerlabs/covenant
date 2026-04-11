@@ -123,17 +123,40 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
       <Link
         href="/"
         style={{
-          fontSize: "11px",
-          textTransform: "uppercase",
-          letterSpacing: "0.12em",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
           textDecoration: "none",
-          color: isDark ? "#ffffff" : "#000000",
-          fontWeight: 700,
           flexShrink: 0,
           marginRight: "8px",
         }}
       >
-        Covenant
+        {/* Pixel-art mark. Designed white-on-transparent; invert on light variant
+            so it stays readable against a light background. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/covenant-logo.png"
+          alt="Covenant"
+          width={24}
+          height={24}
+          style={{
+            width: "24px",
+            height: "24px",
+            imageRendering: "pixelated",
+            filter: isDark ? "none" : "invert(1)",
+          }}
+        />
+        <span
+          style={{
+            fontSize: "11px",
+            textTransform: "uppercase",
+            letterSpacing: "0.12em",
+            color: isDark ? "#ffffff" : "#000000",
+            fontWeight: 700,
+          }}
+        >
+          Covenant
+        </span>
       </Link>
 
       <div className="nav-tabs" style={{ display: "flex", gap: "16px", alignItems: "center", flex: 1 }}>
