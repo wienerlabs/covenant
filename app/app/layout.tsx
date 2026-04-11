@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Pixelify_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import dynamic from "next/dynamic";
 import "./globals.css";
 
@@ -9,10 +9,31 @@ const Providers = dynamic(() => import("@/components/Providers"), {
   ssr: false,
 });
 
-const pixelifySans = Pixelify_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+/**
+ * PPMondwest — the chunky pixel-bitmap display face we use as the site's
+ * single typeface. Self-hosted via next/font/local so it ships with the
+ * critical CSS and never blocks first paint waiting on Google Fonts.
+ *
+ * The variable name stays `--font-pixelify` for backwards compatibility
+ * with everything that already references it in globals.css and inline
+ * styles. Only the source file and displayed identity change.
+ */
+const mondwest = localFont({
+  src: [
+    {
+      path: "./fonts/PPMondwest-Regular.otf",
+      weight: "400",
+      style: "normal",
+    },
+  ],
   variable: "--font-pixelify",
+  display: "swap",
+  // Use Courier (monospaced, pre-installed everywhere) as the fallback
+  // so the pre-font-load flash keeps roughly the same glyph width and
+  // layouts don't jump when the pixel face hydrates.
+  fallback: ["Courier New", "Courier", "monospace"],
+  // Adjust metrics to keep vertical rhythm stable across the swap.
+  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
@@ -46,7 +67,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${pixelifySans.variable} ${pixelifySans.className}`}>
+    <html lang="en" className={`${mondwest.variable} ${mondwest.className}`}>
       <head>
         {/*
           Critical backgrounds — kick off fetches in parallel with HTML so
@@ -101,6 +122,10 @@ export default function RootLayout({
           href="/covenant-logo.png"
           type="image/png"
         />
+        {/* PPMondwest is our only display face — preloading it avoids a
+            brief flash of fallback Courier when the pixel bitmap hasn't
+            decoded yet. next/font/local with display:swap handles the
+            swap cleanly either way. */}
       </head>
       <body>
         <Providers>{children}</Providers>

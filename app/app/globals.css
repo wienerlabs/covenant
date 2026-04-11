@@ -12,12 +12,19 @@ body {
   margin: 0;
   padding: 0;
   background-color: #ffffff;
-  font-family: var(--font-pixelify), 'Pixelify Sans', sans-serif;
+  /* PPMondwest is a pixel-bitmap display face. The CSS custom property
+     is still named --font-pixelify for backwards compat with every
+     existing inline style in the tree; only the font file changes. */
+  font-family: var(--font-pixelify), "Courier New", Courier, monospace;
   color: #000000;
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* PPMondwest's bitmap grid looks best when the browser doesn't try to
+     hint or smooth the pixel edges. */
+  font-feature-settings: "liga" 0;
+  text-rendering: optimizeSpeed;
 }
 
 ::selection {
