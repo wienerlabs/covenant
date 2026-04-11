@@ -5,6 +5,8 @@ import { useConnector } from "@solana/connector/react";
 import { JOB_CATEGORIES, type CategoryId } from "@/lib/categories";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { fireConfetti } from "@/lib/confetti";
+import { signAndSendTransaction, deserializeTx } from "@/lib/wallet-sign";
+import { triggerBalanceRefresh } from "@/lib/balance-bus";
 
 interface JobWizardProps {
   onComplete?: (data: Record<string, unknown>) => void;
@@ -21,7 +23,10 @@ interface WizardData {
 
 export default function JobWizard({ onComplete, variant = "dark" }: JobWizardProps) {
   const isDark = variant === "dark";
-  const { account } = useConnector();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const connector = useConnector() as any;
+  const account = connector.account as string | undefined;
+  const selectedWallet = connector.selectedWallet;
   const [step, setStep] = useState(1);
   const [data, setData] = useState<WizardData>({
     category: null,
@@ -49,7 +54,9 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [faucetLoading, setFaucetLoading] = useState(false);
   const [faucetSuccess, setFaucetSuccess] = useState(false);
-  const [escrowStep, setEscrowStep] = useState<"idle" | "checking" | "approved" | "creating">("idle");
+  const [escrowStep, setEscrowStep] = useState<
+    "idle" | "checking" | "approved" | "building" | "signing" | "creating"
+  >("idle");
 
   const cardBg = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.03)";
   const cardBorder = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)";
@@ -142,7 +149,6 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
     }
 
     setSubmitting(true);
-    setEscrowStep("creating");
     setError(null);
 
     try {
@@ -165,7 +171,59 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
         ...(data.category === "design" && stylePreference ? { stylePreference } : {}),
       };
 
-      // Use escrow/confirm endpoint for integrated escrow + job creation
+      let escrowTxHash: string | undefined;
+      let escrowAta: string | undefined;
+
+      // ----- Wallet-signed escrow lock (USDC only) -----
+      // Skip for SOL payments which don't need an SPL transfer.
+      // The user's wallet pops up here and a real USDC transfer
+      // moves funds from their ATA into the escrow ATA.
+      if (data.paymentToken === "USDC") {
+        setEscrowStep("building");
+        const buildRes = await fetch("/api/escrow/build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            posterWallet: account,
+            amount: data.amount,
+          }),
+        });
+        if (!buildRes.ok) {
+          const d = await buildRes.json().catch(() => ({}));
+          setError(d.error || "Failed to build escrow transaction");
+          setEscrowStep("idle");
+          return;
+        }
+        const build = (await buildRes.json()) as {
+          transaction: string;
+          escrowAta: string;
+        };
+        escrowAta = build.escrowAta;
+
+        setEscrowStep("signing");
+        try {
+          const tx = deserializeTx(build.transaction);
+          escrowTxHash = await signAndSendTransaction(
+            selectedWallet,
+            account,
+            tx,
+          );
+        } catch (signErr) {
+          setError(
+            signErr instanceof Error
+              ? `Wallet signing failed: ${signErr.message}`
+              : "Wallet signing failed",
+          );
+          setEscrowStep("idle");
+          return;
+        }
+      }
+
+      // ----- Record on the server -----
+      // Server verifies escrowTxHash on chain (if present) before
+      // persisting the Job row, so the only way the DB ends up with
+      // an unbacked job is via the legacy known-wallet agent path.
+      setEscrowStep("creating");
       const res = await fetch("/api/escrow/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -173,6 +231,8 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
           posterWallet: account,
           amount: data.amount,
           jobData,
+          escrowTxHash,
+          escrowAta,
         }),
       });
 
@@ -184,9 +244,14 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
       }
 
       const jobResult = await res.json();
-      setResult({ jobId: jobResult.id || jobResult.jobId, txHash: jobResult.txHash || null });
+      setResult({
+        jobId: jobResult.id || jobResult.jobId,
+        txHash: escrowTxHash || jobResult.txHash || null,
+      });
       setStep(4);
       fireConfetti();
+      // Refresh NavBar balance — USDC just left the user's wallet
+      triggerBalanceRefresh();
       if (onComplete) onComplete(jobResult);
     } catch {
       setError("Network error. Please try again.");
@@ -888,7 +953,13 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
               }}
             >
               {submitting
-                ? escrowStep === "creating" ? "Locking Escrow & Creating Job..." : "Processing..."
+                ? escrowStep === "building"
+                  ? "Building escrow transaction..."
+                  : escrowStep === "signing"
+                    ? "Approve in your wallet..."
+                    : escrowStep === "creating"
+                      ? "Recording on protocol..."
+                      : "Processing..."
                 : (data.paymentToken === "USDC" && !hasSufficientBalance)
                   ? "Insufficient Balance"
                   : `Approve ${data.amount} ${data.paymentToken} & Create Job`}

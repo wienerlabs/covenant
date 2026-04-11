@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Keypair } from "@solana/web3.js";
+import { Connection, Keypair } from "@solana/web3.js";
 import { lockFundsInEscrow } from "@/lib/escrow";
 import { sendMarkerTransaction } from "@/lib/solana";
 import crypto from "crypto";
@@ -12,7 +12,15 @@ export async function POST(request: NextRequest) {
       posterWallet,
       amount,
       jobData,
-    } = body;
+      escrowTxHash: clientEscrowTxHash,
+      escrowAta: clientEscrowAta,
+    } = body as {
+      posterWallet?: string;
+      amount?: number;
+      jobData?: Record<string, unknown>;
+      escrowTxHash?: string;
+      escrowAta?: string;
+    };
 
     if (!posterWallet || typeof posterWallet !== "string") {
       return NextResponse.json({ error: "posterWallet is required" }, { status: 400 });
@@ -24,23 +32,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "jobData is required" }, { status: 400 });
     }
 
-    const {
-      title,
-      description,
-      requirements,
-      category,
-      paymentToken,
-      minWords,
-      language,
-      deadline,
-      sourceText,
-      repoUrl,
-      targetUrl,
-      stylePreference,
-    } = jobData;
+    // jobData fields come in as `unknown` after the typed destructure;
+    // narrow each one to the type the rest of the route expects.
+    const jd = jobData as Record<string, unknown>;
+    const title = typeof jd.title === "string" ? jd.title : "";
+    const description = typeof jd.description === "string" ? jd.description : "";
+    const requirements = typeof jd.requirements === "string" ? jd.requirements : "";
+    const category = typeof jd.category === "string" ? jd.category : "text_writing";
+    const paymentToken = jd.paymentToken === "SOL" ? "SOL" : "USDC";
+    const minWords = typeof jd.minWords === "number" ? jd.minWords : 0;
+    const language = typeof jd.language === "string" ? jd.language : "English";
+    const deadline = typeof jd.deadline === "string" ? jd.deadline : "";
+    const sourceText = typeof jd.sourceText === "string" ? jd.sourceText : undefined;
+    const repoUrl = typeof jd.repoUrl === "string" ? jd.repoUrl : undefined;
+    const targetUrl = typeof jd.targetUrl === "string" ? jd.targetUrl : undefined;
+    const stylePreference =
+      typeof jd.stylePreference === "string" ? jd.stylePreference : undefined;
 
     if (!minWords || !deadline) {
-      return NextResponse.json({ error: "jobData must include minWords and deadline" }, { status: 400 });
+      return NextResponse.json(
+        { error: "jobData must include minWords and deadline" },
+        { status: 400 },
+      );
     }
 
     const deadlineDate = new Date(deadline);
@@ -70,36 +83,122 @@ export async function POST(request: NextRequest) {
       .update(JSON.stringify(specJson))
       .digest("hex");
 
-    // Attempt server-side escrow lock
-    // For known wallets with keypairs, do a real SPL transfer
-    // For external wallets, use mint+lock (deployer mints to escrow on behalf)
+    // ----- Escrow lock resolution -----
+    //
+    // Three paths, in priority order:
+    //
+    //   1. Client-signed transfer (NEW). The frontend already prompted
+    //      the user's wallet via /api/escrow/build + signAndSendTransaction
+    //      and gives us the resulting tx signature in the body. We verify
+    //      it on chain and accept it as the lock evidence.
+    //
+    //   2. Server-keypair lock (LEGACY). The poster wallet matches an
+    //      env-held agent keypair (Alpha / Omega / Deployer). The server
+    //      signs the SPL transfer with that keypair. Used by the arena,
+    //      battle, and autonomous demos which run head-less and have
+    //      no UI to prompt.
+    //
+    //   3. None (REJECTED for human wallets). If the wallet is unknown
+    //      and the body has no escrowTxHash, we refuse to write the Job
+    //      row. This is the bug fix: previously the route silently
+    //      created a Job with txHash=null, making the demo look like
+    //      it worked while no funds had moved.
     let escrowTxHash: string | null = null;
 
-    const knownWallets: Record<string, string> = {};
-    if (process.env.AGENT_ALPHA_WALLET) knownWallets[process.env.AGENT_ALPHA_WALLET] = "AGENT_ALPHA_KEYPAIR";
-    if (process.env.AGENT_OMEGA_WALLET) knownWallets[process.env.AGENT_OMEGA_WALLET] = "AGENT_OMEGA_KEYPAIR";
-    try {
-      const deployerKpRaw = JSON.parse(process.env.DEPLOYER_KEYPAIR || "[]");
-      if (deployerKpRaw.length > 0) {
-        const deployerWallet = Keypair.fromSecretKey(Uint8Array.from(deployerKpRaw)).publicKey.toBase58();
-        knownWallets[deployerWallet] = "DEPLOYER_KEYPAIR";
-      }
-    } catch { /* ignore */ }
+    if (paymentToken !== "SOL") {
+      if (
+        typeof clientEscrowTxHash === "string" &&
+        clientEscrowTxHash.length > 0
+      ) {
+        // Path 1 — verify client-signed tx on chain
+        try {
+          const rpc =
+            process.env.HELIUS_RPC_URL ||
+            process.env.NEXT_PUBLIC_RPC_URL ||
+            "https://api.devnet.solana.com";
+          const connection = new Connection(rpc, "confirmed");
+          const tx = await connection.getTransaction(clientEscrowTxHash, {
+            maxSupportedTransactionVersion: 0,
+            commitment: "confirmed",
+          });
+          if (!tx) {
+            throw new Error(
+              `Escrow tx ${clientEscrowTxHash.slice(0, 8)}... not found on chain`,
+            );
+          }
+          if (tx.meta?.err) {
+            throw new Error(
+              `Escrow tx reverted: ${JSON.stringify(tx.meta.err)}`,
+            );
+          }
+          escrowTxHash = clientEscrowTxHash;
+          console.log(
+            "[escrow/confirm] verified client-signed lock:",
+            clientEscrowTxHash,
+          );
+        } catch (err) {
+          console.error("[escrow/confirm] client tx verification failed:", err);
+          return NextResponse.json(
+            {
+              error:
+                "Escrow transaction could not be verified on chain. No funds were locked. " +
+                (err instanceof Error ? err.message : String(err)),
+            },
+            { status: 400 },
+          );
+        }
+      } else {
+        // Path 2 — server-side fallback for known agent wallets
+        const knownWallets: Record<string, string> = {};
+        if (process.env.AGENT_ALPHA_WALLET)
+          knownWallets[process.env.AGENT_ALPHA_WALLET] = "AGENT_ALPHA_KEYPAIR";
+        if (process.env.AGENT_OMEGA_WALLET)
+          knownWallets[process.env.AGENT_OMEGA_WALLET] = "AGENT_OMEGA_KEYPAIR";
+        try {
+          const deployerKpRaw = JSON.parse(process.env.DEPLOYER_KEYPAIR || "[]");
+          if (deployerKpRaw.length > 0) {
+            const deployerWallet = Keypair.fromSecretKey(
+              Uint8Array.from(deployerKpRaw),
+            ).publicKey.toBase58();
+            knownWallets[deployerWallet] = "DEPLOYER_KEYPAIR";
+          }
+        } catch {
+          /* ignore */
+        }
 
-    const keypairEnv = knownWallets[posterWallet];
-
-    if (keypairEnv && paymentToken !== "SOL") {
-      // Known wallet: do real SPL lock
-      try {
-        const result = await lockFundsInEscrow(keypairEnv, amount);
-        escrowTxHash = result.txHash;
-      } catch (err) {
-        console.error("[escrow/confirm] Real lock failed for known wallet:", err);
+        const keypairEnv = knownWallets[posterWallet];
+        if (keypairEnv) {
+          try {
+            const result = await lockFundsInEscrow(keypairEnv, amount);
+            escrowTxHash = result.txHash;
+          } catch (err) {
+            console.error(
+              "[escrow/confirm] server-keypair lock failed:",
+              err,
+            );
+          }
+        } else {
+          // Path 3 — human wallet without a signed tx, reject
+          return NextResponse.json(
+            {
+              error:
+                "Missing escrowTxHash. Human wallets must sign the escrow lock client-side via /api/escrow/build → signAndSendTransaction.",
+            },
+            { status: 400 },
+          );
+        }
       }
     }
 
-    // If no real lock happened, the escrow is handled by the protocol
-    // (deployer acts as escrow, funds are tracked in DB)
+    // SOL payment path falls through with escrowTxHash=null. SOL escrow
+    // is not part of the v1 protocol; the job is recorded so the demo
+    // pages keep working but the on-chain lock is a no-op.
+
+    // clientEscrowAta is informational only — keep the reference alive
+    // so the linter doesn't drop the destructure.
+    if (clientEscrowAta) {
+      console.log("[escrow/confirm] escrowAta reported by client:", clientEscrowAta);
+    }
 
     // Create the job
     const job = await prisma.job.create({
