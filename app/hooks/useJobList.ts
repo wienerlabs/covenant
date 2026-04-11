@@ -9,7 +9,15 @@ export interface JobData {
   paymentToken: string;
   specHash: string;
   specJson: Record<string, unknown>;
-  status: "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed";
+  status:
+    | "Open"
+    | "Accepted"
+    | "Delivered"
+    | "Disputed"
+    | "Finalized"
+    | "Resolved"
+    | "Completed" // legacy / pre-pivot
+    | "Cancelled";
   category: string;
   minWords: number;
   language: string;

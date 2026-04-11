@@ -30,6 +30,8 @@ export interface WorkMetrics {
   categoryProof: string;
   /** Execution time in milliseconds */
   executionTime: number;
+  /** Legacy field retained for UI backwards compatibility. Always 0. */
+  cycleCount: number;
   /** Public metadata that gets committed to the chain via work_hash */
   publicValues: {
     minWords: number;
@@ -122,6 +124,7 @@ export function computeWorkMetrics(
     quantityPass,
     categoryProof,
     executionTime: Math.round(executionTime * 100) / 100,
+    cycleCount: 0,
     publicValues: { minWords, workHash, category },
   };
 }

@@ -250,7 +250,6 @@ Write a thorough, professional response that fully addresses the job requirement
               takerWallet: AGENT_OMEGA.wallet,
               textHash,
               wordCount,
-              proofHex,
               verified: circuitResult.verified,
               outputText: deliverableText,
             },

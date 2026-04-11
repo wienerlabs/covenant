@@ -204,7 +204,8 @@ export async function POST(req: NextRequest) {
           blockTime: blockTime ? new Date(blockTime * 1000) : null,
           wallet: event.wallet,
           amount: event.amount,
-          data: event.data as Record<string, unknown>,
+          // Prisma expects InputJsonValue; our shape is JSON-safe.
+          data: event.data as unknown as import("@prisma/client").Prisma.InputJsonValue,
         },
       });
 

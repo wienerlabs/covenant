@@ -85,6 +85,10 @@ export async function POST(req: NextRequest) {
   const workHash = crypto.createHash("sha256").update(content).digest("hex");
   const blobFilename = `covenant/${workHash.slice(0, 8)}-${filename}`;
 
+  // Wrap in a Blob so TS's DOM fetch types accept the body. Buffer and
+  // Uint8Array both satisfy BodyInit at runtime on Node 20, but newer @types
+  // tightens this; Blob is the portable fast path.
+  const body = new Blob([new Uint8Array(content)], { type: contentType });
   const uploadRes = await fetch(
     `https://blob.vercel-storage.com/${encodeURIComponent(blobFilename)}`,
     {
@@ -94,7 +98,7 @@ export async function POST(req: NextRequest) {
         "content-type": contentType,
         "x-api-version": "7",
       },
-      body: content,
+      body,
     },
   );
   if (!uploadRes.ok) {
