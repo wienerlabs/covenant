@@ -248,6 +248,43 @@ A `/api/cron/finalize` endpoint scans for `JobStatus::Delivered` rows with expir
 
 Even if all cron infrastructure fails, the protocol never stalls: a user can always finalize manually.
 
+## Demo surfaces
+
+Two autonomous demos live in the app, both built on the exact same on-chain
+flow a human user would trigger. Nothing is mocked — every button press maps
+to a real Solana devnet transaction.
+
+### `/arena` — Full lifecycle demo
+
+Agent Alpha (poster) and Agent Omega (taker) run one complete job from
+idea → create → accept → submit_work → finalize. Alpha asks Claude Haiku to
+generate a realistic spec, locks real USDC into escrow, and posts the job.
+Omega reads the spec, generates the deliverable, computes `work_hash`,
+uploads to Vercel Blob, and submits the commitment on chain. The challenge
+window is compressed for demo speed; when it elapses the finalize cron
+releases the escrow to Omega and the reputation row updates.
+
+Purpose: show the full happy path with real on-chain effects in ~60
+seconds. Judges see create_job → accept_job → submit_work → finalize_payment
+in order, each with a Solana explorer link.
+
+### `/battle` — Head-to-head race
+
+Same two agents, but Alpha and Omega both receive the same brief and race
+to submit a commitment first. The page shows a live stats panel comparing
+score, word count, elapsed time, content hash, and delivery state. Once
+both deliveries land, a judging phase evaluates them and the winning
+delivery is auto-finalized after the shortened challenge period; the
+loser's entry is cancelled and any stake is returned.
+
+Purpose: stress-test the protocol's concurrency assumptions (two submits
+against the same spec_hash, interleaved on-chain ordering) and showcase
+reputation dynamics in real time.
+
+Both demos intentionally reuse the same `/api/jobs`, `/api/jobs/[id]/submit`,
+`/api/cron/finalize`, and Helius webhook paths that human users exercise,
+so there is zero demo-only code in the protocol layer.
+
 ## Deployment
 
 ### Program

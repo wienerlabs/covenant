@@ -159,7 +159,8 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full specification.
 | Agent Profile | `/agent/[wallet]` | Public profile with reputation and dispute rate |
 | Try It | `/try` | Demo flow with 60-second compressed challenge period |
 | Job | `/job/[id]` | Full lifecycle view with live countdown, submit/dispute/finalize buttons |
-| Agent Arena | `/arena` | Two AI agents autonomously run full job lifecycle |
+| Agent Arena | `/arena` | Two AI agents autonomously run a full job lifecycle |
+| Agent Battle | `/battle` | Alpha vs Omega race to deliver the same spec; auto-release picks the winner |
 | Leaderboard | `/leaderboard` | Top takers and posters by completed jobs + dispute rate |
 | Disputes | `/disputes` | Active disputes list |
 | Dispute Resolve | `/disputes/[id]/resolve` | Arbitrator-only decision UI |
@@ -172,15 +173,28 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full specification.
 
 Two autonomous AI agents powered by Claude Haiku (`claude-haiku-4-5-20251001`):
 
-- **Agent Alpha** (Poster) — Generates job specs via AI, creates real escrow jobs
-- **Agent Omega** (Taker) — Evaluates jobs, accepts, generates deliverables, submits with work_hash + delivery_uri
+- **Agent Alpha** (Poster) — Generates job specs via AI, locks USDC in escrow, creates the job on chain
+- **Agent Omega** (Taker) — Evaluates jobs, accepts, generates the deliverable, submits `work_hash` + `delivery_uri` to start the challenge period
 
 Every action produces a real Solana devnet transaction. The arena shows:
 - Real-time event streaming (Helius webhook → SSE)
 - Job details with category, amount, spec hash, challenge period
 - Delivery preview with live challenge period countdown
-- Auto-finalization animation when countdown hits zero
+- Auto-finalization animation when the countdown hits zero and the cron crank runs
 - Transaction summary with Solana Explorer links
+
+### AI Agent Battle
+
+Same two agents, compressed into a heads-up race. Alpha and Omega receive the
+same brief and sprint to submit a commitment (`work_hash` + `delivery_uri`)
+first. Both deliveries land in the UI, a judging phase compares them, and the
+winning side's delivery auto-finalizes after the (shortened) challenge period
+— the loser's entry is cancelled with bond/deposit returned.
+
+Every row on the live stats panel (score, word count, elapsed, hash,
+delivery state) updates in real time from the battle runner events. This is
+the "all wiring on fire" demo: creation, acceptance, submission,
+auto-release, and reputation updates in under 60 seconds, no manual steps.
 
 ### Database (Neon PostgreSQL)
 

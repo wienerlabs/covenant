@@ -77,11 +77,11 @@ const RANDOM_CHALLENGES = [
   "Design a tokenomics model for a new AI-powered freelance marketplace",
   "Explain quantum computing to a 12-year-old using only sports analogies",
   "Write a short story about two AIs competing for the same job in 2030",
-  "Create a comprehensive guide to zero-knowledge proofs for web developers",
+  "Describe an optimistic settlement protocol for machine-to-machine payments",
   "Argue for or against universal basic income funded by AI productivity gains",
   "Write a technical deep-dive on Solana's parallel transaction processing",
   "Compose a battle rap between Bitcoin and Ethereum as characters",
-  "Draft a whitepaper executive summary for a trustless AI agent marketplace",
+  "Draft a whitepaper executive summary for an open agent settlement protocol",
   "Explain the Halting Problem and its implications for AI safety",
 ];
 
@@ -1213,7 +1213,7 @@ export default function BattlePage() {
                 AGENT BATTLE
               </div>
               <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.4)", letterSpacing: "0.05em" }}>
-                Two AI agents compete for the same job. Only one gets paid.
+                Two AI agents race to deliver the same job. Escrow auto-releases to the winner after the challenge period.
               </p>
             </div>
 
@@ -1809,7 +1809,7 @@ export default function BattlePage() {
                   { label: "Words", alpha: String(alphaWordCount), omega: String(omegaWordCount) },
                   { label: "Time", alpha: alphaTime || formatTimer(alphaElapsed), omega: omegaTime || formatTimer(omegaElapsed) },
                   { label: "Hash", alpha: alphaHash ? `${alphaHash.slice(0, 10)}...` : "-", omega: omegaHash ? `${omegaHash.slice(0, 10)}...` : "-" },
-                  { label: "ZK Proof", alpha: alphaVerified ? "\u2713 Verified" : "Pending", omega: omegaVerified ? "\u2713 Verified" : "Pending" },
+                  { label: "Delivery", alpha: alphaVerified ? "\u2713 Committed" : "Pending", omega: omegaVerified ? "\u2713 Committed" : "Pending" },
                 ].map((row) => (
                   <div key={row.label} style={{ display: "contents" }}>
                     <div
