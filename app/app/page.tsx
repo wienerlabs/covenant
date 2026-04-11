@@ -154,17 +154,20 @@ export default function LandingPage() {
             {/* Left column */}
             <div>
               {/* Covenant pixel mark — designed white-on-transparent so it
-                  reads cleanly against the dark landing background */}
+                  reads cleanly against the dark landing background. Sized
+                  at 220px so it anchors the hero alongside the 48px
+                  headline rather than being an afterthought. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/covenant-logo.png"
                 alt="Covenant"
-                width={120}
-                height={120}
+                width={220}
+                height={220}
                 style={{
-                  width: "120px",
-                  height: "120px",
-                  marginBottom: "24px",
+                  width: "220px",
+                  height: "220px",
+                  marginLeft: "-24px",
+                  marginBottom: "8px",
                   imageRendering: "pixelated",
                 }}
               />

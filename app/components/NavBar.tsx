@@ -161,7 +161,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
   return (
     <nav
       style={{
-        height: "48px",
+        height: "64px",
         borderBottom: isTransparent ? "none" : (isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #e0e0e0"),
         display: "flex",
         alignItems: "center",
@@ -185,18 +185,21 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         }}
       >
         {/* Pixel-art mark. Designed white-on-transparent; invert on light variant
-            so it stays readable against a light background. */}
+            so it stays readable against a light background. Sized at 40px so
+            the pixels are legible at 1x DPI — any smaller and the glyph
+            dissolves into noise. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/covenant-logo.png"
           alt="Covenant"
-          width={24}
-          height={24}
+          width={40}
+          height={40}
           style={{
-            width: "24px",
-            height: "24px",
+            width: "40px",
+            height: "40px",
             imageRendering: "pixelated",
             filter: isDark ? "none" : "invert(1)",
+            flexShrink: 0,
           }}
         />
         <span
@@ -341,7 +344,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
           className="nav-mobile-menu"
           style={{
             position: "fixed",
-            top: "48px",
+            top: "64px",
             left: 0,
             right: 0,
             bottom: 0,
@@ -386,6 +389,44 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
 
       {/* Right side — all in one flex row */}
       <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0, whiteSpace: "nowrap" }}>
+        <a
+          href="https://x.com/WCovenant"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Follow @WCovenant"
+          aria-label="Follow Covenant on X"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "28px",
+            height: "28px",
+            borderRadius: "6px",
+            border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #e0e0e0",
+            color: isDark ? "rgba(255,255,255,0.7)" : "#333",
+            textDecoration: "none",
+            transition: "all 0.15s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = isDark
+              ? "rgba(255,255,255,0.08)"
+              : "rgba(0,0,0,0.05)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "transparent";
+          }}
+        >
+          {/* X / Twitter glyph */}
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+          </svg>
+        </a>
         <span
           style={{
             fontSize: "9px",

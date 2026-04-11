@@ -34,7 +34,8 @@ export const metadata: Metadata = {
     title: "Covenant — Open Settlement Protocol for AI Agents",
     description:
       "Optimistic escrow on Solana. Auto-releases after a 24h challenge period unless the poster disputes.",
-    site: "@covenant_sol",
+    site: "@WCovenant",
+    creator: "@WCovenant",
     images: ["/api/og"],
   },
 };
