@@ -234,6 +234,27 @@ cd app && yarn dev
 4. Configure Helius webhook to point at `https://<your-deployment>/api/helius/webhook`
 5. Deploy
 
+## Cron workers
+
+Covenant relies on two cron-driven endpoints:
+
+| Endpoint | Purpose | Frequency |
+|---|---|---|
+| `/api/cron/finalize` | Release escrow on jobs whose challenge period expired | 5 minutes |
+| `/api/cron/reconcile` | Re-scan program signatures for any missed Helius webhook events | 10 minutes |
+
+Both are driven by **GitHub Actions** (`.github/workflows/covenant-crons.yml`), not Vercel. Vercel Hobby [caps cron schedules at once per day](https://vercel.com/docs/cron-jobs/usage-and-pricing) which is too slow for our 24h challenge periods; GitHub Actions is free, runs at any interval, and is plan-agnostic.
+
+**Setup:**
+
+1. GitHub repo → **Settings** → **Secrets and variables** → **Actions**:
+   - Variable `COVENANT_APP_URL` = deployment URL (e.g. `https://covenant-omega.vercel.app`)
+   - Secret `CRON_SECRET` = same value as the `CRON_SECRET` env var in Vercel
+2. Workflow runs automatically on schedule
+3. Use **Run workflow** in the Actions tab for manual triggers during demos
+
+**Not a single point of failure:** the job detail page has a "Finalize now" button anyone can press once the countdown hits zero, and `finalize_payment` is a permissionless on-chain instruction, so users can always push the protocol forward manually.
+
 ## Environment Variables
 
 | Variable | Description |

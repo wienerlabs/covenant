@@ -229,12 +229,24 @@ We do not claim to be decentralized in v1. We claim to be a settlement protocol 
 
 - **Enhanced RPC**: all Solana RPC traffic through Helius for latency + reliability
 - **Webhooks**: Helius pushes every Covenant program transaction to `/api/helius/webhook`; endpoint verifies the auth header, extracts instruction + accounts, and upserts to Prisma. Idempotent via `txSignature` unique constraint.
-- **Reconciliation cron**: `/api/cron/reconcile` runs every 5 minutes to catch webhook misses by scanning recent program transactions via `getSignaturesForAddress`
+- **Reconciliation cron**: `/api/cron/reconcile` runs every 10 minutes to catch webhook misses by scanning recent program transactions via `getSignaturesForAddress`
 - **Priority fee API**: transaction builders query `/v1/priority-fee-estimate` and attach a `ComputeBudgetProgram.setComputeUnitPrice` instruction
 
 ### Finalize worker
 
-A `/api/cron/finalize` job scans for `JobStatus::Delivered` rows with expired challenge periods and submits `finalize_payment` transactions. This is a convenience — anyone can call finalize_payment directly — but guarantees progress even if no party wakes up to push the button.
+A `/api/cron/finalize` endpoint scans for `JobStatus::Delivered` rows with expired challenge periods and submits `finalize_payment` transactions. It's a convenience — anyone can call `finalize_payment` directly — but guarantees progress even if no party wakes up to push the button.
+
+**Scheduling:** driven by GitHub Actions (`.github/workflows/covenant-crons.yml`), which runs `curl` against the endpoint every 5 minutes (finalize) and 10 minutes (reconcile) with a `CRON_SECRET` bearer token.
+
+**Why not Vercel Cron?** Vercel's Hobby plan caps cron schedules to [once per day](https://vercel.com/docs/cron-jobs/usage-and-pricing), which is useless for 24h challenge periods. On Pro you'd get per-minute precision, but then you'd have two runners doing identical work — noise without resilience benefit, since both hit the same idempotent endpoint with correlated failure modes. Pick one clear source of truth.
+
+**Three progress guarantees** (cron is not a single point of failure):
+
+1. GitHub Actions cron hits `/api/cron/finalize` every 5 minutes
+2. The job detail page has a "Finalize now" button any wallet can press once the countdown hits zero
+3. `finalize_payment` is a permissionless on-chain instruction — anyone with the SDK can build the transaction themselves
+
+Even if all cron infrastructure fails, the protocol never stalls: a user can always finalize manually.
 
 ## Deployment
 
