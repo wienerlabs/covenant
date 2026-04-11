@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { releaseFundsToTaker } from "@/lib/escrow";
 
+// Always dynamic — this route talks to Prisma on every request.
+// Without this, Next.js 14 tries to statically pre-render the GET handler
+// at build time, which fails in CI where DATABASE_URL is unset.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /**
  * GET /api/cron/finalize
  *

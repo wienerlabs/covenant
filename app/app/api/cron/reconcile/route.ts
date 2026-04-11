@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Connection, PublicKey } from "@solana/web3.js";
 
+// Always dynamic — talks to Prisma + Solana RPC per request.
+// Prevents Next.js from pre-rendering this GET handler at build time,
+// which would fail in CI where DATABASE_URL is unset.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /**
  * GET /api/cron/reconcile
  *
