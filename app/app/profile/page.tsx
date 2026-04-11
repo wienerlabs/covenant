@@ -137,7 +137,7 @@ export default function ProfilePage() {
   return (
     <div style={{ minHeight: "100vh", position: "relative" }}>
       {/* Background */}
-      <div style={{ position: "fixed", inset: 0, zIndex: 0, backgroundImage: "url('/covenant-bg.png')", backgroundSize: "cover", backgroundPosition: "center" }} />
+      <div style={{ position: "fixed", inset: 0, zIndex: 0, backgroundImage: "image-set(url('/covenant-bg.webp') type('image/webp'), url('/covenant-bg.png') type('image/png'))", backgroundSize: "cover", backgroundPosition: "center" }} />
       <div style={{ position: "fixed", inset: 0, zIndex: 1, backgroundColor: "rgba(0,0,0,0.55)" }} />
 
       {/* Content */}

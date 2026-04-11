@@ -236,7 +236,7 @@ export default function ArchitecturePage() {
           position: "fixed",
           inset: 0,
           zIndex: 0,
-          backgroundImage: "url('/poster-bg.png')",
+          backgroundImage: "image-set(url('/poster-bg.webp') type('image/webp'), url('/poster-bg.png') type('image/png'))",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",

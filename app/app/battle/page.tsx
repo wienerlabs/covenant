@@ -1146,7 +1146,7 @@ export default function BattlePage() {
       style={{
         minHeight: "100vh",
         backgroundColor: "#0a0a14",
-        backgroundImage: "url('/arena-bg.png')",
+        backgroundImage: "image-set(url('/arena-bg.webp') type('image/webp'), url('/arena-bg.png') type('image/png'))",
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundAttachment: "fixed",

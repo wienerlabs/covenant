@@ -82,12 +82,19 @@ export default function LandingPage() {
         overflow: "hidden",
       }}
     >
-      {/* Full-bleed background video */}
+      {/* Full-bleed background video.
+          - poster: renders instantly while the 13MB .mp4 streams in, so
+            the hero never shows a black frame
+          - preload="auto": browser aggressively prefetches the video on
+            HTML load. Combined with Cache-Control: immutable (next.config.mjs)
+            repeat visits hit disk cache and play with no delay. */}
       <video
         autoPlay
         loop
         muted
         playsInline
+        preload="auto"
+        poster="/covenant-bg-poster.jpg"
         style={{
           position: "fixed",
           inset: 0,

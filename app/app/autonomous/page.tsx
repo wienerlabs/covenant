@@ -193,7 +193,7 @@ export default function AutonomousPage() {
     <div style={{
       minHeight: "100vh",
       backgroundColor: "#0a0a14",
-      backgroundImage: "url('/poster-bg.png')",
+      backgroundImage: "image-set(url('/poster-bg.webp') type('image/webp'), url('/poster-bg.png') type('image/png'))",
       backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundAttachment: "fixed",

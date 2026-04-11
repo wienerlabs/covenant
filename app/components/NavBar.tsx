@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useConnector } from "@solana/connector/react";
 import useProfile from "@/hooks/useProfile";
@@ -9,6 +9,54 @@ import WalletBalance from "./WalletBalance";
 import UserAvatar from "./UserAvatar";
 import NotificationBell from "./NotificationBell";
 import ThemeToggle from "./ThemeToggle";
+
+/**
+ * Hover-prefetch: as soon as the user's cursor lands on a nav link, kick off
+ * a warm fetch for that route's hero background. Combined with the immutable
+ * Cache-Control headers from next.config.mjs, the image is already in disk
+ * cache by the time Next.js renders the new page — so the cross-route
+ * transition shows the background with zero perceivable delay.
+ *
+ * We only prefetch the WebP variant since every modern browser our target
+ * (hackathon judges on macOS/Chrome/Safari 16+) speaks it. Legacy browsers
+ * that don't support WebP fall back gracefully when the actual page loads
+ * and CSS's `image-set()` picks the PNG.
+ */
+const ROUTE_BG_MAP: Partial<Record<Tab, string>> = {
+  home: "/covenant-bg-poster.jpg",
+  agents: "/poster-bg.webp",
+  poster: "/poster-bg.webp",
+  taker: "/poster-bg.webp",
+  dashboard: "/poster-bg.webp",
+  battle: "/arena-bg.webp",
+  arena: "/arena-bg.webp",
+  autonomous: "/poster-bg.webp",
+  leaderboard: "/poster-bg.webp",
+  architecture: "/poster-bg.webp",
+  events: "/poster-bg.webp",
+  admin: "/poster-bg.webp",
+  onchain: "/poster-bg.webp",
+  disputes: "/poster-bg.webp",
+  faucet: "/poster-bg.webp",
+  "api-docs": "/poster-bg.webp",
+  integrate: "/poster-bg.webp",
+  developers: "/poster-bg.webp",
+};
+
+// Module-scoped set so we only kick off each prefetch once per session.
+const prefetchedBackgrounds = new Set<string>();
+function prefetchBackground(href: string): void {
+  if (typeof window === "undefined") return;
+  if (prefetchedBackgrounds.has(href)) return;
+  prefetchedBackgrounds.add(href);
+  // Using Image() rather than <link rel="prefetch"> so we can fire it
+  // synchronously from an event handler. The image enters the browser's
+  // HTTP cache and subsequent CSS `background-image` references resolve
+  // instantly.
+  const img = new window.Image();
+  img.decoding = "async";
+  img.src = href;
+}
 
 type Tab = "home" | "agents" | "poster" | "taker" | "dashboard" | "battle" | "arena" | "autonomous" | "leaderboard" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol" | "developers" | "integrate";
 
@@ -48,6 +96,11 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
   const { isConnected, account } = useConnector();
   const { profile } = useProfile(isConnected && account ? account : undefined);
   const [moreOpen, setMoreOpen] = useState(false);
+
+  const onHoverLink = useCallback((tab: Tab) => {
+    const href = ROUTE_BG_MAP[tab];
+    if (href) prefetchBackground(href);
+  }, []);
   const [mobileOpen, setMobileOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
 
@@ -161,7 +214,13 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
 
       <div className="nav-tabs" style={{ display: "flex", gap: "16px", alignItems: "center", flex: 1 }}>
         {visibleTabs.map((tab) => (
-          <Link key={tab.id} href={tab.href} style={tabStyle(tab.id)}>
+          <Link
+            key={tab.id}
+            href={tab.href}
+            style={tabStyle(tab.id)}
+            onMouseEnter={() => onHoverLink(tab.id)}
+            onFocus={() => onHoverLink(tab.id)}
+          >
             {tab.label}
           </Link>
         ))}
@@ -223,6 +282,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
                   key={tab.id}
                   href={tab.href}
                   onClick={() => setMoreOpen(false)}
+                  onFocus={() => onHoverLink(tab.id)}
                   style={{
                     display: "block",
                     padding: "10px 16px",
@@ -239,6 +299,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
                     transition: "all 0.15s ease",
                   }}
                   onMouseEnter={(e) => {
+                    onHoverLink(tab.id);
                     if (activeTab !== tab.id) {
                       e.currentTarget.style.backgroundColor = isDark ? "rgba(255,255,255,0.07)" : "#f9f9f9";
                     }
