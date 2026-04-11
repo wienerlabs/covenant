@@ -290,12 +290,13 @@ export default function JobList({ filter, walletPubkey, variant = "light", categ
 
       {activeSubmitJob && (
         <SubmitWorkModal
+          open={true}
           jobId={activeSubmitJob.id}
           minWords={activeSubmitJob.minWords}
           category={activeSubmitJob.category || "text_writing"}
           takerWallet={walletPubkey || ""}
           onClose={() => setActiveSubmitJob(null)}
-          onSuccess={handleSubmitSuccess}
+          onSubmitted={handleSubmitSuccess}
         />
       )}
     </div>

@@ -10,7 +10,7 @@ import UserAvatar from "./UserAvatar";
 import NotificationBell from "./NotificationBell";
 import ThemeToggle from "./ThemeToggle";
 
-type Tab = "home" | "agents" | "poster" | "taker" | "dashboard" | "battle" | "arena" | "autonomous" | "leaderboard" | "proof" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol" | "verify" | "developers" | "integrate";
+type Tab = "home" | "agents" | "poster" | "taker" | "dashboard" | "battle" | "arena" | "autonomous" | "leaderboard" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol" | "developers" | "integrate";
 
 interface NavBarProps {
   activeTab: Tab;
@@ -29,10 +29,8 @@ const PRIMARY_TABS: { id: Tab; label: string; href: string }[] = [
 
 const MORE_TABS: { id: Tab; label: string; href: string }[] = [
   { id: "autonomous", label: "Auto", href: "/autonomous" },
-  { id: "verify", label: "Verify", href: "/verify" },
   { id: "developers", label: "Developers", href: "/developers" },
   { id: "integrate", label: "Integrate", href: "/integrate" },
-  { id: "proof", label: "ZK Proof", href: "/proof" },
   { id: "events", label: "Events", href: "/events" },
   { id: "onchain", label: "On-Chain", href: "/onchain" },
   { id: "faucet", label: "Faucet", href: "/faucet" },

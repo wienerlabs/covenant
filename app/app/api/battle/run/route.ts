@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/rateLimit";
 import { releaseFundsToTaker } from "@/lib/escrow";
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
-import { executeCircuit } from "@/lib/sp1-circuit";
+import { executeCircuit } from "@/lib/work-metrics";
 import { generateDID } from "@/lib/aip/did";
 import { NextRequest } from "next/server";
 

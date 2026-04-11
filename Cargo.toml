@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["programs/*"]
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1
+
+# Pin transitive deps that ship with edition2024 and break Anchor 0.30.1's
+# bundled cargo 1.84 toolchain. Must stay until we upgrade Anchor.
+[patch.crates-io]
+constant_time_eq = { git = "https://github.com/cesarb/constant_time_eq.git", tag = "0.3.1" }

@@ -7,109 +7,179 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Job {
-  id            String   @id @default(cuid())
-  pda           String?  @unique
-  posterWallet  String
-  takerWallet   String?
-  amount        Float
-  paymentToken  String   @default("USDC") // "USDC" or "SOL"
-  specHash      String
-  specJson      Json
-  status        String   @default("Open") // Open, Accepted, Completed, Cancelled, Disputed
-  minWords      Int
-  category      String   @default("text_writing")
-  language      String   @default("en")
-  deadline      DateTime
-  txHash        String?  // Solana transaction signature for creation
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+// ============================================================================
+// Core job lifecycle
+// ============================================================================
 
-  submissions   Submission[]
+model Job {
+  id               String      @id @default(cuid())
+  pda              String?     @unique // on-chain JobEscrow PDA (base58)
+  posterWallet     String
+  takerWallet      String?
+  amount           Float
+  paymentToken     String      @default("USDC") // "USDC" or "SOL"
+  specHash         String      // SHA-256 hex of canonical spec JSON
+  specJson         Json
+  status           String      @default("Open")
+  // Open | Accepted | Delivered | Disputed | Finalized | Resolved | Cancelled
+
+  // Challenge period fields (post-pivot)
+  challengePeriod  Int         @default(86400) // seconds, default 24h
+  challengeEndAt   DateTime?   // set when status becomes Delivered
+  deliveredAt      DateTime?
+
+  minWords         Int         @default(0)
+  category         String      @default("text_writing")
+  language         String      @default("en")
+  deadline         DateTime
+  txHash           String?     // create_job tx signature
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  delivery         Delivery?
+  dispute          Dispute?
+  submissions      Submission[]
+  events           JobEvent[]
+
+  @@index([posterWallet])
+  @@index([takerWallet])
+  @@index([status])
+  @@index([challengeEndAt])
 }
 
+// Delivery commitment submitted by the taker via submit_work.
+model Delivery {
+  id             String   @id @default(cuid())
+  jobId          String   @unique
+  takerWallet    String
+  workHash       String   // SHA-256 hex of the delivered content
+  deliveryUri    String   // IPFS / Arweave / HTTPS / Vercel Blob URL
+  contentPreview String?  @db.Text // first ~2000 chars for UI; full content at deliveryUri
+  submittedAt    DateTime @default(now())
+  txHash         String?  // submit_work tx signature
+
+  job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([takerWallet])
+}
+
+// Dispute raised against a delivered job.
+model Dispute {
+  id             String    @id @default(cuid())
+  jobId          String    @unique
+  challenger     String    // wallet that raised
+  bond           Float     // in payment token units
+  reasonHash     String    // SHA-256 hex
+  reasonText     String?   @db.Text // off-chain reason body; hash committed on-chain
+  raisedAt       DateTime  @default(now())
+  txHashRaise    String?
+  resolvedAt     DateTime?
+  txHashResolve  String?
+  resolution     String?   // Pending | FavorTaker | FavorPoster | Split
+  takerAmount    Float?    // for Split resolutions
+  approvedBy     String[]  @default([]) // arbitrator wallets that voted
+  approvalCount  Int       @default(0)
+
+  job            Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([challenger])
+  @@index([resolution])
+}
+
+// Append-only log of on-chain events, keyed by tx signature for
+// idempotent webhook consumption.
+model JobEvent {
+  id          String   @id @default(cuid())
+  jobId       String
+  type        String   // created | accepted | delivered | disputed | finalized | resolved | cancelled
+  txSignature String   @unique
+  slot        BigInt?
+  blockTime   DateTime?
+  wallet      String?  // primary actor for the event
+  amount      Float?
+  data        Json
+  createdAt   DateTime @default(now())
+
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([type])
+  @@index([blockTime])
+}
+
+// ============================================================================
+// Agent identity and reputation
+// ============================================================================
+
 model Reputation {
-  id            String   @id @default(cuid())
-  walletAddress String   @unique
-  jobsCompleted Int      @default(0)
-  jobsFailed    Int      @default(0)
-  totalEarned   Float    @default(0)
-  firstJobAt    DateTime?
-  updatedAt     DateTime @updatedAt
+  id             String    @id @default(cuid())
+  walletAddress  String    @unique
+  jobsCompleted  Int       @default(0)
+  jobsFailed     Int       @default(0)
+  jobsDisputed   Int       @default(0)
+  totalEarned    Float     @default(0)
+  firstJobAt     DateTime?
+  updatedAt      DateTime  @updatedAt
 }
 
 model Profile {
-  id            String   @id @default(cuid())
-  walletAddress String   @unique
-  displayName   String
-  bio           String   @default("")
-  role          String   @default("both") // "poster", "taker", "both"
-  avatarSeed    String   // random seed for pixel avatar generation
-  avatarUrl     String?  // custom uploaded avatar URL (null = use pixel avatar)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(cuid())
+  walletAddress  String   @unique
+  displayName    String
+  bio            String   @default("")
+  role           String   @default("both") // poster | taker | both
+  avatarSeed     String
+  avatarUrl      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
-model Submission {
-  id            String   @id @default(cuid())
-  jobId         String
-  takerWallet   String
-  textHash      String
-  wordCount     Int
-  proofHex      String?
-  verified      Boolean  @default(false)
-  txHash        String?  // Solana transaction signature for submission
-  outputText    String?  @db.Text  // Full text output from the agent
-  submittedAt   DateTime @default(now())
+model PublishedAgent {
+  id             String   @id @default(cuid())
+  walletAddress  String
+  name           String
+  description    String
+  endpointUrl    String
+  agentType      String   @default("Task")
+  capabilities   Json
+  did            String
+  verified       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
 
-  job           Job      @relation(fields: [jobId], references: [id])
+// ============================================================================
+// Legacy / backwards-compat tables
+// ============================================================================
+
+// Old per-action submission records. Kept for history; new flows write
+// to Delivery instead. Existing UI references still read from here.
+model Submission {
+  id           String   @id @default(cuid())
+  jobId        String
+  takerWallet  String
+  textHash     String
+  wordCount    Int
+  verified     Boolean  @default(false)
+  txHash       String?
+  outputText   String?  @db.Text
+  submittedAt  DateTime @default(now())
+
+  job          Job      @relation(fields: [jobId], references: [id])
 }
 
 model Transaction {
   id        String   @id @default(cuid())
   txHash    String   @unique
-  type      String   // "create_job", "accept_job", "submit_completion", "cancel_job"
+  type      String   // create_job | accept_job | submit_work | finalize_payment | raise_dispute | resolve_dispute | cancel_job
   jobId     String?
   wallet    String
   amount    Float?
-  status    String   @default("confirmed") // confirmed, failed
+  status    String   @default("confirmed")
   createdAt DateTime @default(now())
-}
 
-model Dispute {
-  id         String   @id @default(cuid())
-  jobId      String
-  raisedBy   String   // wallet address
-  reason     String
-  status     String   @default("open") // open, resolved_poster, resolved_taker, dismissed
-  resolution String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-}
-
-model Verification {
-  id         String   @id @default(cuid())
-  textHash   String
-  wordCount  Int
-  minWords   Int
-  verified   Boolean
-  cycleCount Int      @default(237583)
-  sharedBy   String?  // wallet address if connected
-  createdAt  DateTime @default(now())
-}
-
-model PublishedAgent {
-  id            String   @id @default(cuid())
-  walletAddress String
-  name          String
-  description   String
-  endpointUrl   String
-  agentType     String   @default("Task")
-  capabilities  Json
-  did           String
-  verified      Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  @@index([wallet])
+  @@index([type])
 }
 
 model ApiKey {

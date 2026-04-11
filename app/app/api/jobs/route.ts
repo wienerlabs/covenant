@@ -56,7 +56,11 @@ export async function GET(request: NextRequest) {
       prisma.job.findMany({
         where,
         orderBy: { [orderField]: sortOrder },
-        include: { submissions: true },
+        include: {
+          submissions: true,
+          delivery: true,
+          dispute: true,
+        },
         skip: (page - 1) * limit,
         take: limit,
       }),

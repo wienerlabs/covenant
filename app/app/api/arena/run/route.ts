@@ -15,7 +15,7 @@ import {
 } from "@/lib/anchor-client";
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
-import { executeCircuit } from "@/lib/sp1-circuit";
+import { executeCircuit } from "@/lib/work-metrics";
 import { generateDID } from "@/lib/aip/did";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { NextRequest } from "next/server";

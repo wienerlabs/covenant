@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { lockFundsInEscrow, releaseFundsToTaker } from "@/lib/escrow";
 import { rateLimit } from "@/lib/rateLimit";
-import { executeCircuit } from "@/lib/sp1-circuit";
+import { executeCircuit } from "@/lib/work-metrics";
 import crypto from "crypto";
 import { NextRequest } from "next/server";
 

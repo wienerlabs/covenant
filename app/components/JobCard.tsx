@@ -264,10 +264,10 @@ export default function JobCard({
               Cancel Job
             </button>
           )}
-          {job.status === "Completed" && (
+          {(job.status === "Completed" || job.status === "Finalized") && (
             <>
               <Link
-                href={`/proof/${job.id}`}
+                href={`/job/${job.id}`}
                 style={{
                   fontFamily: "inherit",
                   fontSize: "12px",
@@ -283,7 +283,7 @@ export default function JobCard({
                   display: "inline-block",
                 }}
               >
-                View Proof
+                View Delivery
               </Link>
               {onDispute && (isPoster || isTaker) && (
                 <button

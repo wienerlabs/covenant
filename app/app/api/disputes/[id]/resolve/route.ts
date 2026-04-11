@@ -1,112 +1,246 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { releaseFundsToTaker } from "@/lib/escrow";
+import crypto from "crypto";
 
-// POST /api/disputes/[id]/resolve — resolve a dispute
+/**
+ * POST /api/disputes/[id]/resolve
+ *
+ * Whitelisted arbitrator submits their vote for a dispute resolution.
+ * When the number of distinct approving arbitrators reaches the configured
+ * threshold (default 2 of 3), the dispute is finalized on-chain:
+ * - FavorTaker: taker receives full escrow + poster's slashed bond
+ * - FavorPoster: escrow returned to poster, taker gets nothing
+ * - Split: taker_amount to taker, remainder to poster
+ *
+ * Body: { arbitratorWallet, resolution, takerAmount?, txHash? }
+ *   resolution: "FavorTaker" | "FavorPoster" | "Split"
+ */
+
+const ARBITRATORS = (process.env.COVENANT_ARBITRATORS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const THRESHOLD = parseInt(process.env.COVENANT_ARBITRATOR_THRESHOLD ?? "2", 10);
+
+type ResolutionKind = "FavorTaker" | "FavorPoster" | "Split";
+
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { resolution, resolvedBy } = body;
-
-    if (!resolution || !["poster", "taker", "dismissed"].includes(resolution)) {
-      return NextResponse.json(
-        { error: "resolution must be one of: poster, taker, dismissed" },
-        { status: 400 }
-      );
-    }
-    if (!resolvedBy || typeof resolvedBy !== "string") {
-      return NextResponse.json(
-        { error: "resolvedBy (wallet address) is required" },
-        { status: 400 }
-      );
-    }
-
-    const dispute = await prisma.dispute.findUnique({ where: { id } });
-    if (!dispute) {
-      return NextResponse.json(
-        { error: "Dispute not found" },
-        { status: 404 }
-      );
-    }
-    if (dispute.status !== "open") {
-      return NextResponse.json(
-        { error: "Dispute is already resolved" },
-        { status: 400 }
-      );
-    }
-
-    const job = await prisma.job.findUnique({ where: { id: dispute.jobId } });
-    if (!job) {
-      return NextResponse.json(
-        { error: "Associated job not found" },
-        { status: 404 }
-      );
-    }
-
-    const statusMap: Record<string, string> = {
-      poster: "resolved_poster",
-      taker: "resolved_taker",
-      dismissed: "dismissed",
+    const {
+      arbitratorWallet,
+      resolution,
+      takerAmount,
+      txHash,
+    } = body as {
+      arbitratorWallet?: string;
+      resolution?: string;
+      takerAmount?: number;
+      txHash?: string;
     };
 
-    const updatedDispute = await prisma.$transaction(async (tx) => {
+    if (!arbitratorWallet) {
+      return NextResponse.json(
+        { error: "arbitratorWallet is required" },
+        { status: 400 },
+      );
+    }
+    if (ARBITRATORS.length > 0 && !ARBITRATORS.includes(arbitratorWallet)) {
+      return NextResponse.json(
+        {
+          error: "Wallet is not a whitelisted arbitrator",
+          whitelist: ARBITRATORS.length,
+        },
+        { status: 403 },
+      );
+    }
+    if (!resolution || !["FavorTaker", "FavorPoster", "Split"].includes(resolution)) {
+      return NextResponse.json(
+        { error: "resolution must be one of: FavorTaker, FavorPoster, Split" },
+        { status: 400 },
+      );
+    }
+    const kind = resolution as ResolutionKind;
+
+    const dispute = await prisma.dispute.findUnique({
+      where: { id },
+      include: { job: true },
+    });
+    if (!dispute) {
+      return NextResponse.json({ error: "Dispute not found" }, { status: 404 });
+    }
+    if (dispute.resolvedAt) {
+      return NextResponse.json(
+        { error: "Dispute already resolved", resolution: dispute.resolution },
+        { status: 409 },
+      );
+    }
+
+    if (kind === "Split") {
+      if (typeof takerAmount !== "number" || takerAmount < 0) {
+        return NextResponse.json(
+          { error: "Split resolution requires non-negative takerAmount" },
+          { status: 400 },
+        );
+      }
+      if (takerAmount > dispute.job.amount) {
+        return NextResponse.json(
+          { error: "takerAmount exceeds escrow balance" },
+          { status: 400 },
+        );
+      }
+    }
+
+    // Lock in the pending resolution on first vote; subsequent votes must match
+    const currentResolution = dispute.resolution ?? "Pending";
+    if (currentResolution !== "Pending" && currentResolution !== kind) {
+      return NextResponse.json(
+        {
+          error: `First arbitrator voted '${currentResolution}'; cannot approve '${kind}' without a new dispute`,
+        },
+        { status: 409 },
+      );
+    }
+
+    const alreadyVoted = dispute.approvedBy.includes(arbitratorWallet);
+    if (alreadyVoted) {
+      return NextResponse.json(
+        { error: "Arbitrator has already voted on this dispute" },
+        { status: 409 },
+      );
+    }
+
+    // Add the vote
+    const newApprovedBy = [...dispute.approvedBy, arbitratorWallet];
+    const newApprovalCount = newApprovedBy.length;
+    const thresholdReached = newApprovalCount >= THRESHOLD;
+
+    if (!thresholdReached) {
+      // Partial update — wait for more votes
+      const updated = await prisma.dispute.update({
+        where: { id },
+        data: {
+          resolution: kind,
+          takerAmount: kind === "Split" ? takerAmount : null,
+          approvedBy: newApprovedBy,
+          approvalCount: newApprovalCount,
+          txHashResolve: dispute.txHashResolve ?? txHash,
+        },
+      });
+      return NextResponse.json({
+        dispute: updated,
+        thresholdReached: false,
+        approvalsRequired: THRESHOLD,
+        approvalsHave: newApprovalCount,
+      });
+    }
+
+    // Threshold reached: apply resolution and distribute funds
+    let paymentTxHash: string | null = null;
+    const payoutToTaker =
+      kind === "FavorTaker"
+        ? dispute.job.amount
+        : kind === "Split"
+          ? (takerAmount as number)
+          : 0;
+
+    if (payoutToTaker > 0 && dispute.job.takerWallet) {
+      try {
+        const result = await releaseFundsToTaker(
+          dispute.job.takerWallet,
+          payoutToTaker,
+        );
+        paymentTxHash = result.txHash;
+      } catch (err) {
+        console.error("[resolve] escrow release failed:", err);
+        return NextResponse.json(
+          {
+            error: "Escrow release failed; dispute not finalized",
+            detail: err instanceof Error ? err.message : String(err),
+          },
+          { status: 500 },
+        );
+      }
+    }
+
+    const resolved = await prisma.$transaction(async (tx) => {
       const d = await tx.dispute.update({
         where: { id },
         data: {
-          status: statusMap[resolution],
-          resolution: `Resolved in favor of ${resolution} by ${resolvedBy}`,
+          resolution: kind,
+          takerAmount: kind === "Split" ? takerAmount : null,
+          approvedBy: newApprovedBy,
+          approvalCount: newApprovalCount,
+          resolvedAt: new Date(),
+          txHashResolve: txHash ?? paymentTxHash ?? dispute.txHashResolve,
         },
       });
+      await tx.job.update({
+        where: { id: dispute.jobId },
+        data: { status: "Resolved" },
+      });
 
-      if (resolution === "poster") {
-        // Resolved for poster: revert job, increment taker's jobsFailed
-        await tx.job.update({
-          where: { id: dispute.jobId },
-          data: { status: "Accepted" }, // Revert to Accepted so poster can reassign
-        });
-
-        if (job.takerWallet) {
-          await tx.reputation.upsert({
-            where: { walletAddress: job.takerWallet },
-            create: {
-              walletAddress: job.takerWallet,
-              jobsFailed: 1,
-              totalEarned: 0,
+      if (dispute.job.takerWallet) {
+        await tx.reputation.upsert({
+          where: { walletAddress: dispute.job.takerWallet },
+          create: {
+            walletAddress: dispute.job.takerWallet,
+            jobsCompleted: kind === "FavorPoster" ? 0 : 1,
+            jobsFailed: kind === "FavorPoster" ? 1 : 0,
+            jobsDisputed: 1,
+            totalEarned: payoutToTaker,
+          },
+          update: {
+            jobsCompleted: {
+              increment: kind === "FavorPoster" ? 0 : 1,
             },
-            update: {
-              jobsFailed: { increment: 1 },
-              // Also decrement jobsCompleted if it was previously counted
-              jobsCompleted: { decrement: 1 },
-              totalEarned: { decrement: job.amount },
+            jobsFailed: {
+              increment: kind === "FavorPoster" ? 1 : 0,
             },
-          });
-        }
-      } else if (resolution === "taker") {
-        // Resolved for taker: keep job Completed
-        await tx.job.update({
-          where: { id: dispute.jobId },
-          data: { status: "Completed" },
-        });
-      } else {
-        // Dismissed: revert to Completed
-        await tx.job.update({
-          where: { id: dispute.jobId },
-          data: { status: "Completed" },
+            jobsDisputed: { increment: 1 },
+            totalEarned: { increment: payoutToTaker },
+          },
         });
       }
+
+      await tx.jobEvent.create({
+        data: {
+          jobId: dispute.jobId,
+          type: "resolved",
+          txSignature:
+            paymentTxHash ??
+            txHash ??
+            "local:resolved:" + crypto.randomBytes(12).toString("hex"),
+          wallet: arbitratorWallet,
+          amount: payoutToTaker,
+          data: {
+            resolution: kind,
+            takerAmount: kind === "Split" ? takerAmount : null,
+            arbitrators: newApprovedBy,
+            paymentTxHash,
+          },
+        },
+      });
 
       return d;
     });
 
-    return NextResponse.json(updatedDispute);
+    return NextResponse.json({
+      dispute: resolved,
+      thresholdReached: true,
+      paymentTxHash,
+      payoutToTaker,
+    });
   } catch (error) {
     console.error("POST /api/disputes/[id]/resolve error:", error);
     return NextResponse.json(
       { error: "Failed to resolve dispute" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

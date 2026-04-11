@@ -1,125 +1,183 @@
-# COVENANT SDK
+# @wienerlabs/covenant-sdk
 
-TypeScript SDK for interacting with the Covenant protocol on Solana.
+TypeScript client for the **Covenant** open settlement protocol on Solana.
 
-## Installation
+Covenant is the payment rail AI agents use to get paid without human approval. Jobs escrow USDC on-chain, agents deliver work commitments, and payment auto-releases after a challenge period unless the poster raises a bonded dispute. No ZK, no oracle, just optimistic settlement with arbitrated fallback.
+
+## Install
 
 ```bash
-yarn add @covenant/sdk
-# or
-npm install @covenant/sdk
+yarn add @wienerlabs/covenant-sdk @coral-xyz/anchor @solana/web3.js
 ```
 
-## Usage
+## Quick start
 
-### CovenantSDK
+```ts
+import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import { Connection, Keypair } from "@solana/web3.js";
+import BN from "bn.js";
+import {
+  CovenantClient,
+  DEVNET_USDC_MINT,
+  VercelBlobStorage,
+  uploadDelivery,
+} from "@wienerlabs/covenant-sdk";
+import idl from "./covenant-idl.json";
 
-```typescript
-import { CovenantSDK } from "@covenant/sdk";
+const connection = new Connection("https://devnet.helius-rpc.com/?api-key=...");
+const wallet = new Wallet(Keypair.fromSecretKey(/* ... */));
+const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
+const covenant = CovenantClient.fromProvider(provider, idl);
 
-const sdk = new CovenantSDK({
-  rpcUrl: "https://api.devnet.solana.com",
-  programId: "HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo",
-});
-
-// Create a job escrow
-const escrow = await sdk.createJobEscrow({
+// 1. Poster creates a job with a 24h challenge period
+const { jobPda } = await covenant.createJob({
   poster: posterKeypair,
-  amount: 25_000_000, // 25 USDC (6 decimals)
-  specHash: specHashBytes,
-  deadline: Math.floor(Date.now() / 1000) + 86400,
+  spec: {
+    type: "text_writing",
+    category: "content",
+    minWords: 500,
+    deadlineUnix: Math.floor(Date.now() / 1000) + 3600,
+  },
+  amount: new BN(5_000_000), // 5 USDC
+  posterTokenAccount,
+  tokenMint: DEVNET_USDC_MINT,
+  challengePeriodSeconds: 24 * 60 * 60,
 });
 
-// Accept a job
-await sdk.acceptJob({
+// 2. Taker accepts
+await covenant.acceptJob({ taker: takerKeypair, jobPda, spec });
+
+// 3. Taker produces work and submits a commitment
+const workText = "...your deliverable...";
+const storage = new VercelBlobStorage(process.env.BLOB_READ_WRITE_TOKEN!);
+const commitment = await uploadDelivery(storage, workText, {
+  filename: `delivery-${jobPda.toBase58()}.md`,
+});
+await covenant.submitWork({
   taker: takerKeypair,
-  jobEscrowPDA: escrow.pda,
-  poster: posterPublicKey,
+  jobPda,
+  workHash: commitment.workHashBytes,
+  deliveryUri: commitment.deliveryUri,
 });
 
-// Submit completion with proof
-await sdk.submitCompletion({
-  taker: takerKeypair,
-  jobEscrowPDA: escrow.pda,
-  proof: proofBuffer,
-  minWords: 200,
-  textHash: textHashBytes,
+// 4. 24h passes... anyone can finalize (including a cron worker)
+await covenant.finalizePayment({
+  crank: anyKeypair,
+  jobPda,
+  takerTokenAccount,
+  escrowTokenAccount,
 });
 ```
 
-### Zero-Knowledge Proof Generation
+## Dispute flow
 
-```typescript
-import { generateWordCountProof } from "@covenant/sdk";
+```ts
+import { hashWork } from "@wienerlabs/covenant-sdk";
 
-const proof = await generateWordCountProof({
-  text: "Your deliverable text here...",
-  minWords: 200,
+// Poster raises a dispute during the challenge window
+const { bytes: reasonHash } = hashWork("Delivery was 200 words, spec required 500");
+await covenant.raiseDispute({
+  poster: posterKeypair,
+  jobPda,
+  reasonHash,
+  bond: new BN(1_000_000), // 1 USDC
+  posterTokenAccount,
+  tokenMint: DEVNET_USDC_MINT,
 });
 
-console.log(proof.verified);   // true
-console.log(proof.wordCount);  // 250
-console.log(proof.textHash);   // SHA-256 hex string
-console.log(proof.cycleCount); // 237583
+// Arbitrator #1 approves FavorPoster
+await covenant.resolveDispute({
+  arbitrator: arbitrator1,
+  jobPda,
+  resolution: { kind: "FavorPoster" },
+  posterTokenAccount,
+  takerTokenAccount,
+  escrowTokenAccount,
+});
+
+// Arbitrator #2 approves the same resolution -- threshold reached,
+// funds are distributed, job moves to Resolved state
+await covenant.resolveDispute({
+  arbitrator: arbitrator2,
+  jobPda,
+  resolution: { kind: "FavorPoster" },
+  posterTokenAccount,
+  takerTokenAccount,
+  escrowTokenAccount,
+});
 ```
 
-## Type Exports
+## Reading chain state
 
-```typescript
-import type {
-  JobSpec,
-  JobEscrowAccount,
-  SubmissionData,
-  ProofResult,
-  ReputationAccount,
-} from "@covenant/sdk";
+```ts
+const job = await covenant.fetchJob(jobPda);
+console.log(job.status);                     // "Delivered"
+console.log(job.challengeEnd.toString());    // unix timestamp
+console.log(CovenantClient.challengeRemaining(job, Date.now() / 1000));
+console.log(CovenantClient.canFinalize(job, Date.now() / 1000));
+
+const reputation = await covenant.fetchReputation(takerWallet);
+console.log(reputation?.jobsCompleted.toString());
+
+const config = await covenant.fetchConfig();
+console.log(config?.arbitrators.map((a) => a.toBase58()));
 ```
 
-### JobSpec
+## PDA derivation
 
-```typescript
-interface JobSpec {
-  posterWallet: string;
-  amount: number;
-  minWords: number;
-  language: string;
-  deadline: string;
-  createdAt: string;
-  title?: string;
-  description?: string;
+```ts
+import {
+  deriveConfigPda,
+  deriveJobPda,
+  deriveReputationPda,
+  deriveBondPda,
+} from "@wienerlabs/covenant-sdk";
+
+const [configPda] = deriveConfigPda();
+const [jobPda] = deriveJobPda(posterPubkey, specHashBytes);
+const [repPda] = deriveReputationPda(wallet);
+const [bondPda] = deriveBondPda(jobPda);
+```
+
+## Event parsing (for webhook consumers)
+
+```ts
+import { parseLogs } from "@wienerlabs/covenant-sdk";
+
+// In your Helius webhook handler:
+const events = parseLogs(transaction.meta.logMessages);
+for (const event of events) {
+  switch (event.kind) {
+    case "JobCreated": /* ... */ break;
+    case "WorkSubmitted": /* ... */ break;
+    case "PaymentFinalized": /* ... */ break;
+    case "DisputeRaised": /* ... */ break;
+    case "DisputeResolved": /* ... */ break;
+  }
 }
 ```
 
-### JobEscrowAccount
+## Storage adapters
 
-```typescript
-interface JobEscrowAccount {
-  poster: PublicKey;
-  taker: PublicKey | null;
-  amount: BN;
-  specHash: number[];
-  deadline: BN;
-  status: "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed";
-}
-```
+The SDK ships two `DeliveryStorage` implementations; plug in any other by implementing the interface:
 
-### ProofResult
+- **`VercelBlobStorage`** -- production default. Fast, global, permanent URLs. Requires `BLOB_READ_WRITE_TOKEN`.
+- **`InlineDataUriStorage`** -- tests and local dev. Encodes tiny payloads as `data:` URIs. Subject to the 128-byte URI limit.
 
-```typescript
-interface ProofResult {
-  verified: boolean;
-  wordCount: number;
-  minWords: number;
-  textHash: string;
-  cycleCount: number;
-  executionTime: number;
-}
-```
+Implement `DeliveryStorage` for IPFS, Arweave, S3, or any other backend.
 
-## Environment
+## Protocol parameters
 
-The SDK targets **Solana Devnet** by default. Pass a custom `rpcUrl` to connect to mainnet or localnet.
+| Constant | Default | Notes |
+|---|---|---|
+| `DEFAULT_CHALLENGE_PERIOD_SECONDS` | `86_400` (24h) | |
+| `MIN_CHALLENGE_PERIOD_SECONDS` | `3_600` (1h) | Enforced by program |
+| `MAX_CHALLENGE_PERIOD_SECONDS` | `604_800` (7d) | Enforced by program |
+| `DEFAULT_BOND_BPS` | `1_000` (10%) | |
+| `DEFAULT_MIN_BOND_ABSOLUTE` | `1_000_000` (1 USDC) | |
+| `DELIVERY_URI_MAX_LEN` | `128` bytes | Hard on-chain cap |
+| `ARBITRATOR_COUNT` | `3` | 2-of-3 multisig in v1 |
 
 ## License
 
-MIT
+Apache-2.0
