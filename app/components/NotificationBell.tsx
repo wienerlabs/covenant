@@ -38,7 +38,7 @@ function timeAgo(dateStr: string): string {
 
 export default function NotificationBell({ wallet, variant = "dark" }: NotificationBellProps) {
   const isDark = variant === "dark";
-  const { notifications, unreadCount } = useNotifications({ wallet });
+  const { notifications, unreadCount, markAllRead } = useNotifications({ wallet });
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +58,15 @@ export default function NotificationBell({ wallet, variant = "dark" }: Notificat
   return (
     <div ref={containerRef} style={{ position: "relative" }}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setOpen((o) => {
+            if (!o && unreadCount > 0) {
+              // Opening the panel — mark all as read
+              markAllRead();
+            }
+            return !o;
+          });
+        }}
         style={{
           position: "relative",
           background: "none",
