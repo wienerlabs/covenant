@@ -3,10 +3,26 @@ import { prisma } from "@/lib/prisma";
 import { releaseFundsToTaker } from "@/lib/escrow";
 
 // Always dynamic — this route talks to Prisma on every request.
-// Without this, Next.js 14 tries to statically pre-render the GET handler
-// at build time, which fails in CI where DATABASE_URL is unset.
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+// NOTE: This cron still uses the server-side releaseFundsToTaker() as
+// the fund-movement mechanism. In a fully on-chain deployment, this
+// would be replaced with a server crank that calls finalize_payment
+// via Anchor using a dedicated crank keypair. The current approach
+// works because:
+//   1. The on-chain finalize_payment is permissionless — any wallet
+//      can call it after challenge_end
+//   2. The server has DEPLOYER_KEYPAIR which can act as the crank
+//   3. Jobs created via the real Anchor create_job instruction have
+//      their escrow in PDA-owned token accounts
+//
+// For jobs created via the legacy SPL-transfer path (arena/battle),
+// releaseFundsToTaker still works because those funds sit in the
+// deployer's ATA. Both paths converge here.
+//
+// TODO: Replace with real Anchor finalize_payment instruction call
+// using a dedicated crank keypair for full on-chain finalize.
 
 /**
  * GET /api/cron/finalize
