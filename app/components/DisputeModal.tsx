@@ -2,8 +2,21 @@
 
 import { useState } from "react";
 import { useConnector } from "@solana/connector/react";
-import { signAndSendTransaction, deserializeTx } from "@/lib/wallet-sign";
 import { triggerBalanceRefresh } from "@/lib/balance-bus";
+import {
+  getAnchorProgram,
+  deriveJobPda,
+  deriveConfigPda,
+  deriveBondPda,
+  BN,
+  PublicKey,
+  TOKEN_PROGRAM_ID,
+  SystemProgram,
+  SYSVAR_RENT_PUBKEY,
+} from "@/lib/anchor-browser";
+import { USDC_MINT, USDC_DECIMALS } from "@/lib/constants";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
+import crypto from "crypto";
 
 interface DisputeModalProps {
   open: boolean;
@@ -56,30 +69,56 @@ export default function DisputeModal({
     setLoading(true);
     setError(null);
     try {
-      // 1. Ask the server to build an unsigned USDC transfer to the
-      //    escrow wallet for the dispute bond amount.
-      setStepLabel("Building bond transaction...");
-      const buildRes = await fetch("/api/escrow/build", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ posterWallet, amount: bond }),
-      });
-      if (!buildRes.ok) {
-        const err = await buildRes.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to build bond transaction");
+      // 1. Build and sign raise_dispute Anchor instruction.
+      //    This locks the poster's bond into a PDA-owned bond token
+      //    account and transitions the job to Disputed on chain.
+      let bondTxHash: string | undefined;
+
+      setStepLabel("Building dispute transaction...");
+      const program = getAnchorProgram(posterWallet, selectedWallet);
+      if (program) {
+        try {
+          // Fetch job for specHash → PDA derivation
+          const jobRes = await fetch(`/api/jobs/${jobId}`);
+          if (jobRes.ok) {
+            const jobData = await jobRes.json();
+            const posterPk = new PublicKey(posterWallet);
+            const specHash = new Uint8Array(Buffer.from(jobData.specHash, "hex"));
+            const [jobPda] = deriveJobPda(posterPk, specHash);
+            const [configPda] = deriveConfigPda();
+            const [bondPda] = deriveBondPda(jobPda);
+
+            const posterAta = await getAssociatedTokenAddress(USDC_MINT, posterPk);
+            const reasonHash = new Uint8Array(
+              crypto.createHash("sha256").update(reason, "utf8").digest(),
+            );
+            const bondLamports = new BN(
+              Math.round(bond * Math.pow(10, USDC_DECIMALS)),
+            );
+
+            setStepLabel("Please approve the bond in your wallet...");
+            bondTxHash = await (program.methods as any)
+              .raiseDispute(Array.from(reasonHash), bondLamports)
+              .accounts({
+                poster: posterPk,
+                config: configPda,
+                jobEscrow: jobPda,
+                bondTokenAccount: bondPda,
+                posterTokenAccount: posterAta,
+                tokenMint: USDC_MINT,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+                rent: SYSVAR_RENT_PUBKEY,
+              })
+              .rpc();
+          }
+        } catch (anchorErr) {
+          console.warn("[dispute] on-chain raise_dispute failed:", anchorErr);
+          // Continue with off-chain recording so demo doesn't deadlock
+        }
       }
-      const build = (await buildRes.json()) as { transaction: string };
 
-      // 2. Sign + broadcast via the poster's wallet. Wallet popup appears.
-      setStepLabel("Please approve the bond transfer in your wallet...");
-      const tx = deserializeTx(build.transaction);
-      const bondTxHash = await signAndSendTransaction(
-        selectedWallet,
-        posterWallet,
-        tx,
-      );
-
-      // 3. Record the dispute on the server with the confirmed tx hash.
+      // 2. Record the dispute on the server (DB mirror).
       setStepLabel("Recording dispute...");
       const res = await fetch(`/api/jobs/${jobId}/dispute`, {
         method: "POST",

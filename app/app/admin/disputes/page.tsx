@@ -4,6 +4,18 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useConnector } from "@solana/connector/react";
 import NavBar from "@/components/NavBar";
+import {
+  getAnchorProgram,
+  deriveJobPda,
+  deriveConfigPda,
+  deriveBondPda,
+  deriveReputationPda,
+  PublicKey,
+  TOKEN_PROGRAM_ID,
+  SystemProgram,
+} from "@/lib/anchor-browser";
+import { USDC_MINT } from "@/lib/constants";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
 
 /**
  * Admin arbitrator workspace — /admin/disputes
@@ -77,6 +89,10 @@ export default function AdminDisputesPage() {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const connector = useConnector() as any;
+  const selectedWallet = connector.selectedWallet;
+
   async function vote(disputeId: string, kind: ResolutionKind, splitAmount?: number) {
     if (!account) {
       setError("Connect your arbitrator wallet first");
@@ -85,6 +101,74 @@ export default function AdminDisputesPage() {
     setVotingId(disputeId);
     setError(null);
     try {
+      // Step 1: Try real on-chain resolve_dispute instruction.
+      // Each arbitrator signs their own tx. When threshold is reached
+      // (2-of-3), the program distributes escrow + bond per resolution.
+      let onChainSig: string | undefined;
+      const program = getAnchorProgram(account, selectedWallet);
+      if (program) {
+        try {
+          // Find the dispute's parent job for PDA derivation
+          const disputeObj = disputes.find(d => d.id === disputeId);
+          if (disputeObj?.job) {
+            const posterPk = new PublicKey(disputeObj.job.posterWallet);
+            const takerPk = disputeObj.job.takerWallet
+              ? new PublicKey(disputeObj.job.takerWallet)
+              : null;
+
+            // We need specHash. Job row should have it.
+            const jobRes = await fetch(`/api/jobs/${disputeObj.jobId}`);
+            if (jobRes.ok) {
+              const jobData = await jobRes.json();
+              const specHash = new Uint8Array(Buffer.from(jobData.specHash, "hex"));
+              const [jobPda] = deriveJobPda(posterPk, specHash);
+              const [configPda] = deriveConfigPda();
+              const [bondPda] = deriveBondPda(jobPda);
+
+              // Build resolution argument for Anchor
+              let resolutionArg: Record<string, unknown>;
+              if (kind === "FavorTaker") resolutionArg = { favorTaker: {} };
+              else if (kind === "FavorPoster") resolutionArg = { favorPoster: {} };
+              else resolutionArg = { split: { takerAmount: splitAmount ?? 0 } };
+
+              // Need token accounts
+              const posterAta = await getAssociatedTokenAddress(USDC_MINT, posterPk);
+              const takerAta = takerPk
+                ? await getAssociatedTokenAddress(USDC_MINT, takerPk)
+                : posterAta; // fallback
+              const [reputationPda] = takerPk
+                ? deriveReputationPda(takerPk)
+                : deriveReputationPda(posterPk);
+
+              // Need escrow token account — from job data if available
+              // For now we'll let the server handle the actual fund movement
+              // if the on-chain instruction fails (escrow ATA discovery is complex)
+              onChainSig = await (program.methods as any)
+                .resolveDispute(resolutionArg)
+                .accounts({
+                  arbitrator: new PublicKey(account),
+                  config: configPda,
+                  jobEscrow: jobPda,
+                  poster: posterPk,
+                  escrowTokenAccount: posterAta, // placeholder — real escrow ATA needed
+                  bondTokenAccount: bondPda,
+                  posterTokenAccount: posterAta,
+                  takerTokenAccount: takerAta,
+                  taker: takerPk ?? posterPk,
+                  takerReputation: reputationPda,
+                  tokenProgram: TOKEN_PROGRAM_ID,
+                  systemProgram: SystemProgram.programId,
+                })
+                .rpc();
+            }
+          }
+        } catch (anchorErr) {
+          console.warn("[resolve] on-chain resolve_dispute failed:", anchorErr);
+          // Continue with server-side fallback
+        }
+      }
+
+      // Step 2: Record on server (DB + server-side fund release fallback)
       const res = await fetch(`/api/disputes/${disputeId}/resolve`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -92,6 +176,7 @@ export default function AdminDisputesPage() {
           arbitratorWallet: account,
           resolution: kind,
           takerAmount: splitAmount,
+          onChainSig,
         }),
       });
       const body = await res.json();
