@@ -85,6 +85,16 @@ interface Particle {
   type: "spark" | "star" | "dust";
 }
 
+/** Floating damage / status text that rises and fades. */
+interface FloatingText {
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number;
+  maxLife: number;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -101,6 +111,10 @@ export default function PixelBattle({
   const frameRef = useRef(0);
   const rafRef = useRef<number>(0);
   const particlesRef = useRef<Particle[]>([]);
+  const floatingTextsRef = useRef<FloatingText[]>([]);
+
+  // Screen shake
+  const shakeRef = useRef({ intensity: 0, decay: 0.9 });
 
   // Track previous states to detect transitions
   const prevAlphaRef = useRef<WarriorState>("idle");
@@ -113,6 +127,10 @@ export default function PixelBattle({
   // HP animation
   const alphaHPAnimRef = useRef(100);
   const omegaHPAnimRef = useRef(100);
+
+  // Previous HP for damage number calculation
+  const prevAlphaHPRef = useRef(100);
+  const prevOmegaHPRef = useRef(100);
 
   const spawnParticles = useCallback(
     (
@@ -160,68 +178,70 @@ export default function PixelBattle({
       if (alphaState !== prevAlphaRef.current) {
         alphaAnimRef.current = { progress: 0, startFrame: frame };
         if (alphaState === "attack") {
-          // Spawn sparks at collision point
           setTimeout(() => {
-            spawnParticles(
-              alphaBaseX + 35 * p,
-              warriorBaseY + 6 * p,
-              8,
-              "spark",
-              ALPHA_COLOR,
-            );
+            spawnParticles(alphaBaseX + 35 * p, warriorBaseY + 6 * p, 12, "spark", ALPHA_COLOR);
           }, 200);
         }
+        if (alphaState === "hit") {
+          // Screen shake on hit
+          shakeRef.current.intensity = 8;
+          // Damage number
+          const dmg = Math.round(prevAlphaHPRef.current - alphaHP);
+          if (dmg > 0) {
+            floatingTextsRef.current.push({
+              x: alphaBaseX + 8 * p, y: warriorBaseY - 5 * p,
+              text: `-${dmg}`, color: "#FF4444", life: 40, maxLife: 40,
+            });
+          }
+        }
         if (alphaState === "victory") {
-          spawnParticles(
-            alphaBaseX + 8 * p,
-            warriorBaseY - 5 * p,
-            12,
-            "star",
-            ALPHA_COLOR,
-          );
+          // Victory star burst — more particles for celebration
+          spawnParticles(alphaBaseX + 8 * p, warriorBaseY - 10 * p, 25, "star", GOLD_COLOR);
+          spawnParticles(alphaBaseX + 8 * p, warriorBaseY, 15, "spark", ALPHA_COLOR);
+          floatingTextsRef.current.push({
+            x: alphaBaseX + 2 * p, y: warriorBaseY - 20 * p,
+            text: "VICTORY", color: GOLD_COLOR, life: 80, maxLife: 80,
+          });
         }
         if (alphaState === "defeat") {
-          spawnParticles(
-            alphaBaseX + 8 * p,
-            warriorBaseY + 16 * p,
-            6,
-            "dust",
-            ALPHA_COLOR,
-          );
+          // Pixel scatter death — more dust particles erupting
+          spawnParticles(alphaBaseX + 8 * p, warriorBaseY + 10 * p, 20, "dust", ALPHA_COLOR);
+          spawnParticles(alphaBaseX + 8 * p, warriorBaseY + 5 * p, 10, "spark", ALPHA_COLOR);
+          shakeRef.current.intensity = 5;
         }
         prevAlphaRef.current = alphaState;
       }
+      prevAlphaHPRef.current = alphaHP;
 
       if (omegaState !== prevOmegaRef.current) {
         omegaAnimRef.current = { progress: 0, startFrame: frame };
         if (omegaState === "attack") {
           setTimeout(() => {
-            spawnParticles(
-              omegaBaseX - 35 * p,
-              warriorBaseY + 6 * p,
-              8,
-              "spark",
-              OMEGA_COLOR,
-            );
+            spawnParticles(omegaBaseX - 35 * p, warriorBaseY + 6 * p, 12, "spark", OMEGA_COLOR);
           }, 200);
         }
+        if (omegaState === "hit") {
+          shakeRef.current.intensity = 8;
+          const dmg = Math.round(prevOmegaHPRef.current - omegaHP);
+          if (dmg > 0) {
+            floatingTextsRef.current.push({
+              x: omegaBaseX - 8 * p, y: warriorBaseY - 5 * p,
+              text: `-${dmg}`, color: "#FF4444", life: 40, maxLife: 40,
+            });
+          }
+        }
         if (omegaState === "victory") {
-          spawnParticles(
-            omegaBaseX - 8 * p,
-            warriorBaseY - 5 * p,
-            12,
-            "star",
-            OMEGA_COLOR,
-          );
+          spawnParticles(omegaBaseX - 8 * p, warriorBaseY - 10 * p, 25, "star", GOLD_COLOR);
+          spawnParticles(omegaBaseX - 8 * p, warriorBaseY, 15, "spark", OMEGA_COLOR);
+          floatingTextsRef.current.push({
+            x: omegaBaseX - 14 * p, y: warriorBaseY - 20 * p,
+            text: "VICTORY", color: GOLD_COLOR, life: 80, maxLife: 80,
+          });
         }
         if (omegaState === "defeat") {
-          spawnParticles(
-            omegaBaseX - 8 * p,
-            warriorBaseY + 16 * p,
-            6,
-            "dust",
-            OMEGA_COLOR,
-          );
+          spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 10 * p, 20, "dust", OMEGA_COLOR);
+          spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 5 * p, 10, "spark", OMEGA_COLOR);
+          shakeRef.current.intensity = 5;
         }
         prevOmegaRef.current = omegaState;
       }
@@ -237,13 +257,50 @@ export default function PixelBattle({
       alphaHPAnimRef.current += (alphaHP - alphaHPAnimRef.current) * 0.05;
       omegaHPAnimRef.current += (omegaHP - omegaHPAnimRef.current) * 0.05;
 
+      /* ---- Screen shake ---- */
+      const shake = shakeRef.current;
+      if (shake.intensity > 0.5) {
+        shake.intensity *= shake.decay;
+      } else {
+        shake.intensity = 0;
+      }
+      const shakeX = shake.intensity > 0 ? (Math.random() - 0.5) * shake.intensity : 0;
+      const shakeY = shake.intensity > 0 ? (Math.random() - 0.5) * shake.intensity : 0;
+
       /* ---- Clear canvas ---- */
       ctx.clearRect(0, 0, width, height);
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
 
-      /* ---- Draw ground ---- */
+      /* ---- Ambient dust particles ---- */
+      if (frame % 30 === 0) {
+        particlesRef.current.push({
+          x: Math.random() * width,
+          y: height,
+          vx: (Math.random() - 0.5) * 0.3,
+          vy: -0.2 - Math.random() * 0.3,
+          life: 60 + Math.random() * 40,
+          maxLife: 100,
+          color: "rgba(255,255,255,0.15)",
+          size: 1,
+          type: "dust",
+        });
+      }
+
+      /* ---- Draw ground line + texture ---- */
+      // Ground shadow gradient
+      const groundGrad = ctx.createLinearGradient(0, groundY - 3, 0, groundY + 10);
+      groundGrad.addColorStop(0, "transparent");
+      groundGrad.addColorStop(0.3, "rgba(26,26,46,0.5)");
+      groundGrad.addColorStop(1, "#1a1a2e");
+      ctx.fillStyle = groundGrad;
+      ctx.fillRect(0, groundY - 3, width, 13);
       ctx.fillStyle = "#1a1a2e";
       ctx.fillRect(0, groundY, width, 10);
-      // Ground variation patches
+      // Ground line highlight
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fillRect(0, groundY, width, 1);
+      // Variation patches
       for (let gx = 0; gx < width; gx += 8) {
         if ((gx * 7 + 13) % 5 === 0) {
           ctx.fillStyle = "#14142a";
@@ -258,6 +315,15 @@ export default function PixelBattle({
           ctx.fillRect(gx, groundY, 3, 2);
         }
       }
+
+      /* ---- Warrior shadows on ground ---- */
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.beginPath();
+      ctx.ellipse(alphaBaseX + 8 * p, groundY + 1, 12 * p, 3 * p, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(omegaBaseX + 8 * p, groundY + 1, 12 * p, 3 * p, 0, 0, Math.PI * 2);
+      ctx.fill();
 
       /* ---- Draw HP Bars ---- */
       const hpBarWidth = 120;
@@ -344,6 +410,42 @@ export default function PixelBattle({
         }
       }
       particlesRef.current = aliveParticles;
+
+      /* ---- Draw floating damage/status texts ---- */
+      const aliveTexts: FloatingText[] = [];
+      for (const ft of floatingTextsRef.current) {
+        ft.life--;
+        ft.y -= 0.8; // float upward
+        if (ft.life > 0) {
+          const alpha = Math.max(0, ft.life / ft.maxLife);
+          const scale = ft.text === "VICTORY" ? 2 : 1.5;
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.font = `bold ${Math.round(10 * scale)}px monospace`;
+          ctx.textAlign = "center";
+          // Shadow
+          ctx.fillStyle = "rgba(0,0,0,0.6)";
+          ctx.fillText(ft.text, ft.x + 1, ft.y + 1);
+          // Text
+          ctx.fillStyle = ft.color;
+          ctx.fillText(ft.text, ft.x, ft.y);
+          ctx.restore();
+          aliveTexts.push(ft);
+        }
+      }
+      floatingTextsRef.current = aliveTexts;
+
+      /* ---- Close screen shake transform ---- */
+      ctx.restore();
+
+      /* ---- CRT scanline overlay ---- */
+      ctx.save();
+      ctx.globalAlpha = 0.04;
+      for (let sy = 0; sy < height; sy += 3) {
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, sy, width, 1);
+      }
+      ctx.restore();
     },
     [alphaState, omegaState, alphaHP, omegaHP, width, height, spawnParticles],
   );
@@ -432,9 +534,19 @@ function drawHPBar(
   ctx.fillStyle = "#2a2a3e";
   ctx.fillRect(x, y, w, h);
 
-  // Bar fill
+  // Bar fill with gradient color: green(>50) → yellow(>25) → red(<=25)
   const fillW = Math.max(0, (hp / 100) * (w - 2));
-  const fillColor = hp > 50 ? color : hp > 25 ? GOLD_COLOR : "#FF2222";
+  let fillColor: string;
+  if (hp > 50) {
+    fillColor = "#22CC44"; // green
+  } else if (hp > 25) {
+    fillColor = GOLD_COLOR; // yellow
+  } else {
+    // Critical red with subtle pulse
+    const pulse = Math.sin(Date.now() * 0.01) * 0.3 + 0.7;
+    const r = Math.round(255 * pulse);
+    fillColor = `rgb(${r},34,34)`;
+  }
   ctx.fillStyle = fillColor;
   ctx.fillRect(x + 1, y + 1, fillW, h - 2);
 
