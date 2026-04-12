@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useConnector } from "@solana/connector/react";
 import JobCard from "./JobCard";
 import AsciiAnimation from "./AsciiAnimation";
 import SubmitWorkModal from "./SubmitWorkModal";
@@ -9,6 +10,11 @@ import EmptyState from "./EmptyState";
 import useJobList from "@/hooks/useJobList";
 import type { JobData } from "@/hooks/useJobList";
 import { toast } from "@/lib/toast";
+import {
+  getAnchorProgram,
+  deriveJobPda,
+  PublicKey,
+} from "@/lib/anchor-browser";
 
 interface JobListProps {
   filter: "all" | "mine" | "open";
@@ -40,6 +46,10 @@ export default function JobList({ filter, walletPubkey, variant = "light", categ
   const [refreshHover, setRefreshHover] = useState(false);
   const [activeSubmitJob, setActiveSubmitJob] = useState<JobData | null>(null);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const connector = useConnector() as any;
+  const selectedWallet = connector.selectedWallet;
+
   const handleAccept = useCallback(
     async (jobId: string) => {
       if (!walletPubkey) {
@@ -47,10 +57,42 @@ export default function JobList({ filter, walletPubkey, variant = "light", categ
         return;
       }
       try {
+        // Step 1: try real on-chain accept_job instruction
+        let onChainSig: string | undefined;
+        const program = getAnchorProgram(walletPubkey, selectedWallet);
+        if (program) {
+          try {
+            const jobRes = await fetch(`/api/jobs/${jobId}`);
+            if (jobRes.ok) {
+              const jobData = await jobRes.json();
+              const posterPk = new PublicKey(jobData.posterWallet);
+              const specHash = new Uint8Array(
+                Buffer.from(jobData.specHash, "hex"),
+              );
+              const [jobPda] = deriveJobPda(posterPk, specHash);
+
+              onChainSig = await (program.methods as any)
+                .acceptJob(Array.from(specHash))
+                .accounts({
+                  taker: new PublicKey(walletPubkey),
+                  jobEscrow: jobPda,
+                  poster: posterPk,
+                })
+                .rpc();
+            }
+          } catch (anchorErr) {
+            console.warn("[accept] on-chain accept_job failed:", anchorErr);
+          }
+        }
+
+        // Step 2: record on server (DB mirror)
         const response = await fetch(`/api/jobs/${jobId}/accept`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ takerWallet: walletPubkey }),
+          body: JSON.stringify({
+            takerWallet: walletPubkey,
+            onChainSig,
+          }),
         });
         if (!response.ok) {
           const data = await response.json();
@@ -63,7 +105,7 @@ export default function JobList({ filter, walletPubkey, variant = "light", categ
         toast("Failed to accept job", "error");
       }
     },
-    [walletPubkey, refetch]
+    [walletPubkey, selectedWallet, refetch],
   );
 
   const handleCancel = useCallback(
