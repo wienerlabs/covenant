@@ -5,8 +5,18 @@ import { useConnector } from "@solana/connector/react";
 import { JOB_CATEGORIES, type CategoryId } from "@/lib/categories";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { fireConfetti } from "@/lib/confetti";
-import { signAndSendTransaction, deserializeTx } from "@/lib/wallet-sign";
 import { triggerBalanceRefresh } from "@/lib/balance-bus";
+import {
+  getAnchorProgram,
+  createJobOnChain,
+  BN,
+  PublicKey,
+} from "@/lib/anchor-browser";
+import { USDC_MINT, USDC_DECIMALS } from "@/lib/constants";
+import {
+  getAssociatedTokenAddress,
+} from "@solana/spl-token";
+import crypto from "crypto";
 
 interface JobWizardProps {
   onComplete?: (data: Record<string, unknown>) => void;
@@ -172,57 +182,91 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
       };
 
       let escrowTxHash: string | undefined;
-      let escrowAta: string | undefined;
+      let jobPdaStr: string | undefined;
+      let escrowAtaStr: string | undefined;
 
-      // ----- Wallet-signed escrow lock (USDC only) -----
-      // Skip for SOL payments which don't need an SPL transfer.
-      // The user's wallet pops up here and a real USDC transfer
-      // moves funds from their ATA into the escrow ATA.
+      // ----- Real Anchor create_job instruction (USDC) -----
+      // Builds the actual on-chain `create_job` instruction that:
+      //   1. Creates a per-job PDA escrow account
+      //   2. Transfers USDC from the poster's ATA into the PDA-owned escrow ATA
+      //   3. Records spec_hash, deadline, challenge_period on chain
+      // The user's wallet pops up to sign this instruction.
       if (data.paymentToken === "USDC") {
         setEscrowStep("building");
-        const buildRes = await fetch("/api/escrow/build", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            posterWallet: account,
-            amount: data.amount,
-          }),
-        });
-        if (!buildRes.ok) {
-          const d = await buildRes.json().catch(() => ({}));
-          setError(d.error || "Failed to build escrow transaction");
+        const program = getAnchorProgram(account, selectedWallet);
+        if (!program) {
+          setError("Wallet not connected or missing. Please reconnect.");
           setEscrowStep("idle");
           return;
         }
-        const build = (await buildRes.json()) as {
-          transaction: string;
-          escrowAta: string;
+
+        const posterPk = new PublicKey(account);
+
+        // Compute spec hash (SHA-256 of canonical spec JSON)
+        const specJson = {
+          posterWallet: account,
+          amount: data.amount,
+          minWords: data.minWords,
+          language: language || "English",
+          deadline: deadlineDate.toISOString(),
+          createdAt: new Date().toISOString(),
+          title: title || "",
+          description: description || "",
+          requirements: requirements || "",
         };
-        escrowAta = build.escrowAta;
+        const specHash = new Uint8Array(
+          crypto.createHash("sha256").update(JSON.stringify(specJson)).digest(),
+        );
+
+        // Get poster's USDC ATA
+        const posterAta = await getAssociatedTokenAddress(
+          USDC_MINT,
+          posterPk,
+        );
+
+        const amountBn = new BN(
+          Math.round(data.amount * Math.pow(10, USDC_DECIMALS)),
+        );
+        const deadlineBn = new BN(Math.floor(deadlineDate.getTime() / 1000));
+        const challengePeriodBn = new BN(
+          Math.max(60, Math.min(604800, 24 * 60 * 60)), // default 24h, clamped to protocol bounds
+        );
 
         setEscrowStep("signing");
         try {
-          const tx = deserializeTx(build.transaction);
-          escrowTxHash = await signAndSendTransaction(
-            selectedWallet,
-            account,
-            tx,
-          );
+          const result = await createJobOnChain({
+            program,
+            poster: posterPk,
+            specHash,
+            amount: amountBn,
+            deadline: deadlineBn,
+            challengePeriod: challengePeriodBn,
+            posterTokenAccount: posterAta,
+            tokenMint: USDC_MINT,
+          });
+          escrowTxHash = result.sig;
+          jobPdaStr = result.jobPda.toBase58();
+          escrowAtaStr = result.escrowTokenAccount.toBase58();
         } catch (signErr) {
-          setError(
+          const msg =
             signErr instanceof Error
-              ? `Wallet signing failed: ${signErr.message}`
-              : "Wallet signing failed",
-          );
+              ? signErr.message
+              : String(signErr);
+          // Parse Anchor error if present
+          if (msg.includes("0x")) {
+            setError(`Transaction failed: ${msg.slice(0, 200)}`);
+          } else {
+            setError(`Wallet signing failed: ${msg.slice(0, 200)}`);
+          }
           setEscrowStep("idle");
           return;
         }
       }
 
-      // ----- Record on the server -----
-      // Server verifies escrowTxHash on chain (if present) before
-      // persisting the Job row, so the only way the DB ends up with
-      // an unbacked job is via the legacy known-wallet agent path.
+      // ----- Record on the server (DB mirror) -----
+      // The on-chain state is now the source of truth. The server
+      // records a DB row so the frontend can query jobs efficiently
+      // without hitting the RPC for every list view.
       setEscrowStep("creating");
       const res = await fetch("/api/escrow/confirm", {
         method: "POST",
@@ -232,13 +276,14 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
           amount: data.amount,
           jobData,
           escrowTxHash,
-          escrowAta,
+          escrowAta: escrowAtaStr,
+          jobPda: jobPdaStr,
         }),
       });
 
       if (!res.ok) {
         const d = await res.json();
-        setError(d.error || "Failed to create job");
+        setError(d.error || "Failed to record job");
         setEscrowStep("idle");
         return;
       }
@@ -250,7 +295,6 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
       });
       setStep(4);
       fireConfetti();
-      // Refresh NavBar balance — USDC just left the user's wallet
       triggerBalanceRefresh();
       if (onComplete) onComplete(jobResult);
     } catch {
