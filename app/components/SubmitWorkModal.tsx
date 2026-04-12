@@ -2,8 +2,12 @@
 
 import { useState } from "react";
 import { useConnector } from "@solana/connector/react";
-import { signAndSendTransaction } from "@/lib/wallet-sign";
-import { buildMemoTransaction } from "@/lib/memo-tx";
+import {
+  getAnchorProgram,
+  submitWorkOnChain,
+  PublicKey,
+} from "@/lib/anchor-browser";
+import crypto from "crypto";
 
 interface SubmitWorkModalProps {
   open: boolean;
@@ -81,27 +85,42 @@ export default function SubmitWorkModal({
         console.warn("[submit-work] blob upload error, falling back to inline:", upErr);
       }
 
-      // Step 2: delivery commitment — taker signs a memo tx binding
-      //   their wallet to the work_hash + delivery_uri. This doesn't
-      //   move any tokens, just creates a signed audit trail so the
-      //   poster (and any arbitrator later) can prove who submitted.
+      // Step 2: real submit_work instruction via Anchor
+      // This calls the deployed program's submit_work instruction which:
+      //   - Records work_hash + delivery_uri on the JobEscrow PDA
+      //   - Transitions the job to Delivered state on chain
+      //   - Starts the challenge period (challenge_end = now + period)
       let commitmentTxHash: string | undefined;
       try {
         setUploadProgress("Please sign the delivery commitment in your wallet...");
-        const memo = `covenant:submit_work job=${jobId} hash=${
-          workHash ? workHash.slice(0, 16) : "inline"
-        }`;
-        const memoTx = await buildMemoTransaction(takerWallet, memo);
-        commitmentTxHash = await signAndSendTransaction(
-          selectedWallet,
-          takerWallet,
-          memoTx,
-        );
-      } catch (memoErr) {
-        // Memo signing is nice-to-have; if the wallet declines or fails
-        // we still record the delivery off-chain so the demo doesn't
-        // deadlock. Surface the error but continue.
-        console.warn("[submit-work] memo signing skipped:", memoErr);
+        const program = getAnchorProgram(takerWallet, selectedWallet);
+        if (program) {
+          // Fetch job details from API to get poster + specHash for PDA derivation
+          const jobRes = await fetch(`/api/jobs/${jobId}`);
+          if (jobRes.ok) {
+            const jobData = await jobRes.json();
+            const posterPk = new PublicKey(jobData.posterWallet);
+            const specHashBytes = new Uint8Array(
+              Buffer.from(jobData.specHash, "hex"),
+            );
+            const workHashBytes = new Uint8Array(
+              crypto.createHash("sha256").update(content).digest(),
+            );
+
+            commitmentTxHash = await submitWorkOnChain({
+              program,
+              taker: new PublicKey(takerWallet),
+              poster: posterPk,
+              specHash: specHashBytes,
+              workHash: workHashBytes,
+              deliveryUri: deliveryUri ?? `inline:${jobId.slice(0, 8)}`,
+            });
+          }
+        }
+      } catch (submitErr) {
+        // If the on-chain submit_work fails, fall back to off-chain
+        // recording so the demo doesn't deadlock. Log the error.
+        console.warn("[submit-work] on-chain submit_work failed:", submitErr);
       }
 
       // Step 3: server-side record

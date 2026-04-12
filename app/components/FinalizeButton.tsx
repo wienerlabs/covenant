@@ -1,6 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useConnector } from "@solana/connector/react";
+import {
+  getAnchorProgram,
+  finalizePaymentOnChain,
+  PublicKey,
+} from "@/lib/anchor-browser";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
+import { USDC_MINT } from "@/lib/constants";
+import { triggerBalanceRefresh } from "@/lib/balance-bus";
 
 interface FinalizeButtonProps {
   jobId: string;
@@ -30,20 +39,73 @@ export default function FinalizeButton({
 
   const isDark = variant === "dark";
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const connector = useConnector() as any;
+  const selectedWallet = connector.selectedWallet;
+
   async function handleFinalize() {
     setLoading(true);
     setError(null);
     try {
+      // Step 1: try on-chain finalize_payment (real Anchor instruction)
+      let onChainSig: string | undefined;
+      if (callerWallet && selectedWallet) {
+        try {
+          const program = getAnchorProgram(callerWallet, selectedWallet);
+          if (program) {
+            // Fetch job details for PDA derivation
+            const jobRes = await fetch(`/api/jobs/${jobId}`);
+            if (jobRes.ok) {
+              const jobData = await jobRes.json();
+              if (jobData.posterWallet && jobData.takerWallet && jobData.specHash) {
+                const posterPk = new PublicKey(jobData.posterWallet);
+                const takerPk = new PublicKey(jobData.takerWallet);
+                const specHash = new Uint8Array(Buffer.from(jobData.specHash, "hex"));
+                const takerAta = await getAssociatedTokenAddress(USDC_MINT, takerPk);
+                // escrowTokenAccount — we'd need it from the job. If the job has pda
+                // and escrow ATA stored, use those; otherwise fallback to server-side.
+                // For now, try the on-chain call; if it fails, fallback to server.
+                const crankPk = new PublicKey(callerWallet);
+
+                // Try to get escrow token account from job events
+                const escrowAta = jobData.delivery?.escrowAta
+                  ? new PublicKey(jobData.delivery.escrowAta)
+                  : undefined;
+
+                if (escrowAta) {
+                  onChainSig = await finalizePaymentOnChain({
+                    program,
+                    crank: crankPk,
+                    poster: posterPk,
+                    taker: takerPk,
+                    specHash,
+                    escrowTokenAccount: escrowAta,
+                    takerTokenAccount: takerAta,
+                  });
+                }
+              }
+            }
+          }
+        } catch (anchorErr) {
+          console.warn("[finalize] on-chain finalize_payment failed, falling back to server:", anchorErr);
+        }
+      }
+
+      // Step 2: record on server (DB mirror + fallback release)
       const res = await fetch(`/api/jobs/${jobId}/finalize`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ callerWallet: callerWallet ?? "anonymous" }),
+        body: JSON.stringify({
+          callerWallet: callerWallet ?? "anonymous",
+          onChainSig,
+        }),
       });
       const body = await res.json();
       if (!res.ok) {
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
       setSuccess(true);
+      triggerBalanceRefresh();
       onFinalized?.(body);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
