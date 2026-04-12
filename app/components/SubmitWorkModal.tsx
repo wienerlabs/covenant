@@ -194,7 +194,7 @@ export default function SubmitWorkModal({
               fontSize: "10px",
               textTransform: "uppercase",
               letterSpacing: "0.1em",
-              color: "#FFE342",
+              color: "#fffeb2",
               marginBottom: "6px",
             }}
           >
@@ -308,9 +308,9 @@ export default function SubmitWorkModal({
               flex: 1,
               padding: "12px",
               borderRadius: "6px",
-              border: "1px solid #FFE342",
+              border: "1px solid #fffeb2",
               backgroundColor: "rgba(255,227,66,0.1)",
-              color: "#FFE342",
+              color: "#fffeb2",
               fontSize: "12px",
               textTransform: "uppercase",
               letterSpacing: "0.05em",

@@ -66,8 +66,8 @@ export default function LiveFeed() {
 
   const statusColor = (status: FeedItem["status"]) => {
     switch (status) {
-      case "completed": return "#FFE342";
-      case "accepted": return "#42BDFF";
+      case "completed": return "#fffeb2";
+      case "accepted": return "#fffeb2";
       case "cancelled": return "#fca5a5";
       default: return "rgba(255,255,255,0.7)";
     }
@@ -110,9 +110,9 @@ export default function LiveFeed() {
             width: "6px",
             height: "6px",
             borderRadius: "50%",
-            backgroundColor: "#FFE342",
+            backgroundColor: "#fffeb2",
             display: "inline-block",
-            boxShadow: "0 0 6px #FFE342",
+            boxShadow: "0 0 6px #fffeb2",
             animation: "pulse 2s infinite",
           }}
         />

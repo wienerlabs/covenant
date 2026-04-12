@@ -67,7 +67,7 @@ export default function WalletBalance() {
         alignItems: "center",
         gap: "8px",
         fontSize: "10px",
-        color: flash ? "#FFE342" : "rgba(255,255,255,0.7)",
+        color: flash ? "#fffeb2" : "rgba(255,255,255,0.7)",
         padding: "3px 8px",
         borderRadius: "6px",
         border: flash

@@ -310,7 +310,7 @@ export default function ProfilePage() {
                             <img
                               src={avatarPreview}
                               alt="Preview"
-                              style={{ width: 80, height: 80, borderRadius: "8px", objectFit: "cover", border: "2px solid #42BDFF" }}
+                              style={{ width: 80, height: 80, borderRadius: "8px", objectFit: "cover", border: "2px solid #fffeb2" }}
                             />
                             <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
                               <button
@@ -323,10 +323,10 @@ export default function ProfilePage() {
                                   letterSpacing: "0.05em",
                                   padding: "4px 12px",
                                   cursor: uploadingAvatar ? "not-allowed" : "pointer",
-                                  border: "1px solid #42BDFF",
+                                  border: "1px solid #fffeb2",
                                   borderRadius: "4px",
                                   backgroundColor: uploadingAvatar ? "rgba(66,189,255,0.08)" : "rgba(66,189,255,0.15)",
-                                  color: "#42BDFF",
+                                  color: "#fffeb2",
                                   transition: "all 0.15s ease",
                                   display: "inline-flex",
                                   alignItems: "center",
@@ -335,7 +335,7 @@ export default function ProfilePage() {
                               >
                                 {uploadingAvatar ? (
                                   <>
-                                    <span style={{ display: "inline-block", width: 10, height: 10, border: "2px solid rgba(66,189,255,0.3)", borderTopColor: "#42BDFF", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+                                    <span style={{ display: "inline-block", width: 10, height: 10, border: "2px solid rgba(66,189,255,0.3)", borderTopColor: "#fffeb2", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
                                     Saving
                                   </>
                                 ) : "Save"}
@@ -401,7 +401,7 @@ export default function ProfilePage() {
                                 color: "rgba(255,255,255,0.4)",
                                 transition: "color 0.15s ease",
                               }}
-                              onMouseEnter={(e) => { e.currentTarget.style.color = "#42BDFF"; }}
+                              onMouseEnter={(e) => { e.currentTarget.style.color = "#fffeb2"; }}
                               onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
                             >
                               Change Avatar
@@ -411,7 +411,7 @@ export default function ProfilePage() {
                         {avatarToast && (
                           <div style={{
                             fontSize: "10px",
-                            color: avatarToast.includes("updated") ? "#FFE342" : "#FF425E",
+                            color: avatarToast.includes("updated") ? "#fffeb2" : "#FF425E",
                             textAlign: "center",
                             marginTop: "2px",
                           }}>

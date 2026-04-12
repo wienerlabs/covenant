@@ -341,7 +341,7 @@ function DisputeCard({
             style={{
               fontSize: "18px",
               fontWeight: 700,
-              color: "#FFE342",
+              color: "#fffeb2",
               textDecoration: "none",
             }}
           >
@@ -434,7 +434,7 @@ function DisputeCard({
               href={dispute.job.delivery.deliveryUri}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: "#FFE342", wordBreak: "break-all" }}
+              style={{ color: "#fffeb2", wordBreak: "break-all" }}
             >
               {dispute.job.delivery.deliveryUri}
             </a>
@@ -489,7 +489,7 @@ function DisputeCard({
           </span>
         )}
         {dispute.resolution && dispute.resolution !== "Pending" && (
-          <span style={{ marginLeft: "8px", color: "#FFE342" }}>
+          <span style={{ marginLeft: "8px", color: "#fffeb2" }}>
             pending: {dispute.resolution}
           </span>
         )}
@@ -549,7 +549,7 @@ function DisputeCard({
             />
             <VoteButton
               label="Split"
-              color="#FFE342"
+              color="#fffeb2"
               disabled={disabled}
               onClick={() => onVote(dispute.id, "Split", splitAmount)}
             />

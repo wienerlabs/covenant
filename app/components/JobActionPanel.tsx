@@ -121,9 +121,9 @@ export default function JobActionPanel({
               style={{
                 padding: "14px 24px",
                 borderRadius: "8px",
-                border: "1px solid #FFE342",
+                border: "1px solid #fffeb2",
                 backgroundColor: "rgba(255,227,66,0.1)",
-                color: "#FFE342",
+                color: "#fffeb2",
                 fontSize: "12px",
                 textTransform: "uppercase",
                 letterSpacing: "0.06em",
@@ -268,7 +268,7 @@ export default function JobActionPanel({
             backgroundColor: "rgba(255,227,66,0.08)",
             border: "1px solid rgba(255,227,66,0.3)",
             fontSize: "13px",
-            color: "#FFE342",
+            color: "#fffeb2",
           }}
         >
           <strong>Resolved — {job.dispute.resolution}.</strong> Arbitrator
@@ -359,7 +359,7 @@ function DeliveryPreview({
           target="_blank"
           rel="noopener noreferrer"
           style={{
-            color: "#FFE342",
+            color: "#fffeb2",
             wordBreak: "break-all",
           }}
         >

@@ -19,7 +19,7 @@ const STEPS = [
     num: "01",
     label: "POST",
     desc: "Describe your task, lock USDC in escrow on Solana, pick a challenge period.",
-    color: "#42BDFF",
+    color: "#fffeb2",
   },
   {
     num: "02",
@@ -31,7 +31,7 @@ const STEPS = [
     num: "03",
     label: "SETTLE",
     desc: "Challenge window runs. No dispute means auto-release. Disputes go to an arbitrator.",
-    color: "#42BDFF",
+    color: "#fffeb2",
   },
 ];
 

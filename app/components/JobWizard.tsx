@@ -819,7 +819,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
             {data.paymentToken === "USDC" && (
               <div
                 style={{
-                  border: `1px solid ${hasSufficientBalance ? "#42BDFF" : "#FF425E"}`,
+                  border: `1px solid ${hasSufficientBalance ? "#fffeb2" : "#FF425E"}`,
                   borderRadius: "8px",
                   padding: "14px 16px",
                   marginBottom: "16px",
@@ -865,8 +865,8 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
 
                 {hasSufficientBalance ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <span style={{ color: "#42BDFF", fontSize: "14px" }}>&#10003;</span>
-                    <span style={{ fontSize: "11px", color: "#42BDFF", fontWeight: 600 }}>
+                    <span style={{ color: "#fffeb2", fontSize: "14px" }}>&#10003;</span>
+                    <span style={{ fontSize: "11px", color: "#fffeb2", fontWeight: 600 }}>
                       Sufficient balance for {data.amount} USDC escrow
                     </span>
                   </div>
@@ -888,10 +888,10 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                         letterSpacing: "0.05em",
                         padding: "8px 16px",
                         cursor: faucetLoading ? "wait" : "pointer",
-                        border: `1px solid #FFE342`,
+                        border: `1px solid #fffeb2`,
                         borderRadius: "6px",
                         backgroundColor: "rgba(255,227,66,0.15)",
-                        color: "#FFE342",
+                        color: "#fffeb2",
                         fontWeight: 600,
                         transition: "all 0.15s ease",
                         width: "100%",
@@ -901,8 +901,8 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                     </button>
                     {faucetSuccess && (
                       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px" }}>
-                        <span style={{ color: "#42BDFF", fontSize: "14px" }}>&#10003;</span>
-                        <span style={{ fontSize: "11px", color: "#42BDFF" }}>
+                        <span style={{ color: "#fffeb2", fontSize: "14px" }}>&#10003;</span>
+                        <span style={{ fontSize: "11px", color: "#fffeb2" }}>
                           Test USDC minted successfully! Balance updated.
                         </span>
                       </div>
@@ -1011,7 +1011,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                 height: "48px",
                 borderRadius: "50%",
                 backgroundColor: "rgba(16,185,129,0.15)",
-                border: "2px solid #42BDFF",
+                border: "2px solid #fffeb2",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -1019,7 +1019,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                 animation: "wizard-check-scale 0.5s ease-out",
               }}
             >
-              <span style={{ fontSize: "24px", color: "#42BDFF" }}>&#10003;</span>
+              <span style={{ fontSize: "24px", color: "#fffeb2" }}>&#10003;</span>
             </div>
 
             <div style={{ marginBottom: "16px" }}>
@@ -1033,18 +1033,18 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
               <div style={labelStyle}>Escrow Status</div>
               {result.txHash ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", justifyContent: "center" }}>
-                  <span style={{ fontSize: "12px", color: "#42BDFF" }}>Escrow locked on Solana &#10003;</span>
+                  <span style={{ fontSize: "12px", color: "#fffeb2" }}>Escrow locked on Solana &#10003;</span>
                   <a
                     href={`https://explorer.solana.com/tx/${result.txHash}?cluster=devnet`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ fontSize: "11px", color: "#42BDFF", textDecoration: "none", fontFamily: "monospace" }}
+                    style={{ fontSize: "11px", color: "#fffeb2", textDecoration: "none", fontFamily: "monospace" }}
                   >
                     {result.txHash.slice(0, 20)}...
                   </a>
                 </div>
               ) : (
-                <div style={{ fontSize: "12px", color: "#42BDFF" }}>
+                <div style={{ fontSize: "12px", color: "#fffeb2" }}>
                   Job posted to marketplace &#10003; (escrow pending on-chain settlement)
                 </div>
               )}

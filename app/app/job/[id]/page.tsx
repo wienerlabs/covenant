@@ -510,7 +510,7 @@ export default function JobDetailPage() {
                             padding: "2px 8px",
                             borderRadius: "4px",
                             backgroundColor: sub.verified ? "rgba(134,239,172,0.15)" : "rgba(255,255,255,0.07)",
-                            color: sub.verified ? "#FFE342" : "rgba(255,255,255,0.4)",
+                            color: sub.verified ? "#fffeb2" : "rgba(255,255,255,0.4)",
                             border: `1px solid ${sub.verified ? "rgba(134,239,172,0.3)" : "rgba(255,255,255,0.1)"}`,
                           }}>
                             {sub.verified ? "Verified" : "Pending"}
@@ -572,7 +572,7 @@ export default function JobDetailPage() {
                           fontSize: "10px",
                           textTransform: "uppercase",
                           letterSpacing: "0.1em",
-                          color: "#FFE342",
+                          color: "#fffeb2",
                           fontWeight: 600,
                         }}>
                           Deliverable Output
@@ -592,7 +592,7 @@ export default function JobDetailPage() {
                           borderRadius: "4px",
                           backgroundColor: "rgba(255,227,66,0.1)",
                           border: "1px solid rgba(255,227,66,0.3)",
-                          color: "#FFE342",
+                          color: "#fffeb2",
                           fontWeight: 700,
                         }}>
                           ZK Verified
@@ -635,7 +635,7 @@ export default function JobDetailPage() {
                       </div>
                       <div>
                         <div style={labelStyle}>Status</div>
-                        <div style={{ fontSize: "12px", color: sub.verified ? "#FFE342" : "rgba(255,255,255,0.4)", fontWeight: 600 }}>
+                        <div style={{ fontSize: "12px", color: sub.verified ? "#fffeb2" : "rgba(255,255,255,0.4)", fontWeight: 600 }}>
                           {sub.verified ? "Verified" : "Pending"}
                         </div>
                       </div>
@@ -707,11 +707,11 @@ export default function JobDetailPage() {
                     {jobTransactions.map((tx) => {
                       const typeColors: Record<string, string> = {
                         escrow_lock: "#a855f7",
-                        accept_job: "#FFE342",
+                        accept_job: "#fffeb2",
                         submit_completion: "#22c55e",
                         escrow_release: "#22c55e",
                         payment_released: "#22c55e",
-                        create_job: "#42BDFF",
+                        create_job: "#fffeb2",
                       };
                       const typeLabels: Record<string, string> = {
                         escrow_lock: "Escrow Lock",
@@ -757,7 +757,7 @@ export default function JobDetailPage() {
                             style={{
                               fontSize: "10px",
                               fontFamily: "monospace",
-                              color: "#42BDFF",
+                              color: "#fffeb2",
                               textDecoration: "none",
                               overflow: "hidden",
                               textOverflow: "ellipsis",

@@ -2,7 +2,7 @@ export const AGENT_ALPHA = {
   name: "AGENT ALPHA",
   role: "poster" as const,
   wallet: process.env.AGENT_ALPHA_WALLET || "",
-  color: "#42BDFF", // blue
+  color: "#fffeb2", // blue
   avatarSeed: "agent-alpha-covenant-2026",
 };
 

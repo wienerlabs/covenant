@@ -150,7 +150,7 @@ print(f"Certificate: https://covenant-omega.vercel.app/certificate/{data['certif
               href="/integrate"
               style={{
                 fontSize: "12px",
-                color: "#42BDFF",
+                color: "#fffeb2",
                 textDecoration: "none",
               }}
             >
@@ -208,9 +208,9 @@ print(f"Certificate: https://covenant-omega.vercel.app/certificate/{data['certif
                       textTransform: "uppercase",
                       letterSpacing: "0.05em",
                       cursor: creating ? "wait" : "pointer",
-                      border: "1px solid #42BDFF",
+                      border: "1px solid #fffeb2",
                       borderRadius: "8px",
-                      backgroundColor: "#42BDFF",
+                      backgroundColor: "#fffeb2",
                       color: "#ffffff",
                       transition: "all 0.2s ease",
                       whiteSpace: "nowrap",
@@ -261,7 +261,7 @@ print(f"Certificate: https://covenant-omega.vercel.app/certificate/{data['certif
                               border: "1px solid rgba(255,255,255,0.15)",
                               borderRadius: "4px",
                               backgroundColor: "rgba(255,255,255,0.05)",
-                              color: copiedKey === k.key ? "#FFE342" : "rgba(255,255,255,0.5)",
+                              color: copiedKey === k.key ? "#fffeb2" : "rgba(255,255,255,0.5)",
                               transition: "all 0.15s ease",
                             }}
                           >
@@ -293,7 +293,7 @@ print(f"Certificate: https://covenant-omega.vercel.app/certificate/{data['certif
 
             <div style={{ marginBottom: "20px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "4px", backgroundColor: "rgba(59,130,246,0.2)", color: "#42BDFF", fontWeight: 600 }}>
+                <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "4px", backgroundColor: "rgba(59,130,246,0.2)", color: "#fffeb2", fontWeight: 600 }}>
                   POST
                 </span>
                 <span style={{ fontSize: "13px", color: "#ffffff", fontFamily: "monospace" }}>/api/verify</span>
@@ -361,7 +361,7 @@ print(f"Certificate: https://covenant-omega.vercel.app/certificate/{data['certif
                     letterSpacing: "0.05em",
                     cursor: "pointer",
                     border: "none",
-                    borderBottom: activeSnippet === i ? "2px solid #42BDFF" : "2px solid transparent",
+                    borderBottom: activeSnippet === i ? "2px solid #fffeb2" : "2px solid transparent",
                     backgroundColor: "transparent",
                     color: activeSnippet === i ? "#ffffff" : "rgba(255,255,255,0.4)",
                     transition: "all 0.15s ease",

@@ -177,13 +177,13 @@ export default function AutonomousPage() {
   }
 
   function getEventColor(step: string): string {
-    if (step.includes("scanning")) return "#42BDFF";
-    if (step.includes("working") || step.includes("accepting")) return "#FFE342";
-    if (step.includes("completed") || step.includes("round_end")) return "#42BDFF";
-    if (step.includes("found")) return "#42BDFF";
-    if (step.includes("submitting")) return "#FFE342";
+    if (step.includes("scanning")) return "#fffeb2";
+    if (step.includes("working") || step.includes("accepting")) return "#fffeb2";
+    if (step.includes("completed") || step.includes("round_end")) return "#fffeb2";
+    if (step.includes("found")) return "#fffeb2";
+    if (step.includes("submitting")) return "#fffeb2";
     if (step.includes("error")) return "#FF425E";
-    if (step.includes("auto_complete")) return "#FFE342";
+    if (step.includes("auto_complete")) return "#fffeb2";
     return "rgba(255,255,255,0.5)";
   }
 
@@ -256,7 +256,7 @@ export default function AutonomousPage() {
             flexWrap: "wrap",
           }}>
             <div>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "#42BDFF", animation: running ? "count-up 0.3s ease" : "none" }}>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "#fffeb2", animation: running ? "count-up 0.3s ease" : "none" }}>
                 {jobsCompleted}
               </div>
               <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -264,7 +264,7 @@ export default function AutonomousPage() {
               </div>
             </div>
             <div>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "#FFE342", animation: running ? "count-up 0.3s ease" : "none" }}>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "#fffeb2", animation: running ? "count-up 0.3s ease" : "none" }}>
                 {totalEarned.toFixed(0)}
               </div>
               <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -359,7 +359,7 @@ export default function AutonomousPage() {
                 <div style={{
                   width: `${progressPercent}%`,
                   height: "100%",
-                  background: "linear-gradient(90deg, #42FF82, #42BDFF)",
+                  background: "linear-gradient(90deg, #42FF82, #fffeb2)",
                   borderRadius: "3px",
                   transition: "width 0.5s ease",
                 }} />
@@ -480,7 +480,7 @@ export default function AutonomousPage() {
                           </a>
                         ) : null}
                         {entry.event.data?.amount ? (
-                          <span style={{ color: "#FFE342", marginLeft: "6px" }}>
+                          <span style={{ color: "#fffeb2", marginLeft: "6px" }}>
                             +{String(entry.event.data.amount)} USDC
                           </span>
                         ) : null}
@@ -505,8 +505,8 @@ export default function AutonomousPage() {
           }}>
             {[
               { label: "Rounds", value: String(totalRoundsMax), color: "rgba(255,255,255,0.7)" },
-              { label: "Jobs Done", value: String(jobsCompleted), color: "#42BDFF" },
-              { label: "USDC Earned", value: totalEarned.toFixed(0), color: "#FFE342" },
+              { label: "Jobs Done", value: String(jobsCompleted), color: "#fffeb2" },
+              { label: "USDC Earned", value: totalEarned.toFixed(0), color: "#fffeb2" },
               { label: "Avg/Round", value: avgTimePerRound > 0 ? `${avgTimePerRound.toFixed(1)}s` : `${(elapsedTime / Math.max(1, totalRoundsMax)).toFixed(1)}s`, color: "rgba(255,255,255,0.5)" },
             ].map((stat, i) => (
               <div

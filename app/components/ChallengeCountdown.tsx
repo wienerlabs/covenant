@@ -50,7 +50,7 @@ export default function ChallengeCountdown({
   const textColor = expired
     ? "#1E9E5F"
     : isDark
-      ? "#FFE342"
+      ? "#fffeb2"
       : "#000000";
   const labelColor = isDark ? "rgba(255,255,255,0.5)" : "#666666";
   const borderColor = isDark

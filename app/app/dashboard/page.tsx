@@ -103,10 +103,10 @@ function relativeTime(dateStr: string): string {
 }
 
 const EVENT_COLORS: Record<string, string> = {
-  job_created: "#42BDFF",
-  create_job: "#42BDFF",
-  job_accepted: "#FFE342",
-  accept_job: "#FFE342",
+  job_created: "#fffeb2",
+  create_job: "#fffeb2",
+  job_accepted: "#fffeb2",
+  accept_job: "#fffeb2",
   job_completed: "#22c55e",
   submit_completion: "#22c55e",
   job_cancelled: "#FF425E",
@@ -282,10 +282,10 @@ export default function DashboardPage() {
     letterSpacing: "0.08em",
     padding: "8px 24px",
     cursor: "pointer",
-    border: active ? "1px solid #42BDFF" : "1px solid rgba(255,255,255,0.2)",
+    border: active ? "1px solid #fffeb2" : "1px solid rgba(255,255,255,0.2)",
     borderRadius: "6px",
     backgroundColor: active ? "rgba(66,189,255,0.12)" : "transparent",
-    color: active ? "#42BDFF" : "rgba(255,255,255,0.5)",
+    color: active ? "#fffeb2" : "rgba(255,255,255,0.5)",
     backdropFilter: "blur(4px)",
     transition: "all 0.15s ease",
     fontWeight: active ? 600 : 400,
@@ -374,7 +374,7 @@ export default function DashboardPage() {
                   transition: "all 0.15s ease",
                   whiteSpace: "nowrap",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#42BDFF"; e.currentTarget.style.color = "#42BDFF"; }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#fffeb2"; e.currentTarget.style.color = "#fffeb2"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}
               >
                 Edit Profile
@@ -405,7 +405,7 @@ export default function DashboardPage() {
                   {/* Jobs Posted */}
                   <div style={{ ...GLASS_CARD, padding: "24px 20px", textAlign: "center" }}>
                     <div style={{ marginBottom: "10px" }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#42BDFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fffeb2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                         <polyline points="14 2 14 8 20 8" />
                         <line x1="12" y1="18" x2="12" y2="12" />
@@ -416,7 +416,7 @@ export default function DashboardPage() {
                     <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: "6px" }}>
                       Jobs Posted
                     </div>
-                    <Link href="/poster" style={{ fontSize: "9px", color: "#42BDFF", textDecoration: "none", marginTop: "8px", display: "inline-block", letterSpacing: "0.05em" }}>
+                    <Link href="/poster" style={{ fontSize: "9px", color: "#fffeb2", textDecoration: "none", marginTop: "8px", display: "inline-block", letterSpacing: "0.05em" }}>
                       View all &rarr;
                     </Link>
                   </div>
@@ -424,7 +424,7 @@ export default function DashboardPage() {
                   {/* Jobs Taken */}
                   <div style={{ ...GLASS_CARD, padding: "24px 20px", textAlign: "center" }}>
                     <div style={{ marginBottom: "10px" }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFE342" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fffeb2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
                         <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
                       </svg>
@@ -433,7 +433,7 @@ export default function DashboardPage() {
                     <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: "6px" }}>
                       Jobs Taken
                     </div>
-                    <Link href="/taker" style={{ fontSize: "9px", color: "#FFE342", textDecoration: "none", marginTop: "8px", display: "inline-block", letterSpacing: "0.05em" }}>
+                    <Link href="/taker" style={{ fontSize: "9px", color: "#fffeb2", textDecoration: "none", marginTop: "8px", display: "inline-block", letterSpacing: "0.05em" }}>
                       View all &rarr;
                     </Link>
                   </div>
@@ -454,14 +454,14 @@ export default function DashboardPage() {
                   {/* Success Rate */}
                   <div style={{ ...GLASS_CARD, padding: "24px 20px", textAlign: "center" }}>
                     <div style={{ marginBottom: "10px" }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={successRate >= 80 ? "#22c55e" : successRate >= 50 ? "#FFE342" : "#FF425E"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={successRate >= 80 ? "#22c55e" : successRate >= 50 ? "#fffeb2" : "#FF425E"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                       </svg>
                     </div>
                     <div style={{
                       fontSize: "28px",
                       fontWeight: 700,
-                      color: successRate >= 80 ? "#22c55e" : successRate >= 50 ? "#FFE342" : "#FF425E",
+                      color: successRate >= 80 ? "#22c55e" : successRate >= 50 ? "#fffeb2" : "#FF425E",
                     }}>
                       {successRate}%
                     </div>
@@ -516,10 +516,10 @@ export default function DashboardPage() {
                       letterSpacing: "0.06em",
                       padding: "8px 18px",
                       cursor: faucetLoading ? "not-allowed" : "pointer",
-                      border: "1px solid #FFE342",
+                      border: "1px solid #fffeb2",
                       borderRadius: "6px",
                       backgroundColor: faucetLoading ? "rgba(255,227,66,0.05)" : "rgba(255,227,66,0.12)",
-                      color: "#FFE342",
+                      color: "#fffeb2",
                       transition: "all 0.15s ease",
                       fontWeight: 600,
                     }}
@@ -549,7 +549,7 @@ export default function DashboardPage() {
                   {faucetMsg && (
                     <span style={{
                       fontSize: "10px",
-                      color: faucetMsg.includes("sent") ? "#FFE342" : "#FF425E",
+                      color: faucetMsg.includes("sent") ? "#fffeb2" : "#FF425E",
                       fontWeight: 600,
                     }}>
                       {faucetMsg}
@@ -647,7 +647,7 @@ export default function DashboardPage() {
                                 rel="noopener noreferrer"
                                 style={{
                                   fontSize: "9px",
-                                  color: "#42BDFF",
+                                  color: "#fffeb2",
                                   textDecoration: "none",
                                   fontFamily: "monospace",
                                   opacity: 0.7,
@@ -729,7 +729,7 @@ export default function DashboardPage() {
                               borderRadius: "4px",
                               backgroundColor: "rgba(255,227,66,0.1)",
                               border: "1px solid rgba(255,227,66,0.3)",
-                              color: "#FFE342",
+                              color: "#fffeb2",
                               fontWeight: 700,
                               whiteSpace: "nowrap",
                             }}>
@@ -753,7 +753,7 @@ export default function DashboardPage() {
                               fontSize: "9px",
                               textTransform: "uppercase",
                               letterSpacing: "0.05em",
-                              color: "#42BDFF",
+                              color: "#fffeb2",
                               textDecoration: "none",
                               padding: "3px 10px",
                               border: "1px solid rgba(66,189,255,0.3)",
@@ -815,10 +815,10 @@ export default function DashboardPage() {
                   flex: "1 1 180px",
                   textAlign: "center",
                   padding: "14px 20px",
-                  border: "1px solid #42BDFF",
+                  border: "1px solid #fffeb2",
                   borderRadius: "8px",
                   backgroundColor: "rgba(66,189,255,0.1)",
-                  color: "#42BDFF",
+                  color: "#fffeb2",
                   textDecoration: "none",
                   fontSize: "12px",
                   fontWeight: 600,

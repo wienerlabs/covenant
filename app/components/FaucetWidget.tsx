@@ -166,7 +166,7 @@ export default function FaucetWidget() {
           </button>
 
           {txHash && (
-            <div style={{ fontSize: "10px", color: "#FFE342", wordBreak: "break-all" }}>
+            <div style={{ fontSize: "10px", color: "#fffeb2", wordBreak: "break-all" }}>
               Success!{" "}
               <a
                 href={`https://explorer.solana.com/tx/${txHash}?cluster=devnet`}

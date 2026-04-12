@@ -50,9 +50,9 @@ interface BattleStats {
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
-const ALPHA_COLOR = "#42BDFF";
+const ALPHA_COLOR = "#fffeb2";
 const OMEGA_COLOR = "#FF425E";
-const GOLD_COLOR = "#FFE342";
+const GOLD_COLOR = "#fffeb2";
 
 const ALPHA_CONFIG = {
   name: "AGENT ALPHA",

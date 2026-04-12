@@ -17,7 +17,7 @@ export default function ReputationScore({
   const score = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   const color =
-    score > 80 ? "#42BDFF" : score >= 50 ? "#FFE342" : "#FF425E";
+    score > 80 ? "#fffeb2" : score >= 50 ? "#fffeb2" : "#FF425E";
 
   const size = 64;
   const strokeWidth = 5;
