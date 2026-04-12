@@ -403,6 +403,67 @@ export default function BattlePage() {
   }, [chatMessages]);
 
   /* ================================================================ */
+  /*  Continuous fight loop — auto-cycle attacks during battle          */
+  /* ================================================================ */
+
+  useEffect(() => {
+    if (phase !== "fighting") return;
+
+    // Combat patterns: sequences of [attacker, delay_ms] pairs
+    const patterns = [
+      // Alpha attacks, omega gets hit
+      () => {
+        setAlphaAnimState("attack");
+        setTimeout(() => { setOmegaAnimState("hit"); }, 300);
+        setTimeout(() => { setAlphaAnimState("idle"); setOmegaAnimState("idle"); }, 700);
+      },
+      // Omega attacks, alpha gets hit
+      () => {
+        setOmegaAnimState("attack");
+        setTimeout(() => { setAlphaAnimState("hit"); }, 300);
+        setTimeout(() => { setOmegaAnimState("idle"); setAlphaAnimState("idle"); }, 700);
+      },
+      // Both taunt
+      () => {
+        setAlphaAnimState("taunt");
+        setOmegaAnimState("taunt");
+        setTimeout(() => { setAlphaAnimState("idle"); setOmegaAnimState("idle"); }, 500);
+      },
+      // Alpha double attack
+      () => {
+        setAlphaAnimState("attack");
+        setTimeout(() => { setOmegaAnimState("hit"); }, 300);
+        setTimeout(() => {
+          setAlphaAnimState("idle");
+          setOmegaAnimState("idle");
+          setTimeout(() => {
+            setAlphaAnimState("attack");
+            setTimeout(() => { setOmegaAnimState("hit"); }, 250);
+            setTimeout(() => { setAlphaAnimState("idle"); setOmegaAnimState("idle"); }, 600);
+          }, 200);
+        }, 700);
+      },
+      // Omega counter-attack
+      () => {
+        setOmegaAnimState("taunt");
+        setTimeout(() => {
+          setOmegaAnimState("attack");
+          setTimeout(() => { setAlphaAnimState("hit"); }, 250);
+          setTimeout(() => { setOmegaAnimState("idle"); setAlphaAnimState("idle"); }, 600);
+        }, 400);
+      },
+    ];
+
+    let patternIdx = 0;
+    const interval = setInterval(() => {
+      patterns[patternIdx % patterns.length]();
+      patternIdx++;
+    }, 1800); // New attack pattern every 1.8s
+
+    return () => clearInterval(interval);
+  }, [phase]);
+
+  /* ================================================================ */
   /*  Fetch battle history & stats on mount                            */
   /* ================================================================ */
 

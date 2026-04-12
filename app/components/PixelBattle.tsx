@@ -564,6 +564,57 @@ interface AnimState {
   startFrame: number;
 }
 
+/**
+ * Space Invader sprite maps. Each row is an array of 0/1/2 values:
+ *   0 = transparent
+ *   1 = main color
+ *   2 = dark accent
+ * Alpha = squid type, Omega = crab type.
+ */
+const SPRITE_ALPHA = [
+  // Squid invader (11 wide x 8 tall)
+  [0,0,0,0,0,1,0,0,0,0,0],
+  [0,0,0,0,1,1,1,0,0,0,0],
+  [0,0,0,1,1,1,1,1,0,0,0],
+  [0,0,1,1,2,1,2,1,1,0,0],
+  [0,1,1,1,1,1,1,1,1,1,0],
+  [0,0,1,0,1,1,1,0,1,0,0],
+  [0,1,0,0,0,0,0,0,0,1,0],
+  [0,0,1,0,0,0,0,0,1,0,0],
+];
+const SPRITE_ALPHA_WALK = [
+  [0,0,0,0,0,1,0,0,0,0,0],
+  [0,0,0,0,1,1,1,0,0,0,0],
+  [0,0,0,1,1,1,1,1,0,0,0],
+  [0,0,1,1,2,1,2,1,1,0,0],
+  [0,1,1,1,1,1,1,1,1,1,0],
+  [0,0,1,0,1,1,1,0,1,0,0],
+  [0,0,0,1,0,0,0,1,0,0,0],
+  [0,1,1,0,0,0,0,0,1,1,0],
+];
+
+const SPRITE_OMEGA = [
+  // Crab invader (11 wide x 8 tall)
+  [0,0,1,0,0,0,0,0,1,0,0],
+  [0,0,0,1,0,0,0,1,0,0,0],
+  [0,0,1,1,1,1,1,1,1,0,0],
+  [0,1,1,2,1,1,1,2,1,1,0],
+  [1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,1,1,1,1,1,1,1,0,1],
+  [1,0,1,0,0,0,0,0,1,0,1],
+  [0,0,0,1,1,0,1,1,0,0,0],
+];
+const SPRITE_OMEGA_WALK = [
+  [0,0,1,0,0,0,0,0,1,0,0],
+  [0,0,0,1,0,0,0,1,0,0,0],
+  [0,0,1,1,1,1,1,1,1,0,0],
+  [0,1,1,2,1,1,1,2,1,1,0],
+  [1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,1,1,1,1,1,1,1,0,1],
+  [1,0,1,0,0,0,0,0,1,0,1],
+  [0,1,0,0,0,0,0,0,0,1,0],
+];
+
 function drawWarrior(
   ctx: CanvasRenderingContext2D,
   baseX: number,
@@ -575,229 +626,143 @@ function drawWarrior(
   animState: AnimState,
   p: number,
 ) {
-  const light = lighten(color, 30);
-  const dark = darken(color, 30);
-  const darkest = darken(color, 50);
-
-  // Mirroring: if facing left, we flip the x coordinates
+  const dark = darken(color, 40);
   const dir = facing === "right" ? 1 : -1;
+  const elapsed = frame - animState.startFrame;
 
   /* ---- Compute offsets based on state ---- */
   let offsetX = 0;
   let offsetY = 0;
-  let swordAngle = 0; // 0 = normal, 1 = raised, 2 = forward swing
   let isFlashing = false;
   let isDesaturated = false;
   let fallAngle = 0;
   let glowAlpha = 0;
-
-  const elapsed = frame - animState.startFrame;
+  let scaleX = 1;
+  let scaleY = 1;
 
   switch (state) {
     case "idle": {
-      // Gentle bounce
-      offsetY = Math.sin(frame * 0.06) * p;
-      swordAngle = 0;
+      offsetY = Math.sin(frame * 0.06) * p * 1.5;
       break;
     }
     case "taunt": {
-      // Lean forward, raise sword
       const t = Math.min(1, elapsed / 15);
-      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-      offsetX = dir * 3 * p * (ease < 0.5 ? ease * 2 : 2 - ease * 2);
-      swordAngle = 1;
-      // Return to idle handled by state change from parent
+      offsetX = dir * 5 * p * Math.sin(t * Math.PI);
+      scaleX = 1 + 0.1 * Math.sin(t * Math.PI);
       break;
     }
     case "attack": {
-      // Dash forward, swing sword
       const t = Math.min(1, elapsed / 25);
-      let dashT: number;
       if (t < 0.4) {
-        // Dash forward
-        dashT = t / 0.4;
-        offsetX = dir * 30 * p * (dashT * dashT);
+        offsetX = dir * 40 * p * (t / 0.4) * (t / 0.4);
       } else if (t < 0.6) {
-        // Hold at peak
-        offsetX = dir * 30 * p;
+        offsetX = dir * 40 * p;
+        scaleX = 1.2;
+        scaleY = 0.85;
       } else {
-        // Return
         const retT = (t - 0.6) / 0.4;
-        offsetX = dir * 30 * p * (1 - retT * retT);
+        offsetX = dir * 40 * p * (1 - retT * retT);
       }
-      swordAngle = t < 0.5 ? 2 : 0;
       break;
     }
     case "hit": {
-      // Knocked back, flash red
       const t = Math.min(1, elapsed / 20);
-      offsetX = -dir * 15 * p * Math.sin(t * Math.PI);
+      offsetX = -dir * 18 * p * Math.sin(t * Math.PI);
       isFlashing = Math.floor(elapsed / 3) % 2 === 0 && elapsed < 18;
+      scaleX = 1 + 0.15 * Math.sin(t * Math.PI * 3);
       break;
     }
     case "victory": {
-      // Jump up, bounce
       const t = (elapsed % 40) / 40;
-      const bouncePhase = Math.abs(Math.sin(t * Math.PI * 3));
-      offsetY = -15 * p * bouncePhase * Math.max(0, 1 - elapsed / 120);
-      swordAngle = 1;
-      glowAlpha = 0.15 + 0.1 * Math.sin(frame * 0.1);
+      offsetY = -18 * p * Math.abs(Math.sin(t * Math.PI * 3)) * Math.max(0, 1 - elapsed / 120);
+      glowAlpha = 0.2 + 0.15 * Math.sin(frame * 0.1);
+      scaleX = 1 + 0.05 * Math.sin(frame * 0.15);
+      scaleY = 1 + 0.05 * Math.cos(frame * 0.15);
       break;
     }
     case "defeat": {
-      // Fall to side
       const t = Math.min(1, elapsed / 25);
-      fallAngle = (dir * Math.PI * 0.4 * t);
+      fallAngle = dir * Math.PI * 0.5 * t;
       isDesaturated = true;
+      scaleY = 1 - 0.3 * t;
       break;
     }
   }
 
-  // Effective colors
-  const mainColor = isFlashing
-    ? "#FF2222"
-    : isDesaturated
-      ? desaturate(color, 70)
-      : color;
-  const mainLight = isFlashing
-    ? "#FF6666"
-    : isDesaturated
-      ? desaturate(light, 70)
-      : light;
-  const mainDark = isFlashing
-    ? "#CC0000"
-    : isDesaturated
-      ? desaturate(dark, 70)
-      : dark;
-  const mainDarkest = isFlashing
-    ? "#990000"
-    : isDesaturated
-      ? desaturate(darkest, 70)
-      : darkest;
+  // Choose sprite based on creature type + walk cycle
+  const isOmega = color === OMEGA_COLOR;
+  const walkFrame = Math.floor(frame / 10) % 2 === 0;
+  let sprite: number[][];
+  if (isOmega) {
+    sprite = walkFrame ? SPRITE_OMEGA_WALK : SPRITE_OMEGA;
+  } else {
+    sprite = walkFrame ? SPRITE_ALPHA_WALK : SPRITE_ALPHA;
+  }
+
+  // Colors
+  const mainColor = isFlashing ? "#FF2222" : isDesaturated ? desaturate(color, 70) : color;
+  const accentColor = isFlashing ? "#CC0000" : isDesaturated ? desaturate(dark, 70) : dark;
+  const eyeColor = isFlashing ? "#FFAAAA" : "#ffffff";
 
   const bx = baseX + offsetX;
   const by = baseY + offsetY;
+  const spriteW = sprite[0].length;
+  const spriteH = sprite.length;
+  // Center the sprite
+  const drawX = bx - (spriteW * p * scaleX) / 2;
+  const drawY = by - (spriteH * p * scaleY) / 2 + 4 * p;
 
   ctx.save();
 
-  // Apply fall rotation for defeat
+  // Fall rotation for defeat
   if (fallAngle !== 0) {
-    ctx.translate(bx + 8 * p, by + 18 * p); // rotate around feet
+    ctx.translate(bx, by + 8 * p);
     ctx.rotate(fallAngle);
-    ctx.translate(-(bx + 8 * p), -(by + 18 * p));
+    ctx.translate(-bx, -(by + 8 * p));
   }
 
   // Victory glow
   if (glowAlpha > 0) {
     const [gr, gg, gb] = hexToRgb(mainColor);
     ctx.fillStyle = `rgba(${gr},${gg},${gb},${glowAlpha})`;
-    ctx.fillRect(bx - 3 * p, by - 3 * p, 22 * p, 26 * p);
+    ctx.beginPath();
+    ctx.arc(bx, by + 4 * p, spriteW * p * 0.7, 0, Math.PI * 2);
+    ctx.fill();
   }
 
-  // Mirror drawing for left-facing warrior
+  // Mirror for left-facing
   if (facing === "left") {
-    ctx.save();
-    ctx.translate(bx + 8 * p, 0);
+    ctx.translate(bx, 0);
     ctx.scale(-1, 1);
-    ctx.translate(-(bx + 8 * p), 0);
+    ctx.translate(-bx, 0);
   }
 
-  /* ---- Helmet ---- */
-  ctx.fillStyle = mainColor;
-  ctx.fillRect(bx + 5 * p, by, 6 * p, 2 * p); // top rim
-  ctx.fillRect(bx + 4 * p, by + 2 * p, 8 * p, 4 * p); // main helmet
-
-  /* ---- Visor ---- */
-  ctx.fillStyle = mainDark;
-  ctx.fillRect(bx + 5 * p, by + 3 * p, 6 * p, 2 * p);
-
-  /* ---- Eyes ---- */
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(bx + 6 * p, by + 3 * p, p, p);
-  ctx.fillRect(bx + 9 * p, by + 3 * p, p, p);
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(bx + 6 * p, by + 4 * p, p, p);
-  ctx.fillRect(bx + 9 * p, by + 4 * p, p, p);
-
-  /* ---- Body / Armor ---- */
-  ctx.fillStyle = mainColor;
-  ctx.fillRect(bx + 4 * p, by + 6 * p, 8 * p, 8 * p);
-  ctx.fillStyle = mainLight;
-  ctx.fillRect(bx + 6 * p, by + 7 * p, 4 * p, 4 * p); // chest plate
-
-  /* ---- Arms ---- */
-  ctx.fillStyle = mainDark;
-  ctx.fillRect(bx + 2 * p, by + 6 * p, 2 * p, 6 * p); // left arm (shield side)
-  ctx.fillRect(bx + 12 * p, by + 6 * p, 2 * p, 6 * p); // right arm (sword side)
-
-  /* ---- Sword (right hand) ---- */
-  const swordBaseX = bx + 14 * p;
-  if (swordAngle === 0) {
-    // Sword at side, pointing down
-    ctx.fillStyle = isDesaturated ? desaturate(GOLD_COLOR, 70) : GOLD_COLOR;
-    ctx.fillRect(swordBaseX, by + 5 * p, 2 * p, 3 * p); // handle
-    ctx.fillStyle = isDesaturated ? desaturate(SILVER_COLOR, 70) : SILVER_COLOR;
-    ctx.fillRect(swordBaseX, by + 8 * p, 2 * p, 7 * p); // blade down
-  } else if (swordAngle === 1) {
-    // Sword raised high
-    ctx.fillStyle = isDesaturated ? desaturate(GOLD_COLOR, 70) : GOLD_COLOR;
-    ctx.fillRect(swordBaseX, by + 3 * p, 2 * p, 3 * p); // handle
-    ctx.fillStyle = isDesaturated ? desaturate(SILVER_COLOR, 70) : SILVER_COLOR;
-    ctx.fillRect(swordBaseX, by - 6 * p, 2 * p, 9 * p); // blade up
-  } else if (swordAngle === 2) {
-    // Sword swung forward (horizontal)
-    ctx.fillStyle = isDesaturated ? desaturate(GOLD_COLOR, 70) : GOLD_COLOR;
-    ctx.fillRect(swordBaseX, by + 6 * p, 2 * p, 3 * p); // handle
-    ctx.fillStyle = isDesaturated ? desaturate(SILVER_COLOR, 70) : SILVER_COLOR;
-    ctx.fillRect(swordBaseX + 2 * p, by + 6 * p, 8 * p, 2 * p); // blade forward
-  }
-
-  // Sword on ground for defeat
-  if (state === "defeat" && elapsed > 15) {
-    ctx.fillStyle = desaturate(GOLD_COLOR, 70);
-    ctx.fillRect(bx + 16 * p, by + 18 * p, 2 * p, 2 * p);
-    ctx.fillStyle = desaturate(SILVER_COLOR, 70);
-    ctx.fillRect(bx + 18 * p, by + 17 * p, 6 * p, 2 * p);
-  }
-
-  /* ---- Shield (left hand) ---- */
-  ctx.fillStyle = mainColor;
-  ctx.fillRect(bx + 0 * p, by + 6 * p, 3 * p, 5 * p);
-  // Shield emblem
-  if (!isDesaturated) {
-    if (facing === "right" || facing === "left") {
-      // Alpha gets white cross, omega would be mirrored so both get their own
-      // Since we mirror for left-facing, always draw the same way
-      const isOmega = color === OMEGA_COLOR;
-      if (isOmega) {
-        // X emblem
-        ctx.fillStyle = mainDark;
-        ctx.fillRect(bx + 0 * p, by + 7 * p, p, p);
-        ctx.fillRect(bx + 2 * p, by + 7 * p, p, p);
-        ctx.fillRect(bx + 1 * p, by + 8 * p, p, p);
-        ctx.fillRect(bx + 0 * p, by + 9 * p, p, p);
-        ctx.fillRect(bx + 2 * p, by + 9 * p, p, p);
-      } else {
-        // White cross emblem
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(bx + 1 * p, by + 7 * p, p, 3 * p); // vertical
-        ctx.fillRect(bx + 0 * p, by + 8 * p, 3 * p, p); // horizontal
-      }
+  // Draw sprite pixels
+  for (let row = 0; row < spriteH; row++) {
+    for (let col = 0; col < spriteW; col++) {
+      const val = sprite[row][col];
+      if (val === 0) continue;
+      ctx.fillStyle = val === 2 ? eyeColor : val === 1 ? mainColor : accentColor;
+      ctx.fillRect(
+        drawX + col * p * scaleX,
+        drawY + row * p * scaleY,
+        Math.ceil(p * scaleX),
+        Math.ceil(p * scaleY),
+      );
     }
   }
 
-  /* ---- Legs ---- */
-  ctx.fillStyle = mainDark;
-  ctx.fillRect(bx + 5 * p, by + 14 * p, 2 * p, 4 * p);
-  ctx.fillRect(bx + 9 * p, by + 14 * p, 2 * p, 4 * p);
-
-  /* ---- Boots ---- */
-  ctx.fillStyle = mainDarkest;
-  ctx.fillRect(bx + 4 * p, by + 17 * p, 3 * p, 2 * p);
-  ctx.fillRect(bx + 9 * p, by + 17 * p, 3 * p, 2 * p);
-
-  if (facing === "left") {
-    ctx.restore();
+  // Attack beam — shoot a pixel projectile during attack
+  if (state === "attack") {
+    const t = Math.min(1, elapsed / 25);
+    if (t > 0.3 && t < 0.7) {
+      const beamLen = 20 * p * ((t - 0.3) / 0.4);
+      ctx.fillStyle = mainColor;
+      const beamY = drawY + 4 * p;
+      ctx.fillRect(bx + (facing === "right" ? 6 * p : -6 * p - beamLen), beamY, beamLen, p);
+      ctx.fillStyle = eyeColor;
+      ctx.fillRect(bx + (facing === "right" ? 6 * p + beamLen : -6 * p - beamLen), beamY, 2 * p, p);
+    }
   }
 
   ctx.restore();
