@@ -195,7 +195,10 @@ export async function createJobOnChain(params: {
   const [configPda] = deriveConfigPda();
   const escrowTokenAccount = Keypair.generate();
 
-  const sig = await (program.methods as any)
+  // Build the transaction without sending — we handle signing manually
+  // because Anchor's `.rpc()` signer matching can conflict with
+  // wallet-standard adapters that reject unknown co-signers.
+  const tx = await (program.methods as any)
     .createJob(amount, Array.from(specHash), deadline, challengePeriod)
     .accounts({
       poster,
@@ -208,8 +211,30 @@ export async function createJobOnChain(params: {
       systemProgram: SystemProgram.programId,
       rent: SYSVAR_RENT_PUBKEY,
     })
-    .signers([escrowTokenAccount])
-    .rpc();
+    .transaction();
+
+  // Set recent blockhash + fee payer
+  const connection = program.provider.connection;
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  tx.feePayer = poster;
+
+  // Sign with the escrow token account keypair first (co-signer)
+  tx.partialSign(escrowTokenAccount);
+
+  // Sign with the user's wallet (poster) via the provider
+  const signedTx = await ((program.provider as any).wallet as any).signTransaction(tx);
+
+  // Send the fully-signed transaction
+  const sig = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+  });
+  await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
 
   return { sig, jobPda, escrowTokenAccount: escrowTokenAccount.publicKey };
 }
@@ -229,14 +254,27 @@ export async function submitWorkOnChain(params: {
   const { program, taker, poster, specHash, workHash, deliveryUri } = params;
   const [jobPda] = deriveJobPda(poster, specHash);
 
-  return (program.methods as any)
+  const tx = await (program.methods as any)
     .submitWork(Array.from(workHash), deliveryUri)
-    .accounts({
-      taker,
-      jobEscrow: jobPda,
-      poster,
-    })
-    .rpc();
+    .accounts({ taker, jobEscrow: jobPda, poster })
+    .transaction();
+
+  const connection = program.provider.connection;
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  tx.feePayer = taker;
+
+  const signedTx = await ((program.provider as any).wallet as any).signTransaction(tx);
+  const sig = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+  });
+  await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+  return sig;
 }
 
 /**
@@ -257,7 +295,7 @@ export async function finalizePaymentOnChain(params: {
   const [jobPda] = deriveJobPda(poster, specHash);
   const [reputationPda] = deriveReputationPda(taker);
 
-  return (program.methods as any)
+  const tx = await (program.methods as any)
     .finalizePayment()
     .accounts({
       crank,
@@ -270,5 +308,22 @@ export async function finalizePaymentOnChain(params: {
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
-    .rpc();
+    .transaction();
+
+  const connection = program.provider.connection;
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  tx.feePayer = crank;
+
+  const signedTx = await ((program.provider as any).wallet as any).signTransaction(tx);
+  const sig = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+  });
+  await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+  return sig;
 }
