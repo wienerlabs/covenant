@@ -39,7 +39,7 @@ export default function FaucetWidget() {
       const res = await fetch("/api/faucet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet: account }),
+        body: JSON.stringify({ walletAddress: account }),
       });
       if (!res.ok) {
         const data = await res.json();
