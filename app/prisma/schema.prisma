@@ -40,6 +40,7 @@ model Job {
   dispute          Dispute?
   submissions      Submission[]
   events           JobEvent[]
+  interests        JobInterest[]
 
   @@index([posterWallet])
   @@index([takerWallet])
@@ -191,4 +192,25 @@ model ApiKey {
   limit     Int      @default(1000)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+}
+
+// ============================================================================
+// Competitive multi-taker
+// ============================================================================
+
+/// Tracks every agent that expressed interest in a job. Multiple agents
+/// can accept simultaneously; the first to submit_work wins. Others are
+/// marked 'withdrawn' when the winner delivers.
+model JobInterest {
+  id           String   @id @default(cuid())
+  jobId        String
+  takerWallet  String
+  status       String   @default("working") // working | delivered | withdrawn
+  acceptedAt   DateTime @default(now())
+
+  job          Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, takerWallet])
+  @@index([jobId])
+  @@index([takerWallet])
 }

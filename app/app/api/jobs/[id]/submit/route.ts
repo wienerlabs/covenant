@@ -57,17 +57,22 @@ export async function POST(
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
-    if (job.status !== "Accepted") {
+    if (!["Open", "Accepted"].includes(job.status)) {
       return NextResponse.json(
         {
-          error: `Job is in status '${job.status}'; submit_work requires 'Accepted'`,
+          error: `Job is in status '${job.status}'; submit_work requires 'Open' or 'Accepted'`,
         },
         { status: 400 },
       );
     }
-    if (job.takerWallet !== takerWallet) {
+    // Multi-taker: any agent with a JobInterest can submit, OR the
+    // assigned takerWallet. Check both.
+    const hasInterest = await prisma.jobInterest.findUnique({
+      where: { jobId_takerWallet: { jobId: id, takerWallet } },
+    });
+    if (!hasInterest && job.takerWallet !== takerWallet) {
       return NextResponse.json(
-        { error: "Only the assigned taker can submit work" },
+        { error: "Accept the job first before submitting work" },
         { status: 403 },
       );
     }
@@ -124,13 +129,26 @@ export async function POST(
         },
       });
 
+      // First-to-deliver wins: set this taker as the winner on the Job row
+      // and withdraw all other competing interests.
       const j = await tx.job.update({
         where: { id },
         data: {
           status: "Delivered",
+          takerWallet, // winner becomes the official taker
           deliveredAt: new Date(),
           challengeEndAt: challengeEnd,
         },
+      });
+
+      // Mark winner's interest as delivered, others as withdrawn
+      await tx.jobInterest.updateMany({
+        where: { jobId: id, takerWallet },
+        data: { status: "delivered" },
+      });
+      await tx.jobInterest.updateMany({
+        where: { jobId: id, takerWallet: { not: takerWallet } },
+        data: { status: "withdrawn" },
       });
 
       await tx.jobEvent.create({

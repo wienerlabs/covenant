@@ -2,9 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 
+/**
+ * POST /api/jobs/[id]/accept
+ *
+ * Competitive multi-taker: multiple agents can accept the same job.
+ * Each acceptance creates a JobInterest row (status: "working").
+ * The first taker to successfully submit_work wins; all other
+ * interests transition to "withdrawn".
+ *
+ * On-chain accept_job is NOT called here (it was previously).
+ * Instead, the on-chain accept + submit happens atomically at
+ * submit_work time, so the on-chain taker field always matches
+ * the actual winner — no stale assignment.
+ */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
@@ -14,39 +27,81 @@ export async function POST(
     if (!takerWallet || typeof takerWallet !== "string") {
       return NextResponse.json(
         { error: "takerWallet is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const job = await prisma.job.findUnique({ where: { id } });
+    const job = await prisma.job.findUnique({
+      where: { id },
+      include: { interests: true },
+    });
 
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    if (job.status !== "Open") {
+    // Allow accept on Open AND Accepted (multi-taker)
+    if (!["Open", "Accepted"].includes(job.status)) {
       return NextResponse.json(
-        { error: "Job is not open for acceptance" },
-        { status: 400 }
+        { error: `Job is in status '${job.status}'; only Open or Accepted jobs can be joined` },
+        { status: 400 },
       );
     }
 
     if (new Date() > job.deadline) {
       return NextResponse.json(
         { error: "Job deadline has passed" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const updatedJob = await prisma.job.update({
-      where: { id },
-      data: {
-        status: "Accepted",
-        takerWallet,
-      },
+    if (job.posterWallet === takerWallet) {
+      return NextResponse.json(
+        { error: "Poster cannot accept their own job" },
+        { status: 400 },
+      );
+    }
+
+    // Check if this taker already accepted
+    const existing = job.interests.find((i) => i.takerWallet === takerWallet);
+    if (existing) {
+      return NextResponse.json(
+        { error: "You already accepted this job", interest: existing },
+        { status: 409 },
+      );
+    }
+
+    // Create interest + update job status atomically
+    const [interest, updatedJob] = await prisma.$transaction(async (tx) => {
+      const i = await tx.jobInterest.create({
+        data: {
+          jobId: id,
+          takerWallet,
+        },
+      });
+
+      // First taker sets the job to Accepted and becomes the primary
+      // (for backwards compat with UI that reads takerWallet).
+      // Subsequent takers are tracked in JobInterest only.
+      const isFirst = job.status === "Open";
+      const j = await tx.job.update({
+        where: { id },
+        data: {
+          status: "Accepted",
+          ...(isFirst ? { takerWallet } : {}),
+        },
+        include: { interests: true },
+      });
+
+      return [i, j];
     });
 
-    // Send Solana marker transaction (non-blocking)
+    // Count active workers
+    const activeWorkers = updatedJob.interests.filter(
+      (i) => i.status === "working",
+    ).length;
+
+    // Best-effort marker tx
     let txHash: string | null = null;
     try {
       txHash = await sendMarkerTransaction("accept_job:" + id);
@@ -61,15 +116,24 @@ export async function POST(
         },
       });
     } catch (err) {
-      console.error("[solana] Failed to send marker tx for accept_job:", err);
+      console.error("[solana] Marker tx failed:", err);
     }
 
-    return NextResponse.json({ ...updatedJob, txHash });
+    return NextResponse.json({
+      ...updatedJob,
+      txHash,
+      interest,
+      activeWorkers,
+      message:
+        activeWorkers > 1
+          ? `You joined ${activeWorkers - 1} other agent${activeWorkers > 2 ? "s" : ""} working on this job. First to deliver wins.`
+          : "Job accepted! You're the first agent working on this.",
+    });
   } catch (error) {
     console.error("POST /api/jobs/[id]/accept error:", error);
     return NextResponse.json(
       { error: "Failed to accept job" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

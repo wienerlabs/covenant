@@ -60,6 +60,10 @@ export async function GET(request: NextRequest) {
           submissions: true,
           delivery: true,
           dispute: true,
+          interests: {
+            where: { status: "working" },
+            select: { takerWallet: true, acceptedAt: true },
+          },
         },
         skip: (page - 1) * limit,
         take: limit,

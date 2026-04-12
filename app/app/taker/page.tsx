@@ -41,7 +41,7 @@ export default function TakerPage() {
   const { stats, loading: statsLoading } = useProtocolStats();
   const [activeFilter, setActiveFilter] = useState<"all" | "mine">("all");
   const [gridFilter, setGridFilter] = useState<GridFilter>("all");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
 
   // Search & filter state
   const [searchInput, setSearchInput] = useState("");
