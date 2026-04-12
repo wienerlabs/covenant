@@ -25,7 +25,7 @@ export const revalidate = 0;
 
 const CRON_SECRET = process.env.CRON_SECRET ?? "";
 const PROGRAM_ID = new PublicKey(
-  process.env.COVENANT_PROGRAM_ID ?? "HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo",
+  process.env.COVENANT_PROGRAM_ID ?? "AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ",
 );
 const SCAN_LIMIT = parseInt(process.env.RECONCILE_SCAN_LIMIT ?? "500", 10);
 

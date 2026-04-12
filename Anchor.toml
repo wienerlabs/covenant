@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-covenant = "HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo"
+covenant = "AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ"
 
 [registry]
 url = "https://api.apr.dev"

@@ -1,135 +1,96 @@
 {
-  "address": "HAptQVTwT4AYRzPkvT9UFxGEZEjqVs6ALF295WXXPTNo",
+  "address": "AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ",
   "metadata": {
     "name": "covenant",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "spec": "0.1.0",
-    "description": "Solana escrow program for trustless job delivery with ZK proof verification"
+    "description": "Open settlement protocol for AI agents — optimistic escrow on Solana"
   },
   "instructions": [
     {
-      "name": "accept_job",
-      "discriminator": [
-        43,
-        201,
-        124,
-        1,
-        19,
-        189,
-        96,
-        10
-      ],
+      "name": "init_config",
+      "discriminator": [23, 235, 115, 232, 168, 96, 1, 231],
       "accounts": [
         {
-          "name": "taker",
+          "name": "admin",
           "writable": true,
           "signer": true
         },
         {
-          "name": "job_escrow",
-          "writable": true
-        },
-        {
-          "name": "poster"
-        }
-      ],
-      "args": [
-        {
-          "name": "spec_hash",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "cancel_job",
-      "discriminator": [
-        126,
-        241,
-        155,
-        241,
-        50,
-        236,
-        83,
-        118
-      ],
-      "accounts": [
-        {
-          "name": "signer",
+          "name": "config",
           "writable": true,
-          "signer": true
-        },
-        {
-          "name": "job_escrow",
-          "writable": true
-        },
-        {
-          "name": "poster",
-          "writable": true
-        },
-        {
-          "name": "escrow_token_account",
-          "writable": true
-        },
-        {
-          "name": "poster_token_account",
-          "writable": true
-        },
-        {
-          "name": "taker_reputation",
-          "writable": true,
+          "signer": false,
           "pda": {
             "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  114,
-                  101,
-                  112,
-                  117,
-                  116,
-                  97,
-                  116,
-                  105,
-                  111,
-                  110
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "job_escrow.taker",
-                "account": "JobEscrow"
-              }
+              { "kind": "const", "value": [99, 111, 110, 102, 105, 103] }
             ]
           }
-        },
-        {
-          "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "arbitrators",
+          "type": { "array": ["pubkey", 3] }
+        },
+        {
+          "name": "threshold",
+          "type": "u8"
+        },
+        {
+          "name": "min_challenge_period",
+          "type": "u64"
+        },
+        {
+          "name": "max_challenge_period",
+          "type": "u64"
+        },
+        {
+          "name": "min_bond_bps",
+          "type": "u16"
+        },
+        {
+          "name": "min_bond_absolute",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "update_arbitrators",
+      "discriminator": [105, 34, 122, 221, 124, 230, 203, 120],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [99, 111, 110, 102, 105, 103] }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "arbitrators",
+          "type": { "array": ["pubkey", 3] }
+        },
+        {
+          "name": "threshold",
+          "type": "u8"
+        }
+      ]
     },
     {
       "name": "create_job",
-      "discriminator": [
-        178,
-        130,
-        217,
-        110,
-        100,
-        27,
-        82,
-        119
-      ],
+      "discriminator": [178, 130, 217, 110, 100, 27, 82, 119],
       "accounts": [
         {
           "name": "poster",
@@ -137,40 +98,39 @@
           "signer": true
         },
         {
-          "name": "job_escrow",
-          "writable": true,
+          "name": "config",
+          "signer": false,
           "pda": {
             "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  106,
-                  111,
-                  98
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "poster"
-              },
-              {
-                "kind": "arg",
-                "path": "spec_hash"
-              }
+              { "kind": "const", "value": [99, 111, 110, 102, 105, 103] }
+            ]
+          }
+        },
+        {
+          "name": "job_escrow",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [106, 111, 98] },
+              { "kind": "account", "path": "poster" },
+              { "kind": "arg", "path": "spec_hash" }
             ]
           }
         },
         {
           "name": "escrow_token_account",
           "writable": true,
-          "signer": true
+          "signer": false
         },
         {
           "name": "poster_token_account",
-          "writable": true
+          "writable": true,
+          "signer": false
         },
         {
-          "name": "token_mint"
+          "name": "token_mint",
+          "signer": false
         },
         {
           "name": "token_program",
@@ -192,31 +152,21 @@
         },
         {
           "name": "spec_hash",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
+          "type": { "array": ["u8", 32] }
         },
         {
           "name": "deadline",
           "type": "i64"
+        },
+        {
+          "name": "challenge_period",
+          "type": "u64"
         }
       ]
     },
     {
-      "name": "submit_completion",
-      "discriminator": [
-        155,
-        236,
-        211,
-        88,
-        53,
-        120,
-        74,
-        196
-      ],
+      "name": "accept_job",
+      "discriminator": [43, 201, 124, 1, 19, 189, 96, 10],
       "accounts": [
         {
           "name": "taker",
@@ -225,44 +175,276 @@
         },
         {
           "name": "job_escrow",
-          "writable": true
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [106, 111, 98] },
+              { "kind": "account", "path": "poster" },
+              { "kind": "arg", "path": "spec_hash" }
+            ]
+          }
         },
         {
           "name": "poster",
-          "writable": true
+          "signer": false
+        }
+      ],
+      "args": [
+        {
+          "name": "spec_hash",
+          "type": { "array": ["u8", 32] }
+        }
+      ]
+    },
+    {
+      "name": "submit_work",
+      "discriminator": [158, 80, 101, 51, 114, 130, 101, 253],
+      "accounts": [
+        {
+          "name": "taker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "job_escrow",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [106, 111, 98] },
+              { "kind": "account", "path": "poster" },
+              { "kind": "account", "path": "job_escrow.spec_hash" }
+            ]
+          }
+        },
+        {
+          "name": "poster",
+          "signer": false
+        }
+      ],
+      "args": [
+        {
+          "name": "work_hash",
+          "type": { "array": ["u8", 32] }
+        },
+        {
+          "name": "delivery_uri",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "finalize_payment",
+      "discriminator": [254, 254, 46, 40, 22, 126, 221, 128],
+      "accounts": [
+        {
+          "name": "crank",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "job_escrow",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [106, 111, 98] },
+              { "kind": "account", "path": "poster" },
+              { "kind": "account", "path": "job_escrow.spec_hash" }
+            ]
+          }
+        },
+        {
+          "name": "poster",
+          "writable": true,
+          "signer": false
         },
         {
           "name": "escrow_token_account",
-          "writable": true
+          "writable": true,
+          "signer": false
         },
         {
           "name": "taker_token_account",
-          "writable": true
+          "writable": true,
+          "signer": false
+        },
+        {
+          "name": "taker",
+          "writable": true,
+          "signer": false
         },
         {
           "name": "taker_reputation",
           "writable": true,
+          "signer": false,
           "pda": {
             "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  114,
-                  101,
-                  112,
-                  117,
-                  116,
-                  97,
-                  116,
-                  105,
-                  111,
-                  110
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "taker"
-              }
+              { "kind": "const", "value": [114, 101, 112, 117, 116, 97, 116, 105, 111, 110] },
+              { "kind": "account", "path": "job_escrow.taker" }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "raise_dispute",
+      "discriminator": [41, 243, 1, 51, 150, 95, 246, 73],
+      "accounts": [
+        {
+          "name": "poster",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [99, 111, 110, 102, 105, 103] }
+            ]
+          }
+        },
+        {
+          "name": "job_escrow",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [106, 111, 98] },
+              { "kind": "account", "path": "poster" },
+              { "kind": "account", "path": "job_escrow.spec_hash" }
+            ]
+          }
+        },
+        {
+          "name": "bond_token_account",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [98, 111, 110, 100] },
+              { "kind": "account", "path": "job_escrow" }
+            ]
+          }
+        },
+        {
+          "name": "poster_token_account",
+          "writable": true,
+          "signer": false
+        },
+        {
+          "name": "token_mint",
+          "signer": false
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "reason_hash",
+          "type": { "array": ["u8", 32] }
+        },
+        {
+          "name": "bond",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "resolve_dispute",
+      "discriminator": [231, 6, 202, 6, 96, 103, 12, 230],
+      "accounts": [
+        {
+          "name": "arbitrator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [99, 111, 110, 102, 105, 103] }
+            ]
+          }
+        },
+        {
+          "name": "job_escrow",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [106, 111, 98] },
+              { "kind": "account", "path": "poster" },
+              { "kind": "account", "path": "job_escrow.spec_hash" }
+            ]
+          }
+        },
+        {
+          "name": "poster",
+          "writable": true,
+          "signer": false
+        },
+        {
+          "name": "escrow_token_account",
+          "writable": true,
+          "signer": false
+        },
+        {
+          "name": "bond_token_account",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [98, 111, 110, 100] },
+              { "kind": "account", "path": "job_escrow" }
+            ]
+          }
+        },
+        {
+          "name": "poster_token_account",
+          "writable": true,
+          "signer": false
+        },
+        {
+          "name": "taker_token_account",
+          "writable": true,
+          "signer": false
+        },
+        {
+          "name": "taker",
+          "writable": true,
+          "signer": false
+        },
+        {
+          "name": "taker_reputation",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [114, 101, 112, 117, 116, 97, 116, 105, 111, 110] },
+              { "kind": "account", "path": "job_escrow.taker" }
             ]
           }
         },
@@ -277,120 +459,98 @@
       ],
       "args": [
         {
-          "name": "proof",
-          "type": "bytes"
-        },
-        {
-          "name": "min_words",
-          "type": "u32"
-        },
-        {
-          "name": "text_hash",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
+          "name": "resolution",
+          "type": { "defined": { "name": "DisputeResolution" } }
         }
       ]
+    },
+    {
+      "name": "cancel_job",
+      "discriminator": [126, 241, 155, 241, 50, 236, 83, 118],
+      "accounts": [
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "job_escrow",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [106, 111, 98] },
+              { "kind": "account", "path": "poster" },
+              { "kind": "account", "path": "job_escrow.spec_hash" }
+            ]
+          }
+        },
+        {
+          "name": "poster",
+          "writable": true,
+          "signer": false
+        },
+        {
+          "name": "escrow_token_account",
+          "writable": true,
+          "signer": false
+        },
+        {
+          "name": "poster_token_account",
+          "writable": true,
+          "signer": false
+        },
+        {
+          "name": "taker_reputation",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [114, 101, 112, 117, 116, 97, 116, 105, 111, 110] },
+              { "kind": "account", "path": "job_escrow.taker" }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
     {
-      "name": "AgentReputation",
-      "discriminator": [
-        245,
-        56,
-        239,
-        246,
-        36,
-        231,
-        227,
-        67
-      ]
+      "name": "ProtocolConfig",
+      "discriminator": [207, 91, 250, 28, 152, 179, 215, 209]
     },
     {
       "name": "JobEscrow",
-      "discriminator": [
-        189,
-        224,
-        160,
-        70,
-        105,
-        78,
-        115,
-        151
-      ]
-    }
-  ],
-  "errors": [
-    {
-      "code": 6000,
-      "name": "InvalidStatus",
-      "msg": "Job is not in the required status for this operation"
+      "discriminator": [189, 224, 160, 70, 105, 78, 115, 151]
     },
     {
-      "code": 6001,
-      "name": "DeadlineExpired",
-      "msg": "Job deadline has passed"
-    },
-    {
-      "code": 6002,
-      "name": "DeadlineNotExpired",
-      "msg": "Job deadline has not passed yet"
-    },
-    {
-      "code": 6003,
-      "name": "SpecHashMismatch",
-      "msg": "Spec hash provided does not match committed hash"
-    },
-    {
-      "code": 6004,
-      "name": "InvalidProof",
-      "msg": "Proof verification failed"
-    },
-    {
-      "code": 6005,
-      "name": "Unauthorized",
-      "msg": "Signer is not authorized for this operation"
-    },
-    {
-      "code": 6006,
-      "name": "InvalidAmount",
-      "msg": "Payment amount must be greater than zero"
+      "name": "AgentReputation",
+      "discriminator": [245, 56, 239, 246, 36, 231, 227, 67]
     }
   ],
   "types": [
     {
-      "name": "AgentReputation",
+      "name": "ProtocolConfig",
       "type": {
         "kind": "struct",
         "fields": [
-          {
-            "name": "address",
-            "type": "pubkey"
-          },
-          {
-            "name": "jobs_completed",
-            "type": "u32"
-          },
-          {
-            "name": "jobs_failed",
-            "type": "u32"
-          },
-          {
-            "name": "total_earned",
-            "type": "u64"
-          },
-          {
-            "name": "first_job_at",
-            "type": "i64"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          }
+          { "name": "admin", "type": "pubkey" },
+          { "name": "arbitrators", "type": { "array": ["pubkey", 3] } },
+          { "name": "threshold", "type": "u8" },
+          { "name": "min_challenge_period", "type": "u64" },
+          { "name": "max_challenge_period", "type": "u64" },
+          { "name": "min_bond_bps", "type": "u16" },
+          { "name": "min_bond_absolute", "type": "u64" },
+          { "name": "bump", "type": "u8" }
         ]
       }
     },
@@ -399,47 +559,52 @@
       "type": {
         "kind": "struct",
         "fields": [
-          {
-            "name": "poster",
-            "type": "pubkey"
-          },
-          {
-            "name": "taker",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "spec_hash",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "status",
-            "type": {
-              "defined": {
-                "name": "JobStatus"
-              }
-            }
-          },
-          {
-            "name": "created_at",
-            "type": "i64"
-          },
-          {
-            "name": "deadline",
-            "type": "i64"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          }
+          { "name": "poster", "type": "pubkey" },
+          { "name": "taker", "type": "pubkey" },
+          { "name": "amount", "type": "u64" },
+          { "name": "spec_hash", "type": { "array": ["u8", 32] } },
+          { "name": "status", "type": { "defined": { "name": "JobStatus" } } },
+          { "name": "created_at", "type": "i64" },
+          { "name": "deadline", "type": "i64" },
+          { "name": "challenge_period", "type": "u64" },
+          { "name": "challenge_end", "type": "i64" },
+          { "name": "delivered_at", "type": "i64" },
+          { "name": "work_hash", "type": { "array": ["u8", 32] } },
+          { "name": "delivery_uri", "type": { "array": ["u8", 128] } },
+          { "name": "delivery_uri_len", "type": "u8" },
+          { "name": "dispute", "type": { "defined": { "name": "DisputeInfo" } } },
+          { "name": "bump", "type": "u8" }
+        ]
+      }
+    },
+    {
+      "name": "AgentReputation",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "address", "type": "pubkey" },
+          { "name": "jobs_completed", "type": "u64" },
+          { "name": "jobs_failed", "type": "u64" },
+          { "name": "jobs_disputed", "type": "u64" },
+          { "name": "total_earned", "type": "u64" },
+          { "name": "first_job_at", "type": "i64" },
+          { "name": "bump", "type": "u8" }
+        ]
+      }
+    },
+    {
+      "name": "DisputeInfo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "challenger", "type": "pubkey" },
+          { "name": "bond", "type": "u64" },
+          { "name": "reason_hash", "type": { "array": ["u8", 32] } },
+          { "name": "raised_at", "type": "i64" },
+          { "name": "resolved_at", "type": "i64" },
+          { "name": "resolution", "type": { "defined": { "name": "DisputeResolution" } } },
+          { "name": "approval_mask", "type": "u8" },
+          { "name": "approval_count", "type": "u8" }
         ]
       }
     },
@@ -448,20 +613,56 @@
       "type": {
         "kind": "enum",
         "variants": [
+          { "name": "Open" },
+          { "name": "Accepted" },
+          { "name": "Delivered" },
+          { "name": "Disputed" },
+          { "name": "Finalized" },
+          { "name": "Resolved" },
+          { "name": "Cancelled" }
+        ]
+      }
+    },
+    {
+      "name": "DisputeResolution",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          { "name": "Pending" },
+          { "name": "FavorTaker" },
+          { "name": "FavorPoster" },
           {
-            "name": "Open"
-          },
-          {
-            "name": "Accepted"
-          },
-          {
-            "name": "Completed"
-          },
-          {
-            "name": "Cancelled"
+            "name": "Split",
+            "fields": [
+              { "name": "taker_amount", "type": "u64" }
+            ]
           }
         ]
       }
     }
+  ],
+  "errors": [
+    { "code": 6000, "name": "InvalidStatus", "msg": "Job is not in the required status for this operation" },
+    { "code": 6001, "name": "DeadlineExpired", "msg": "Job deadline has passed" },
+    { "code": 6002, "name": "DeadlineNotExpired", "msg": "Job deadline has not passed yet" },
+    { "code": 6003, "name": "SpecHashMismatch", "msg": "Spec hash provided does not match committed hash" },
+    { "code": 6004, "name": "Unauthorized", "msg": "Signer is not authorized for this operation" },
+    { "code": 6005, "name": "InvalidAmount", "msg": "Payment amount must be greater than zero" },
+    { "code": 6006, "name": "InvalidChallengePeriod", "msg": "Challenge period must be within protocol min/max bounds" },
+    { "code": 6007, "name": "DeliveryUriTooLong", "msg": "Delivery URI exceeds maximum length" },
+    { "code": 6008, "name": "ChallengePeriodNotExpired", "msg": "Challenge period has not expired yet" },
+    { "code": 6009, "name": "DisputeWindowClosed", "msg": "Challenge window has already closed" },
+    { "code": 6010, "name": "DisputeAlreadyActive", "msg": "Dispute is already active on this job" },
+    { "code": 6011, "name": "NoActiveDispute", "msg": "No dispute active for this job" },
+    { "code": 6012, "name": "InsufficientBond", "msg": "Insufficient dispute bond provided" },
+    { "code": 6013, "name": "NotArbitrator", "msg": "Signer is not a whitelisted arbitrator" },
+    { "code": 6014, "name": "AlreadyApproved", "msg": "Arbitrator has already approved this resolution" },
+    { "code": 6015, "name": "InsufficientApprovals", "msg": "Dispute resolution requires approval from multiple arbitrators" },
+    { "code": 6016, "name": "ResolutionMismatch", "msg": "Pending resolution does not match requested resolution" },
+    { "code": 6017, "name": "InvalidSplitAmount", "msg": "Split resolution amount exceeds escrow balance" },
+    { "code": 6018, "name": "ConfigAlreadyInitialized", "msg": "Protocol config already initialized" },
+    { "code": 6019, "name": "ConfigNotInitialized", "msg": "Protocol config not initialized" },
+    { "code": 6020, "name": "InvalidThreshold", "msg": "Arbitrator threshold must be between 1 and ARBITRATOR_COUNT" },
+    { "code": 6021, "name": "MathOverflow", "msg": "Math overflow" }
   ]
 }
