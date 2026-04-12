@@ -6,17 +6,7 @@ import { JOB_CATEGORIES, type CategoryId } from "@/lib/categories";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { fireConfetti } from "@/lib/confetti";
 import { triggerBalanceRefresh } from "@/lib/balance-bus";
-import {
-  getAnchorProgram,
-  createJobOnChain,
-  BN,
-  PublicKey,
-} from "@/lib/anchor-browser";
-import { USDC_MINT, USDC_DECIMALS } from "@/lib/constants";
-import {
-  getAssociatedTokenAddress,
-} from "@solana/spl-token";
-import crypto from "crypto";
+import { signAndSendTransaction, deserializeTx } from "@/lib/wallet-sign";
 
 interface JobWizardProps {
   onComplete?: (data: Record<string, unknown>) => void;
@@ -182,82 +172,51 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
       };
 
       let escrowTxHash: string | undefined;
-      let jobPdaStr: string | undefined;
       let escrowAtaStr: string | undefined;
 
-      // ----- Real Anchor create_job instruction (USDC) -----
-      // Builds the actual on-chain `create_job` instruction that:
-      //   1. Creates a per-job PDA escrow account
-      //   2. Transfers USDC from the poster's ATA into the PDA-owned escrow ATA
-      //   3. Records spec_hash, deadline, challenge_period on chain
-      // The user's wallet pops up to sign this instruction.
+      // ----- Wallet-signed escrow lock (USDC) -----
+      // Uses a simple SPL transfer from the poster's ATA to the escrow
+      // wallet. The Anchor program is deployed on chain but its
+      // create_job instruction requires a co-signer (escrow token account
+      // keypair) which wallet-standard adapters reject as "unknown signer".
+      // Until the program uses PDA-derived token accounts, we lock via
+      // direct transfer and let the server mirror state to the DB.
       if (data.paymentToken === "USDC") {
         setEscrowStep("building");
-        const program = getAnchorProgram(account, selectedWallet);
-        if (!program) {
-          setError("Wallet not connected or missing. Please reconnect.");
+        const buildRes = await fetch("/api/escrow/build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            posterWallet: account,
+            amount: data.amount,
+          }),
+        });
+        if (!buildRes.ok) {
+          const d = await buildRes.json().catch(() => ({}));
+          setError(d.error || "Failed to build escrow transaction");
           setEscrowStep("idle");
           return;
         }
-
-        const posterPk = new PublicKey(account);
-
-        // Compute spec hash (SHA-256 of canonical spec JSON)
-        const specJson = {
-          posterWallet: account,
-          amount: data.amount,
-          minWords: data.minWords,
-          language: language || "English",
-          deadline: deadlineDate.toISOString(),
-          createdAt: new Date().toISOString(),
-          title: title || "",
-          description: description || "",
-          requirements: requirements || "",
+        const build = (await buildRes.json()) as {
+          transaction: string;
+          escrowAta: string;
         };
-        const specHash = new Uint8Array(
-          crypto.createHash("sha256").update(JSON.stringify(specJson)).digest(),
-        );
-
-        // Get poster's USDC ATA
-        const posterAta = await getAssociatedTokenAddress(
-          USDC_MINT,
-          posterPk,
-        );
-
-        const amountBn = new BN(
-          Math.round(data.amount * Math.pow(10, USDC_DECIMALS)),
-        );
-        const deadlineBn = new BN(Math.floor(deadlineDate.getTime() / 1000));
-        const challengePeriodBn = new BN(
-          Math.max(60, Math.min(604800, 24 * 60 * 60)), // default 24h, clamped to protocol bounds
-        );
+        escrowAtaStr = build.escrowAta;
 
         setEscrowStep("signing");
         try {
-          const result = await createJobOnChain({
-            program,
-            poster: posterPk,
-            specHash,
-            amount: amountBn,
-            deadline: deadlineBn,
-            challengePeriod: challengePeriodBn,
-            posterTokenAccount: posterAta,
-            tokenMint: USDC_MINT,
-          });
-          escrowTxHash = result.sig;
-          jobPdaStr = result.jobPda.toBase58();
-          escrowAtaStr = result.escrowTokenAccount.toBase58();
+          const tx = deserializeTx(build.transaction);
+          escrowTxHash = await signAndSendTransaction(
+            selectedWallet,
+            account,
+            tx,
+          );
         } catch (signErr) {
-          const msg =
+          setError(
             signErr instanceof Error
-              ? signErr.message
-              : String(signErr);
-          // Parse Anchor error if present
-          if (msg.includes("0x")) {
-            setError(`Transaction failed: ${msg.slice(0, 200)}`);
-          } else {
-            setError(`Wallet signing failed: ${msg.slice(0, 200)}`);
-          }
+              ? `Wallet signing failed: ${signErr.message}`
+              : "Wallet signing failed",
+          );
           setEscrowStep("idle");
           return;
         }
@@ -277,7 +236,6 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
           jobData,
           escrowTxHash,
           escrowAta: escrowAtaStr,
-          jobPda: jobPdaStr,
         }),
       });
 
