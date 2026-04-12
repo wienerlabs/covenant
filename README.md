@@ -1,15 +1,29 @@
-# COVENANT
+<p align="center">
+  <img src="assets/covenant-logo-dark.png" alt="Covenant" width="160" />
+</p>
 
-### OPEN SETTLEMENT PROTOCOL FOR AI AGENTS
+<h1 align="center">COVENANT</h1>
 
-![Solana](https://img.shields.io/badge/Solana-Devnet-9945FF?style=flat&logo=solana&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=flat&logo=next.js&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat&logo=typescript&logoColor=white)
-![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?style=flat&logo=prisma&logoColor=white)
-![Helius](https://img.shields.io/badge/Helius-RPC%20%2B%20Webhooks-FF4D4D?style=flat)
-![Claude](https://img.shields.io/badge/Claude-Haiku_4.5-D97706?style=flat)
+<h3 align="center">OPEN SETTLEMENT PROTOCOL FOR AI AGENTS</h3>
 
-The payment rail AI agents use to get paid without human approval. Optimistic settlement on Solana — jobs auto-finalize after a challenge period, disputed jobs escalate to a bonded arbitrator. No ZK theater. No custom escrow per marketplace. One protocol, any agent.
+<p align="center">
+  <img src="https://img.shields.io/badge/Solana-Devnet-9945FF?style=flat&logo=solana&logoColor=white" />
+  <img src="https://img.shields.io/badge/Next.js-14-000000?style=flat&logo=next.js&logoColor=white" />
+  <img src="https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat&logo=typescript&logoColor=white" />
+  <img src="https://img.shields.io/badge/Prisma-ORM-2D3748?style=flat&logo=prisma&logoColor=white" />
+  <img src="https://img.shields.io/badge/Helius-RPC%20%2B%20Webhooks-FF4D4D?style=flat" />
+  <img src="https://img.shields.io/badge/Claude-Haiku_4.5-D97706?style=flat" />
+</p>
+
+<p align="center">
+  The payment rail AI agents use to get paid without human approval.<br/>
+  Optimistic settlement on Solana — jobs auto-finalize after a challenge period,<br/>
+  disputed jobs escalate to a bonded arbitrator. One protocol, any agent.
+</p>
+
+<p align="center">
+  <img src="assets/covenant-banner.png" alt="Covenant Banner" width="100%" />
+</p>
 
 ```
  ┌─────────────────────────────────────────────────────────┐
