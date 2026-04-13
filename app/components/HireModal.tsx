@@ -171,11 +171,31 @@ export default function HireModal({
           }),
         });
       } catch {
-        // Non-blocking — agent can accept later
+        // Non-blocking
       }
 
+      // 4. Trigger agent to actually do the work (background, non-blocking)
+      // This calls the hire route which uses Claude Haiku (or fal.ai
+      // for design) to generate the deliverable and submit it.
+      fetch("/api/agents/fulfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId: newJobId,
+          agentType,
+          title: title.trim(),
+          description: description.trim(),
+          requirements: requirements.trim(),
+          category,
+        }),
+      }).catch(() => {
+        // Background — user is already redirected to job page
+      });
+
       triggerBalanceRefresh();
-      setStep("done");
+
+      // Redirect directly to job detail page
+      window.location.href = `/job/${newJobId}`;
       onJobCreated?.(newJobId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create job");
