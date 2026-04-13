@@ -42,7 +42,7 @@ const AGENTS: AgentCard[] = [
     successRate: "95%",
     earned: "$890",
     price: 25,
-    color: "#22CC44",
+    color: "#fffeb2",
     seed: "inspector-agent-covenant-2026",
   },
   {
@@ -53,7 +53,7 @@ const AGENTS: AgentCard[] = [
     successRate: "97%",
     earned: "$670",
     price: 12,
-    color: "#8B5CF6",
+    color: "#fffeb2",
     seed: "linguist-agent-covenant-2026",
   },
   {
@@ -64,7 +64,7 @@ const AGENTS: AgentCard[] = [
     successRate: "96%",
     earned: "$430",
     price: 10,
-    color: "#FF8C00",
+    color: "#fffeb2",
     seed: "classifier-agent-covenant-2026",
   },
   {
@@ -75,7 +75,7 @@ const AGENTS: AgentCard[] = [
     successRate: "92%",
     earned: "$2,100",
     price: 40,
-    color: "#FF4444",
+    color: "#fffeb2",
     seed: "guardian-agent-covenant-2026",
   },
   {

@@ -6,33 +6,77 @@ import { executeCircuit } from "@/lib/work-metrics";
 import crypto from "crypto";
 import { NextRequest } from "next/server";
 
-const AGENT_CONFIGS: Record<string, { category: string; minWords: number; amount: number; title: string; description: string; requirements: string; prompt: string }> = {
+interface AgentConfig {
+  category: string;
+  minWords: number;
+  amount: number;
+  title: string;
+  description: string;
+  requirements: string;
+  prompt: string;
+  outputFormat?: string; // "json" for structured output agents
+  generateImage?: boolean; // true for design agent
+}
+
+const AGENT_CONFIGS: Record<string, AgentConfig> = {
   writer: {
     category: "text_writing",
     minWords: 150,
     amount: 15,
-    title: "Professional Article on Decentralized AI Marketplaces",
-    description: "Write a professional article about the benefits of decentralized AI agent marketplaces. Cover key advantages, use cases, and future potential.",
-    requirements: "Be concise and informative. Use professional tone.",
-    prompt: "You are an AI agent completing a job on the COVENANT protocol.\n\nJOB TITLE: Professional Article on Decentralized AI Marketplaces\nDESCRIPTION: Write a professional article about the benefits of decentralized AI agent marketplaces. Cover key advantages, use cases, and future potential.\nREQUIREMENTS: Be concise and informative. Use professional tone.\nMINIMUM WORDS: 150\n\nWrite a thorough, professional response. Must be at least 150 words.",
+    title: "The Future of AI Agent Payments",
+    description: "Write a professional article about how optimistic settlement protocols enable autonomous AI agents to get paid without human approval.",
+    requirements: "Professional tone. Cover escrow, challenge periods, and dispute resolution.",
+    prompt: "You are SCRIBE, a writing agent on Covenant. Write a professional article about optimistic settlement for AI agent payments. Cover: (1) why current payment rails fail for agents, (2) how escrow + challenge periods work, (3) dispute resolution with bonded arbitrators. At least 150 words. Be concise and insightful.",
   },
   reviewer: {
     category: "code_review",
     minWords: 100,
-    amount: 20,
-    title: "Solana Escrow Smart Contract Review",
-    description: "Review a sample Solana smart contract function that handles escrow payments. Analyze the code for security vulnerabilities, gas efficiency, and adherence to best practices.",
-    requirements: "Include observations about security, gas efficiency, and best practices.",
-    prompt: "You are an AI agent completing a job on the COVENANT protocol.\n\nJOB TITLE: Solana Escrow Smart Contract Review\nDESCRIPTION: Review a sample Solana smart contract function that handles escrow payments. Analyze the code for security vulnerabilities, gas efficiency, and adherence to best practices.\nREQUIREMENTS: Include observations about security, gas efficiency, and best practices.\nMINIMUM WORDS: 100\n\nWrite a thorough, professional response. Must be at least 100 words.",
+    amount: 25,
+    title: "Solana Escrow Program Security Review",
+    description: "Review the Covenant Anchor program for security vulnerabilities, best practices, and optimization opportunities.",
+    requirements: "Return structured findings with severity levels and an overall score.",
+    outputFormat: "json",
+    prompt: 'You are INSPECTOR, a code review agent on Covenant. Review the following Solana Anchor escrow pattern:\n\n```rust\npub fn create_job(ctx: Context<CreateJob>, amount: u64, spec_hash: [u8; 32]) -> Result<()> {\n    let job = &mut ctx.accounts.job_escrow;\n    job.poster = ctx.accounts.poster.key();\n    job.amount = amount;\n    token::transfer(transfer_ctx, amount)?;\n    Ok(())\n}\n```\n\nReturn ONLY valid JSON:\n{"type":"code_review","filesAnalyzed":1,"findings":[{"severity":"...","title":"...","description":"...","file":"create_job.rs","line":3}],"score":7.5,"summary":"..."}',
   },
   translator: {
     category: "translation",
     minWords: 100,
     amount: 12,
-    title: "ZK Proof Concept Translation (Spanish & French)",
-    description: "Translate the following concept into both Spanish and French: 'Zero-knowledge proofs allow one party to prove to another that a statement is true without revealing any additional information beyond the validity of the statement itself.'",
-    requirements: "Provide translations in both Spanish and French. At least 100 words total.",
-    prompt: "You are an AI agent completing a job on the COVENANT protocol.\n\nJOB TITLE: ZK Proof Concept Translation (Spanish & French)\nDESCRIPTION: Translate the following concept into both Spanish and French: 'Zero-knowledge proofs allow one party to prove to another that a statement is true without revealing any additional information beyond the validity of the statement itself.'\nREQUIREMENTS: Provide translations in both Spanish and French. At least 100 words total.\nMINIMUM WORDS: 100\n\nWrite a thorough, professional response. Must be at least 100 words.",
+    title: "Settlement Protocol Explainer (Spanish & French)",
+    description: "Translate the concept of optimistic settlement for AI agents into Spanish and French.",
+    requirements: "Provide translations in both languages with confidence scoring.",
+    outputFormat: "json",
+    prompt: 'You are LINGUIST, a translation agent on Covenant. Translate this into Spanish and French:\n\n"Optimistic settlement allows AI agents to get paid automatically after a challenge period. If the poster doesn\'t dispute the delivery within 24 hours, escrow releases to the agent. Disputes are resolved by a bonded arbitrator multisig."\n\nReturn ONLY valid JSON:\n{"type":"translation","sourceLang":"English","targetLang":"Spanish & French","source":"...original...","target":"Spanish: ...\\n\\nFrench: ...","confidence":95}',
+  },
+  labeler: {
+    category: "data_labeling",
+    minWords: 50,
+    amount: 10,
+    title: "Sentiment Analysis: Crypto Project Reviews",
+    description: "Label 10 sample crypto project reviews with sentiment categories (positive, negative, neutral, mixed).",
+    requirements: "Return structured JSON with labeled items and distribution.",
+    outputFormat: "json",
+    prompt: 'You are CLASSIFIER, a data labeling agent on Covenant. Label these 10 crypto reviews with sentiment (positive/negative/neutral/mixed):\n\n1. "This protocol is revolutionary, fast settlement times!"\n2. "Too many bugs, lost funds twice"\n3. "Interesting concept but needs more auditing"\n4. "Best DeFi experience I have had"\n5. "Meh, nothing special compared to competitors"\n6. "The team is responsive and ships fast"\n7. "Gas fees are insane, unusable"\n8. "Solid fundamentals, watching closely"\n9. "Rug pull waiting to happen"\n10. "Finally a protocol that works as promised"\n\nReturn ONLY valid JSON:\n{"type":"data_labeling","totalItems":10,"items":[{"text":"...","label":"positive"}],"distribution":{"positive":4,"negative":3,"neutral":2,"mixed":1}}',
+  },
+  auditor: {
+    category: "bug_bounty",
+    minWords: 100,
+    amount: 40,
+    title: "Escrow Release Function Security Audit",
+    description: "Audit the finalize_payment function for vulnerabilities including reentrancy, access control, and arithmetic overflow.",
+    requirements: "Return severity-rated findings with PoC and fix recommendations.",
+    outputFormat: "json",
+    prompt: 'You are GUARDIAN, a security audit agent on Covenant. Audit this function:\n\n```rust\npub fn finalize_payment(ctx: Context<FinalizePayment>) -> Result<()> {\n    let job = &ctx.accounts.job_escrow;\n    require!(job.status == JobStatus::Delivered);\n    require!(clock.unix_timestamp >= job.challenge_end);\n    token::transfer(transfer_ctx, job.amount)?;\n    job.status = JobStatus::Finalized;\n    Ok(())\n}\n```\n\nReturn ONLY valid JSON:\n{"type":"bug_bounty","severity":"medium","vulnType":"Missing Reentrancy Guard","component":"finalize_payment","finding":"The function checks status before transfer but updates status after. A reentrant call could drain the escrow.","poc":"Call finalize_payment recursively via a malicious token program CPI callback","fix":"Update job.status to Finalized BEFORE the token transfer (checks-effects-interactions pattern)"}',
+  },
+  designer: {
+    category: "design",
+    minWords: 30,
+    amount: 20,
+    title: "Covenant Protocol Logo Concept",
+    description: "Generate a minimalist pixel art logo for a blockchain settlement protocol using dark backgrounds and warm yellow accents.",
+    requirements: "Pixel art style, dark background, #fffeb2 accent color.",
+    generateImage: true,
+    prompt: "Minimalist pixel art logo for Covenant, a blockchain AI agent settlement protocol. Dark background (#0a0a0f), warm yellow (#fffeb2) as primary accent. Geometric, clean, futuristic. 8-bit aesthetic.",
   },
 };
 
@@ -163,29 +207,49 @@ export async function POST(request: NextRequest) {
         send("working", "Agent generating deliverable...");
 
         let deliverableText = "";
-        try {
-          const Anthropic = (await import("@anthropic-ai/sdk")).default;
-          const client = new Anthropic();
-          const aiResponse = await client.messages.create({
-            model: "claude-haiku-4-5-20251001",
-            max_tokens: 1024,
-            messages: [{ role: "user", content: config.prompt }],
-          });
-          const textBlock = aiResponse.content.find((b: { type: string }) => b.type === "text");
-          if (textBlock && "text" in textBlock) {
-            deliverableText = (textBlock as { type: "text"; text: string }).text;
+        let imageUrl: string | null = null;
+
+        // Design agent: generate image via fal.ai
+        if (config.generateImage) {
+          send("generating_image", "Agent generating visual with fal.ai...");
+          try {
+            const imgRes = await fetch(new URL("/api/generate/image", request.url).toString(), {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ prompt: config.prompt, size: "square" }),
+            });
+            if (imgRes.ok) {
+              const imgData = await imgRes.json();
+              imageUrl = imgData.imageUrl;
+              deliverableText = `Design deliverable: ${config.title}\n\nPrompt: ${config.prompt}\nGenerated with fal.ai flux-schnell`;
+              send("image_generated", "Visual generated", { imageUrl });
+            }
+          } catch (imgErr) {
+            console.error("[hire] image generation failed:", imgErr);
           }
-        } catch {
-          // Fallback content
-          deliverableText = `This is a demonstration deliverable for the ${agentType} agent task. ` +
-            "The COVENANT protocol enables trustless work delivery using zero-knowledge proofs on Solana. " +
-            "AI agents complete tasks and generate cryptographic proofs that the work meets specifications. " +
-            "Payment is locked in escrow and automatically released when proof is verified on-chain. " +
-            "This eliminates the need for intermediaries and builds trust through mathematics rather than reputation alone. " +
-            "The marketplace supports multiple job categories including text writing, code review, translation, data labeling, " +
-            "bug bounties, and design work. Each category has specialized verification circuits that ensure deliverable quality. " +
-            "Workers earn reputation on-chain, creating a permanent and verifiable track record of their capabilities. " +
-            "This is the future of work: autonomous, provable, and trustless.";
+        }
+
+        // Text/structured agents: generate with Claude Haiku
+        if (!deliverableText) {
+          try {
+            const Anthropic = (await import("@anthropic-ai/sdk")).default;
+            const client = new Anthropic();
+            const aiResponse = await client.messages.create({
+              model: "claude-haiku-4-5-20251001",
+              max_tokens: 1024,
+              messages: [{ role: "user", content: config.prompt }],
+            });
+            const textBlock = aiResponse.content.find((b: { type: string }) => b.type === "text");
+            if (textBlock && "text" in textBlock) {
+              deliverableText = (textBlock as { type: "text"; text: string }).text;
+            }
+          } catch {
+            deliverableText = `Demonstration deliverable for the ${agentType} agent.\n\n` +
+              "Covenant is an open settlement protocol for AI agents on Solana. " +
+              "Agents accept jobs, deliver work commitments on-chain, and get paid " +
+              "automatically after a 24-hour challenge period. If the poster disputes, " +
+              "a 2-of-3 arbitrator multisig resolves it. No intermediary needed.";
+          }
         }
 
         send("generating", `Generated ${deliverableText.trim().split(/\s+/).length} words`);
@@ -198,17 +262,28 @@ export async function POST(request: NextRequest) {
         const textHashBuffer = circuitResult.textHash;
         const passed = circuitResult.verified;
 
-        send("proof_verified", `Proof verified: ${wordCount} words, hash: ${textHashBuffer.slice(0, 16)}...`, {
+        send("verified", `Delivery verified: ${wordCount} words, hash: ${textHashBuffer.slice(0, 16)}...`, {
           wordCount,
           textHash: textHashBuffer,
           passed,
-          cycleCount: circuitResult.cycleCount,
-          executionTime: circuitResult.executionTime,
         });
 
         // Step 5: Submit & complete
-        send("submitting", "Submitting work and completing job...");
+        send("submitting", "Submitting work and recording delivery...");
 
+        // Create Delivery row (new optimistic flow)
+        await prisma.delivery.create({
+          data: {
+            jobId: job.id,
+            takerWallet,
+            workHash: textHashBuffer,
+            deliveryUri: imageUrl || `inline:${job.id.slice(0, 8)}`,
+            contentPreview: deliverableText.slice(0, 2000),
+            imageUrl: imageUrl,
+          },
+        });
+
+        // Legacy submission row for backwards compat
         await prisma.submission.create({
           data: {
             jobId: job.id,
@@ -216,12 +291,18 @@ export async function POST(request: NextRequest) {
             wordCount,
             textHash: textHashBuffer,
             verified: passed,
+            outputText: deliverableText,
           },
         });
 
         await prisma.job.update({
           where: { id: job.id },
-          data: { status: "Completed" },
+          data: {
+            status: "Delivered",
+            takerWallet,
+            deliveredAt: new Date(),
+            challengeEndAt: new Date(Date.now() + 60 * 1000), // 60s demo challenge
+          },
         });
 
         let completeTxHash: string | null = null;
