@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import PixelAgent from "@/components/PixelAgent";
 import ReputationScore from "@/components/ReputationScore";
-import { fireConfetti } from "@/lib/confetti";
+import HireModal from "@/components/HireModal";
 
 type AgentType = "writer" | "reviewer" | "translator" | "labeler" | "auditor" | "designer";
-type AgentState = "idle" | "thinking" | "working" | "celebrating";
 
 interface AgentCard {
   type: AgentType;
@@ -111,24 +110,7 @@ interface PublishedAgentData {
 }
 
 export default function AgentsPage() {
-  const [hiring, setHiring] = useState<Record<AgentType, boolean>>({ writer: false, reviewer: false, translator: false, labeler: false, auditor: false, designer: false });
-  const defaultProgress = { step: 0, messages: [], done: false, error: null };
-  const [progress, setProgress] = useState<Record<AgentType, HireProgress>>({
-    writer: { ...defaultProgress },
-    reviewer: { ...defaultProgress },
-    translator: { ...defaultProgress },
-    labeler: { ...defaultProgress },
-    auditor: { ...defaultProgress },
-    designer: { ...defaultProgress },
-  });
-  const [agentStates, setAgentStates] = useState<Record<AgentType, AgentState>>({
-    writer: "idle",
-    reviewer: "idle",
-    translator: "idle",
-    labeler: "idle",
-    auditor: "idle",
-    designer: "idle",
-  });
+  const [selectedAgent, setSelectedAgent] = useState<AgentCard | null>(null);
   const [publishedAgents, setPublishedAgents] = useState<PublishedAgentData[]>([]);
 
   useEffect(() => {
@@ -146,122 +128,9 @@ export default function AgentsPage() {
     fetchPublished();
   }, []);
 
-  const hireAgent = useCallback(async (agentType: AgentType) => {
-    setHiring(h => ({ ...h, [agentType]: true }));
-    setAgentStates(s => ({ ...s, [agentType]: "thinking" }));
-    setProgress(p => ({
-      ...p,
-      [agentType]: { step: 1, messages: ["Creating job..."], done: false, error: null },
-    }));
-
-    try {
-      const res = await fetch("/api/agents/hire", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentType }),
-      });
-
-      if (!res.ok || !res.body) {
-        const err = await res.json().catch(() => ({ error: "Hire failed" }));
-        setProgress(p => ({
-          ...p,
-          [agentType]: { step: 0, messages: [err.error || "Failed"], done: true, error: err.error || "Failed" },
-        }));
-        setAgentStates(s => ({ ...s, [agentType]: "idle" }));
-        setHiring(h => ({ ...h, [agentType]: false }));
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const event = JSON.parse(line);
-            const msg = event.message || event.step || "";
-
-            if (event.step?.includes("working") || event.step?.includes("generating")) {
-              setAgentStates(s => ({ ...s, [agentType]: "working" }));
-              setProgress(p => ({
-                ...p,
-                [agentType]: { ...p[agentType], step: 2, messages: [...p[agentType].messages, "Generating deliverable..."] },
-              }));
-            } else if (event.step?.includes("image")) {
-              setProgress(p => ({
-                ...p,
-                [agentType]: { ...p[agentType], step: 2, messages: [...p[agentType].messages, "Generating visual with fal.ai..."] },
-              }));
-            } else if (event.step?.includes("verified") || event.step?.includes("proof")) {
-              setProgress(p => ({
-                ...p,
-                [agentType]: { ...p[agentType], step: 3, messages: [...p[agentType].messages, "Delivery verified \u2713"] },
-              }));
-            } else if (event.step?.includes("escrow")) {
-              setProgress(p => ({
-                ...p,
-                [agentType]: { ...p[agentType], messages: [...p[agentType].messages, "Escrow locked \u2713"] },
-              }));
-            } else if (event.step?.includes("submit")) {
-              setProgress(p => ({
-                ...p,
-                [agentType]: { ...p[agentType], step: 3, messages: [...p[agentType].messages, "Submitting to protocol..."] },
-              }));
-            } else if (event.step?.includes("complete") || event.step?.includes("payment") || event.step?.includes("done")) {
-              setAgentStates(s => ({ ...s, [agentType]: "celebrating" }));
-              fireConfetti();
-              setProgress(p => ({
-                ...p,
-                [agentType]: { ...p[agentType], step: 4, messages: [...p[agentType].messages, "Delivered \u2713 Challenge period started"], done: true },
-              }));
-            } else if (msg) {
-              setProgress(p => ({
-                ...p,
-                [agentType]: { ...p[agentType], messages: [...p[agentType].messages, msg] },
-              }));
-            }
-          } catch {
-            // skip unparseable lines
-          }
-        }
-      }
-
-      // Ensure done state
-      setProgress(p => ({
-        ...p,
-        [agentType]: { ...p[agentType], done: true },
-      }));
-    } catch (err) {
-      setProgress(p => ({
-        ...p,
-        [agentType]: { step: 0, messages: ["Network error"], done: true, error: String(err) },
-      }));
-      setAgentStates(s => ({ ...s, [agentType]: "idle" }));
-    } finally {
-      setHiring(h => ({ ...h, [agentType]: false }));
-      // Reset to idle after 5 seconds
-      setTimeout(() => {
-        setAgentStates(s => ({ ...s, [agentType]: "idle" }));
-      }, 5000);
-    }
-  }, []);
-
-  const progressSteps = [
-    { label: "Creating job...", idx: 1 },
-    { label: "Agent working...", idx: 2 },
-    { label: "Proof verified", idx: 3 },
-    { label: "Payment released", idx: 4 },
-  ];
-
+  // Hire flow: clicking "Hire" opens a HireModal where the user
+  // describes their actual task. The old auto-demo flow was removed.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   return (
     <div style={{ minHeight: "100vh", fontFamily: "inherit", position: "relative" }}>
       <div style={{ position: "fixed", inset: 0, zIndex: 0, backgroundImage: "image-set(url('/poster-bg.webp') type('image/webp'), url('/poster-bg.png') type('image/png'))", backgroundSize: "cover", backgroundPosition: "center" }} />
@@ -303,9 +172,6 @@ export default function AgentsPage() {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px" }}>
             {AGENTS.map((agent) => {
-              const isHiring = hiring[agent.type];
-              const prog = progress[agent.type];
-              const aState = agentStates[agent.type];
 
               return (
                 <div
@@ -332,7 +198,7 @@ export default function AgentsPage() {
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                    <PixelAgent seed={agent.seed} color={agent.color} size={64} state={aState} />
+                    <PixelAgent seed={agent.seed} color={agent.color} size={64} state="idle" />
                     <div style={{ transform: "scale(0.65)", transformOrigin: "center" }}>
                       <ReputationScore completed={parseInt(agent.successRate) || 95} failed={100 - (parseInt(agent.successRate) || 95)} />
                     </div>
@@ -366,90 +232,31 @@ export default function AgentsPage() {
                     </div>
                   </div>
 
-                  {/* Live terminal output */}
-                  {(isHiring || prog.done) && prog.messages.length > 0 && (
-                    <div style={{
-                      width: "100%",
-                      borderRadius: "8px",
-                      backgroundColor: "rgba(0,0,0,0.6)",
-                      border: "1px solid rgba(255,254,178,0.15)",
-                      overflow: "hidden",
-                    }}>
-                      {/* Terminal header */}
-                      <div style={{
-                        padding: "6px 12px",
-                        backgroundColor: "rgba(255,254,178,0.05)",
-                        borderBottom: "1px solid rgba(255,254,178,0.1)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                      }}>
-                        <div style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: isHiring ? "#fffeb2" : prog.error ? "#FF4444" : "#1E9E5F", animation: isHiring ? "pulse 1.5s infinite" : "none" }} />
-                        <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                          {isHiring ? "agent working" : prog.error ? "failed" : "complete"}
-                        </span>
-                      </div>
-                      {/* Terminal body */}
-                      <div style={{
-                        padding: "10px 12px",
-                        maxHeight: "140px",
-                        overflowY: "auto",
-                        fontFamily: "ui-monospace, monospace",
-                        fontSize: "10px",
-                        lineHeight: 1.8,
-                      }}>
-                        {prog.messages.map((msg, i) => (
-                          <div key={i} style={{
-                            color: msg.includes("\u2713") ? "#1E9E5F"
-                              : msg.includes("Error") ? "#FF4444"
-                              : i === prog.messages.length - 1 && isHiring ? "#fffeb2"
-                              : "rgba(255,255,255,0.5)",
-                          }}>
-                            <span style={{ color: "rgba(255,254,178,0.3)", marginRight: "6px" }}>$</span>
-                            {msg}
-                          </div>
-                        ))}
-                        {isHiring && (
-                          <div style={{ color: "#fffeb2" }}>
-                            <span style={{ color: "rgba(255,254,178,0.3)", marginRight: "6px" }}>$</span>
-                            <span style={{ animation: "pulse 1s infinite" }}>_</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
                   <button
-                    onClick={() => hireAgent(agent.type)}
-                    disabled={isHiring}
+                    onClick={() => setSelectedAgent(agent)}
                     style={{
                       fontFamily: "inherit",
                       fontSize: "12px",
                       textTransform: "uppercase",
                       letterSpacing: "0.05em",
-                      padding: "10px 24px",
+                      padding: "12px 24px",
                       width: "100%",
-                      cursor: isHiring ? "wait" : "pointer",
+                      cursor: "pointer",
                       border: `1px solid ${agent.color}`,
                       borderRadius: "8px",
-                      backgroundColor: isHiring ? `${agent.color}20` : `${agent.color}`,
-                      color: isHiring ? agent.color : "#000000",
-                      fontWeight: 600,
+                      backgroundColor: agent.color,
+                      color: "#000000",
+                      fontWeight: 700,
                       transition: "all 0.2s ease",
-                      opacity: isHiring ? 0.7 : 1,
                     }}
                     onMouseEnter={(e) => {
-                      if (!isHiring) {
-                        e.currentTarget.style.backgroundColor = `${agent.color}cc`;
-                      }
+                      e.currentTarget.style.backgroundColor = `${agent.color}cc`;
                     }}
                     onMouseLeave={(e) => {
-                      if (!isHiring) {
-                        e.currentTarget.style.backgroundColor = agent.color;
-                      }
+                      e.currentTarget.style.backgroundColor = agent.color;
                     }}
                   >
-                    {isHiring ? "Working..." : `Hire Now -- $${agent.price}`}
+                    {`Hire -- from $${agent.price}`}
                   </button>
                 </div>
               );
@@ -507,6 +314,20 @@ export default function AgentsPage() {
           )}
         </div>
       </div>
+
+      {/* Hire Modal */}
+      {selectedAgent && (
+        <HireModal
+          open={true}
+          onClose={() => setSelectedAgent(null)}
+          agentName={selectedAgent.name}
+          agentType={selectedAgent.type}
+          specialty={selectedAgent.specialty}
+          suggestedPrice={selectedAgent.price}
+          category={selectedAgent.type}
+          onJobCreated={() => setSelectedAgent(null)}
+        />
+      )}
     </div>
   );
 }
