@@ -17,7 +17,7 @@ body {
      and every component that doesn't set its own font lands here. */
   font-family: var(--font-pixelify), "Pixelify Sans", sans-serif;
   color: #000000;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

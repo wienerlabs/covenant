@@ -174,27 +174,40 @@ export default function HireModal({
         // Non-blocking
       }
 
-      // 4. Trigger agent to actually do the work (background, non-blocking)
-      // This calls the hire route which uses Claude Haiku (or fal.ai
-      // for design) to generate the deliverable and submit it.
-      fetch("/api/agents/fulfill", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jobId: newJobId,
-          agentType,
-          title: title.trim(),
-          description: description.trim(),
-          requirements: requirements.trim(),
-          category,
-        }),
-      }).catch(() => {
-        // Background — user is already redirected to job page
-      });
-
       triggerBalanceRefresh();
 
-      // Redirect directly to job detail page
+      // 4. Trigger agent to actually do the work.
+      // Fire the request BEFORE redirect so it's in-flight when
+      // the page navigates. Use sendBeacon as fallback if available.
+      const fulfillBody = JSON.stringify({
+        jobId: newJobId,
+        agentType,
+        title: title.trim(),
+        description: description.trim(),
+        requirements: requirements.trim(),
+        category,
+      });
+
+      // Try sendBeacon first (survives page navigation)
+      if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+        navigator.sendBeacon(
+          "/api/agents/fulfill",
+          new Blob([fulfillBody], { type: "application/json" }),
+        );
+      } else {
+        // Fallback: fire-and-forget fetch
+        fetch("/api/agents/fulfill", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: fulfillBody,
+          keepalive: true,
+        }).catch(() => {});
+      }
+
+      // Small delay to let the request start before navigation
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Redirect to job detail page
       window.location.href = `/job/${newJobId}`;
       onJobCreated?.(newJobId);
     } catch (err) {
