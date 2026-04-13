@@ -8,7 +8,7 @@ import WalletButton from "./WalletButton";
 import WalletBalance from "./WalletBalance";
 import UserAvatar from "./UserAvatar";
 import NotificationBell from "./NotificationBell";
-import ThemeToggle from "./ThemeToggle";
+// ThemeToggle removed — dark mode only
 
 /**
  * Hover-prefetch: as soon as the user's cursor lands on a nav link, kick off
@@ -460,7 +460,6 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         )}
         {isConnected && account && <WalletBalance />}
         {isConnected && account && <NotificationBell wallet={account} variant={isDark ? "dark" : "light"} />}
-        <ThemeToggle />
         <WalletButton />
       </div>
     </nav>
