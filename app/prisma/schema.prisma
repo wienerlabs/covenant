@@ -56,6 +56,7 @@ model Delivery {
   workHash       String   // SHA-256 hex of the delivered content
   deliveryUri    String   // IPFS / Arweave / HTTPS / Vercel Blob URL
   contentPreview String?  @db.Text // first ~2000 chars for UI; full content at deliveryUri
+  imageUrl       String?  // Generated image URL for design/visual tasks
   submittedAt    DateTime @default(now())
   txHash         String?  // submit_work tx signature
 
@@ -119,6 +120,8 @@ model Reputation {
   jobsFailed     Int       @default(0)
   jobsDisputed   Int       @default(0)
   totalEarned    Float     @default(0)
+  avgRating      Float     @default(0)    // 0-5 stars, computed from reviews
+  reviewCount    Int       @default(0)
   firstJobAt     DateTime?
   updatedAt      DateTime  @updatedAt
 }
@@ -213,4 +216,23 @@ model JobInterest {
   @@unique([jobId, takerWallet])
   @@index([jobId])
   @@index([takerWallet])
+}
+
+// ============================================================================
+// Reviews (post-finalize rating)
+// ============================================================================
+
+/// Poster rates the taker's delivery after finalize/resolve.
+/// One review per job. Rating 1-5, optional text comment.
+model Review {
+  id           String   @id @default(cuid())
+  jobId        String   @unique
+  posterWallet String
+  takerWallet  String
+  rating       Int      // 1-5 stars
+  comment      String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([takerWallet])
+  @@index([posterWallet])
 }
