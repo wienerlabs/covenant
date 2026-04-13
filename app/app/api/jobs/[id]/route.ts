@@ -10,7 +10,15 @@ export async function GET(
 
     const job = await prisma.job.findUnique({
       where: { id },
-      include: { submissions: true },
+      include: {
+        submissions: true,
+        delivery: true,
+        dispute: true,
+        interests: {
+          where: { status: "working" },
+          select: { takerWallet: true, acceptedAt: true },
+        },
+      },
     });
 
     if (!job) {
