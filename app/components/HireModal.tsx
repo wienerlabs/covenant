@@ -145,7 +145,7 @@ export default function HireModal({
             requirements: requirements.trim(),
             category,
             paymentToken: "USDC",
-            minWords: category === "design" ? 30 : 100,
+            minWords: category === "design" ? 0 : 100,
             language: "English",
             deadline: deadlineDate.toISOString(),
           },

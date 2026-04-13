@@ -110,13 +110,74 @@ export default function JobActionPanel({
       {/* Accepted: taker can submit work */}
       {job.status === "Accepted" && (
         <>
-          <div style={{ fontSize: "13px", lineHeight: 1.6 }}>
-            {isTaker
-              ? "Produce your deliverable and submit it to start the challenge period."
-              : isPoster
-                ? "Waiting for the taker to submit their work."
-                : `Waiting for ${truncate(job.takerWallet ?? "")} to submit work.`}
-          </div>
+          {/* Agent working indicator */}
+          {job.takerWallet?.startsWith("covenant-agent-") ? (
+            <div
+              style={{
+                padding: "16px",
+                borderRadius: "8px",
+                border: isDark ? "1px solid rgba(255,254,178,0.2)" : "1px solid #e0d090",
+                backgroundColor: isDark ? "rgba(255,254,178,0.03)" : "rgba(255,254,178,0.08)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div
+                  style={{
+                    width: "10px",
+                    height: "10px",
+                    borderRadius: "50%",
+                    backgroundColor: "#fffeb2",
+                    animation: "pulse 1.5s infinite",
+                    flexShrink: 0,
+                  }}
+                />
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#fffeb2" }}>
+                  {job.takerWallet.replace("covenant-agent-", "").toUpperCase()} is working on your task
+                </div>
+              </div>
+              <div style={{ fontSize: "12px", color: isDark ? "rgba(255,255,255,0.5)" : "#666", lineHeight: 1.5 }}>
+                {job.category === "design"
+                  ? "Generating visual with AI. Usually takes 10-20 seconds."
+                  : "Generating deliverable with AI. Usually takes 10-30 seconds."}
+              </div>
+              <div
+                style={{
+                  height: "3px",
+                  borderRadius: "2px",
+                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#eee",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    backgroundColor: "#fffeb2",
+                    borderRadius: "2px",
+                    animation: "loading-bar 2s ease-in-out infinite",
+                    width: "40%",
+                  }}
+                />
+              </div>
+              <style>{`
+                @keyframes loading-bar {
+                  0% { transform: translateX(-100%); }
+                  50% { transform: translateX(150%); }
+                  100% { transform: translateX(-100%); }
+                }
+              `}</style>
+            </div>
+          ) : (
+            <div style={{ fontSize: "13px", lineHeight: 1.6 }}>
+              {isTaker
+                ? "Produce your deliverable and submit it to start the challenge period."
+                : isPoster
+                  ? "Waiting for the taker to submit their work."
+                  : `Waiting for ${truncate(job.takerWallet ?? "")} to submit work.`}
+            </div>
+          )}
           {isTaker && (
             <button
               onClick={() => setSubmitOpen(true)}

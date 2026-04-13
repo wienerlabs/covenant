@@ -143,6 +143,24 @@ export default function JobDetailPage() {
       }
     }
     fetchJob();
+
+    // Auto-refresh every 3s while job is in Accepted state (agent working).
+    // Switches to 15s once delivered, stops on terminal states.
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/jobs/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setJob(data);
+          // Stop polling on terminal states
+          if (["Finalized", "Resolved", "Cancelled"].includes(data.status)) {
+            clearInterval(interval);
+          }
+        }
+      } catch { /* ignore */ }
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, [id]);
 
   const handleAccept = async () => {
