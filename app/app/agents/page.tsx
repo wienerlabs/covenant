@@ -194,19 +194,34 @@ export default function AgentsPage() {
               setAgentStates(s => ({ ...s, [agentType]: "working" }));
               setProgress(p => ({
                 ...p,
-                [agentType]: { ...p[agentType], step: 2, messages: [...p[agentType].messages, "Agent working..."] },
+                [agentType]: { ...p[agentType], step: 2, messages: [...p[agentType].messages, "Generating deliverable..."] },
               }));
-            } else if (event.step?.includes("proof") || event.step?.includes("verified")) {
+            } else if (event.step?.includes("image")) {
               setProgress(p => ({
                 ...p,
-                [agentType]: { ...p[agentType], step: 3, messages: [...p[agentType].messages, "Proof verified \u2713"] },
+                [agentType]: { ...p[agentType], step: 2, messages: [...p[agentType].messages, "Generating visual with fal.ai..."] },
               }));
-            } else if (event.step?.includes("complete") || event.step?.includes("payment")) {
+            } else if (event.step?.includes("verified") || event.step?.includes("proof")) {
+              setProgress(p => ({
+                ...p,
+                [agentType]: { ...p[agentType], step: 3, messages: [...p[agentType].messages, "Delivery verified \u2713"] },
+              }));
+            } else if (event.step?.includes("escrow")) {
+              setProgress(p => ({
+                ...p,
+                [agentType]: { ...p[agentType], messages: [...p[agentType].messages, "Escrow locked \u2713"] },
+              }));
+            } else if (event.step?.includes("submit")) {
+              setProgress(p => ({
+                ...p,
+                [agentType]: { ...p[agentType], step: 3, messages: [...p[agentType].messages, "Submitting to protocol..."] },
+              }));
+            } else if (event.step?.includes("complete") || event.step?.includes("payment") || event.step?.includes("done")) {
               setAgentStates(s => ({ ...s, [agentType]: "celebrating" }));
               fireConfetti();
               setProgress(p => ({
                 ...p,
-                [agentType]: { ...p[agentType], step: 4, messages: [...p[agentType].messages, "Payment released \u2713"], done: true },
+                [agentType]: { ...p[agentType], step: 4, messages: [...p[agentType].messages, "Delivered \u2713 Challenge period started"], done: true },
               }));
             } else if (msg) {
               setProgress(p => ({
@@ -351,41 +366,56 @@ export default function AgentsPage() {
                     </div>
                   </div>
 
-                  {/* Progress indicator */}
+                  {/* Live terminal output */}
                   {(isHiring || prog.done) && prog.messages.length > 0 && (
-                    <div style={{ width: "100%", padding: "12px", borderRadius: "8px", backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                      {progressSteps.map((ps) => {
-                        const active = prog.step >= ps.idx;
-                        const current = prog.step === ps.idx && !prog.done;
-                        return (
-                          <div key={ps.idx} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                            <span style={{
-                              width: "14px",
-                              height: "14px",
-                              borderRadius: "50%",
-                              border: `1px solid ${active ? agent.color : "rgba(255,255,255,0.2)"}`,
-                              backgroundColor: active ? agent.color : "transparent",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: "8px",
-                              color: active ? "#000" : "rgba(255,255,255,0.3)",
-                              flexShrink: 0,
-                              animation: current ? "pulse 1.5s infinite" : "none",
-                            }}>
-                              {active ? "\u2713" : ""}
-                            </span>
-                            <span style={{ fontSize: "10px", color: active ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.3)" }}>
-                              {ps.label}
-                            </span>
+                    <div style={{
+                      width: "100%",
+                      borderRadius: "8px",
+                      backgroundColor: "rgba(0,0,0,0.6)",
+                      border: "1px solid rgba(255,254,178,0.15)",
+                      overflow: "hidden",
+                    }}>
+                      {/* Terminal header */}
+                      <div style={{
+                        padding: "6px 12px",
+                        backgroundColor: "rgba(255,254,178,0.05)",
+                        borderBottom: "1px solid rgba(255,254,178,0.1)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}>
+                        <div style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: isHiring ? "#fffeb2" : prog.error ? "#FF4444" : "#1E9E5F", animation: isHiring ? "pulse 1.5s infinite" : "none" }} />
+                        <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          {isHiring ? "agent working" : prog.error ? "failed" : "complete"}
+                        </span>
+                      </div>
+                      {/* Terminal body */}
+                      <div style={{
+                        padding: "10px 12px",
+                        maxHeight: "140px",
+                        overflowY: "auto",
+                        fontFamily: "ui-monospace, monospace",
+                        fontSize: "10px",
+                        lineHeight: 1.8,
+                      }}>
+                        {prog.messages.map((msg, i) => (
+                          <div key={i} style={{
+                            color: msg.includes("\u2713") ? "#1E9E5F"
+                              : msg.includes("Error") ? "#FF4444"
+                              : i === prog.messages.length - 1 && isHiring ? "#fffeb2"
+                              : "rgba(255,255,255,0.5)",
+                          }}>
+                            <span style={{ color: "rgba(255,254,178,0.3)", marginRight: "6px" }}>$</span>
+                            {msg}
                           </div>
-                        );
-                      })}
-                      {prog.error && (
-                        <div style={{ fontSize: "10px", color: "#fca5a5", marginTop: "4px" }}>
-                          Error: {prog.error}
-                        </div>
-                      )}
+                        ))}
+                        {isHiring && (
+                          <div style={{ color: "#fffeb2" }}>
+                            <span style={{ color: "rgba(255,254,178,0.3)", marginRight: "6px" }}>$</span>
+                            <span style={{ animation: "pulse 1s infinite" }}>_</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 
