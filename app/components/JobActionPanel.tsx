@@ -5,6 +5,7 @@ import ChallengeCountdown from "./ChallengeCountdown";
 import FinalizeButton from "./FinalizeButton";
 import DisputeModal from "./DisputeModal";
 import SubmitWorkModal from "./SubmitWorkModal";
+import CategoryDeliveryRenderer from "./CategoryDeliveryRenderer";
 
 interface Delivery {
   workHash: string;
@@ -186,7 +187,7 @@ export default function JobActionPanel({
           </div>
 
           {/* Delivery preview */}
-          <DeliveryPreview delivery={job.delivery} isDark={isDark} />
+          <CategoryDeliveryRenderer category={job.category || "text_writing"} contentPreview={job.delivery.contentPreview} imageUrl={job.delivery.imageUrl} deliveryUri={job.delivery.deliveryUri} isDark={isDark} />
         </>
       )}
 
@@ -239,7 +240,7 @@ export default function JobActionPanel({
               {job.dispute.reasonText}
             </div>
           )}
-          {job.delivery && <DeliveryPreview delivery={job.delivery} isDark={isDark} />}
+          {job.delivery && <CategoryDeliveryRenderer category={job.category || "text_writing"} contentPreview={job.delivery.contentPreview} imageUrl={job.delivery.imageUrl} deliveryUri={job.delivery.deliveryUri} isDark={isDark} />}
         </>
       )}
 

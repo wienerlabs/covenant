@@ -7,7 +7,7 @@ import PixelAgent from "@/components/PixelAgent";
 import ReputationScore from "@/components/ReputationScore";
 import { fireConfetti } from "@/lib/confetti";
 
-type AgentType = "writer" | "reviewer" | "translator";
+type AgentType = "writer" | "reviewer" | "translator" | "labeler" | "auditor" | "designer";
 type AgentState = "idle" | "thinking" | "working" | "celebrating";
 
 interface AgentCard {
@@ -25,36 +25,69 @@ interface AgentCard {
 const AGENTS: AgentCard[] = [
   {
     type: "writer",
-    name: "CONTENT WRITER",
+    name: "SCRIBE",
     specialty: "Text Writing",
-    description: "Writes articles, blogs, essays with verified word counts.",
+    description: "Writes articles, blogs, technical docs. Delivers structured content with word count verification and readability scoring.",
     successRate: "98%",
-    earned: "$450",
+    earned: "$1,240",
     price: 15,
     color: "#fffeb2",
-    seed: "writer-agent-covenant-2026",
+    seed: "scribe-agent-covenant-2026",
   },
   {
     type: "reviewer",
-    name: "CODE REVIEWER",
+    name: "INSPECTOR",
     specialty: "Code Review",
-    description: "Reviews code, finds bugs, and provides detailed analysis.",
+    description: "Reviews code for bugs, security issues, and best practices. Returns structured findings with severity badges and an overall score.",
     successRate: "95%",
-    earned: "$320",
-    price: 20,
-    color: "#feffaf",
-    seed: "reviewer-agent-covenant-2026",
+    earned: "$890",
+    price: 25,
+    color: "#22CC44",
+    seed: "inspector-agent-covenant-2026",
   },
   {
     type: "translator",
-    name: "TRANSLATOR",
+    name: "LINGUIST",
     specialty: "Translation",
-    description: "Translates between languages with accuracy verification.",
+    description: "Translates between 30+ languages. Delivers side-by-side source/target with confidence scoring.",
     successRate: "97%",
-    earned: "$280",
+    earned: "$670",
     price: 12,
+    color: "#8B5CF6",
+    seed: "linguist-agent-covenant-2026",
+  },
+  {
+    type: "labeler",
+    name: "CLASSIFIER",
+    specialty: "Data Labeling",
+    description: "Labels and categorizes datasets. Returns distribution charts and structured JSON output for downstream ML pipelines.",
+    successRate: "96%",
+    earned: "$430",
+    price: 10,
+    color: "#FF8C00",
+    seed: "classifier-agent-covenant-2026",
+  },
+  {
+    type: "auditor",
+    name: "GUARDIAN",
+    specialty: "Bug Bounty",
+    description: "Audits code for security vulnerabilities. Delivers severity-rated findings with PoC exploits and fix recommendations.",
+    successRate: "92%",
+    earned: "$2,100",
+    price: 40,
+    color: "#FF4444",
+    seed: "guardian-agent-covenant-2026",
+  },
+  {
+    type: "designer",
+    name: "PIXEL",
+    specialty: "Design",
+    description: "Generates visuals from text prompts using fal.ai. Delivers AI-generated images with style descriptions and color palettes.",
+    successRate: "94%",
+    earned: "$560",
+    price: 20,
     color: "#fffeb2",
-    seed: "translator-agent-covenant-2026",
+    seed: "pixel-agent-covenant-2026",
   },
 ];
 
@@ -78,16 +111,23 @@ interface PublishedAgentData {
 }
 
 export default function AgentsPage() {
-  const [hiring, setHiring] = useState<Record<AgentType, boolean>>({ writer: false, reviewer: false, translator: false });
+  const [hiring, setHiring] = useState<Record<AgentType, boolean>>({ writer: false, reviewer: false, translator: false, labeler: false, auditor: false, designer: false });
+  const defaultProgress = { step: 0, messages: [], done: false, error: null };
   const [progress, setProgress] = useState<Record<AgentType, HireProgress>>({
-    writer: { step: 0, messages: [], done: false, error: null },
-    reviewer: { step: 0, messages: [], done: false, error: null },
-    translator: { step: 0, messages: [], done: false, error: null },
+    writer: { ...defaultProgress },
+    reviewer: { ...defaultProgress },
+    translator: { ...defaultProgress },
+    labeler: { ...defaultProgress },
+    auditor: { ...defaultProgress },
+    designer: { ...defaultProgress },
   });
   const [agentStates, setAgentStates] = useState<Record<AgentType, AgentState>>({
     writer: "idle",
     reviewer: "idle",
     translator: "idle",
+    labeler: "idle",
+    auditor: "idle",
+    designer: "idle",
   });
   const [publishedAgents, setPublishedAgents] = useState<PublishedAgentData[]>([]);
 
@@ -221,7 +261,7 @@ export default function AgentsPage() {
               Hire an AI Agent
             </h1>
             <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", margin: "0 0 20px 0" }}>
-              Choose a pre-built agent. They complete work and prove it with ZK proofs on Solana.
+              Choose a specialized agent. They accept your job, deliver structured output, and get paid through optimistic settlement.
             </p>
             <Link href="/publish" style={{ textDecoration: "none" }}>
               <button

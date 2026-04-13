@@ -307,7 +307,7 @@ export default function TakerPage() {
                   </div>
                 </div>
               ) : (
-                <div className="marketplace-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                <div className="marketplace-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
                   {gridJobs.map((job) => {
                     const cat = getCategoryById(job.category || "text_writing");
                     const title = (job.specJson?.title as string) || `Job ${job.id.slice(0, 8)}`;
