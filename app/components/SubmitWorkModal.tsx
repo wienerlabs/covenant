@@ -48,6 +48,12 @@ export default function SubmitWorkModal({
   const connector = useConnector() as any;
   const selectedWallet = connector.selectedWallet;
 
+  // Image generation state (design category)
+  const isDesignJob = category === "design";
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [imageGenerating, setImageGenerating] = useState(false);
+
   const isDark = variant === "dark";
   const wordCount = content.trim().split(/\s+/).filter((w) => w.length > 0).length;
 
@@ -131,10 +137,11 @@ export default function SubmitWorkModal({
         body: JSON.stringify({
           takerWallet,
           text: content,
-          deliveryUri,
+          deliveryUri: generatedImage || deliveryUri,
           workHash,
           outputText: content,
           commitmentTxHash,
+          imageUrl: generatedImage || undefined,
         }),
       });
       const submitBody = await submitRes.json();
@@ -218,6 +225,134 @@ export default function SubmitWorkModal({
           </p>
         </div>
 
+        {/* ---- Image generation section (design category) ---- */}
+        {isDesignJob && (
+          <div
+            style={{
+              padding: "16px",
+              borderRadius: "8px",
+              border: isDark ? "1px solid rgba(255,254,178,0.2)" : "1px solid #e0d090",
+              backgroundColor: isDark ? "rgba(255,254,178,0.03)" : "rgba(255,254,178,0.1)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "10px",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "#fffeb2",
+              }}
+            >
+              AI Image Generation
+            </div>
+            <input
+              type="text"
+              value={imagePrompt}
+              onChange={(e) => setImagePrompt(e.target.value)}
+              placeholder="Describe the visual you want to generate..."
+              style={{
+                padding: "10px 12px",
+                borderRadius: "6px",
+                border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #d0d0d0",
+                backgroundColor: isDark ? "rgba(255,255,255,0.02)" : "#fafafa",
+                color: "inherit",
+                fontFamily: "inherit",
+                fontSize: "13px",
+              }}
+            />
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <button
+                onClick={async () => {
+                  if (!imagePrompt.trim()) return;
+                  setImageGenerating(true);
+                  try {
+                    const res = await fetch("/api/generate/image", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ prompt: imagePrompt, size: "square" }),
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setGeneratedImage(data.imageUrl);
+                      // Auto-fill content with the prompt as description
+                      if (!content.trim()) {
+                        setContent(`Design deliverable: ${imagePrompt}\n\nGenerated with AI (fal.ai flux-schnell)`);
+                      }
+                    } else {
+                      const err = await res.json().catch(() => ({}));
+                      setError(err.error || "Image generation failed");
+                    }
+                  } catch {
+                    setError("Image generation failed");
+                  } finally {
+                    setImageGenerating(false);
+                  }
+                }}
+                disabled={imageGenerating || !imagePrompt.trim()}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "6px",
+                  border: "1px solid #fffeb2",
+                  backgroundColor: imageGenerating ? "rgba(255,254,178,0.05)" : "rgba(255,254,178,0.1)",
+                  color: "#fffeb2",
+                  fontSize: "11px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  fontFamily: "inherit",
+                  cursor: imageGenerating || !imagePrompt.trim() ? "not-allowed" : "pointer",
+                  fontWeight: 700,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {imageGenerating ? "Generating..." : "Generate Image"}
+              </button>
+              {generatedImage && (
+                <span style={{ fontSize: "11px", color: "#1E9E5F" }}>
+                  Image ready
+                </span>
+              )}
+            </div>
+
+            {/* Generated image preview */}
+            {generatedImage && (
+              <div
+                style={{
+                  borderRadius: "8px",
+                  overflow: "hidden",
+                  border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e0e0e0",
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={generatedImage}
+                  alt="Generated design"
+                  style={{
+                    width: "100%",
+                    height: "auto",
+                    display: "block",
+                    maxHeight: "300px",
+                    objectFit: "contain",
+                    backgroundColor: isDark ? "#0a0a0f" : "#f5f5f5",
+                  }}
+                />
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    fontSize: "10px",
+                    color: isDark ? "rgba(255,255,255,0.4)" : "#999",
+                    backgroundColor: isDark ? "rgba(255,255,255,0.02)" : "#fafafa",
+                  }}
+                >
+                  flux-schnell | {imagePrompt.slice(0, 60)}{imagePrompt.length > 60 ? "..." : ""}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           <span
             style={{
@@ -229,7 +364,7 @@ export default function SubmitWorkModal({
               justifyContent: "space-between",
             }}
           >
-            <span>Deliverable content</span>
+            <span>{isDesignJob ? "Design description" : "Deliverable content"}</span>
             <span style={{ color: wordCountColor }}>
               {wordCount} / {minWords} words
             </span>
@@ -237,8 +372,8 @@ export default function SubmitWorkModal({
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            rows={14}
-            placeholder="Paste your completed work here..."
+            rows={isDesignJob ? 6 : 14}
+            placeholder={isDesignJob ? "Describe the design decisions, colors, composition..." : "Paste your completed work here..."}
             style={{
               padding: "12px",
               borderRadius: "6px",
@@ -249,7 +384,7 @@ export default function SubmitWorkModal({
               fontSize: "13px",
               lineHeight: 1.6,
               resize: "vertical",
-              minHeight: "200px",
+              minHeight: isDesignJob ? "100px" : "200px",
             }}
           />
         </label>

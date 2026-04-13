@@ -32,12 +32,14 @@ export async function POST(
       deliveryUri: providedUri,
       outputText: bodyOutputText,
       commitmentTxHash,
+      imageUrl: providedImageUrl,
     } = body as {
       takerWallet?: string;
       text?: string;
       deliveryUri?: string;
       outputText?: string;
       commitmentTxHash?: string;
+      imageUrl?: string;
     };
 
     if (!takerWallet || typeof takerWallet !== "string") {
@@ -123,8 +125,7 @@ export async function POST(
           workHash: metrics.workHash,
           deliveryUri,
           contentPreview: storedOutputText.slice(0, 2000),
-          // If the taker signed a delivery-commitment memo tx in their
-          // wallet, record its signature on the Delivery row for audit.
+          imageUrl: providedImageUrl || null,
           txHash: commitmentTxHash,
         },
       });

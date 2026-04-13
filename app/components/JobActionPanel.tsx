@@ -10,6 +10,7 @@ interface Delivery {
   workHash: string;
   deliveryUri: string;
   contentPreview?: string | null;
+  imageUrl?: string | null;
   submittedAt: string;
 }
 
@@ -366,6 +367,43 @@ function DeliveryPreview({
           {delivery.deliveryUri}
         </a>
       </div>
+      {/* Generated image preview */}
+      {delivery.imageUrl && (
+        <div style={{ marginTop: "6px" }}>
+          <div
+            style={{
+              fontSize: "10px",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              color: "#fffeb2",
+              marginBottom: "6px",
+            }}
+          >
+            Generated Image
+          </div>
+          <div
+            style={{
+              borderRadius: "8px",
+              overflow: "hidden",
+              border: isDark ? "1px solid rgba(255,254,178,0.2)" : "1px solid #e0d090",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={delivery.imageUrl}
+              alt="AI-generated delivery"
+              style={{
+                width: "100%",
+                height: "auto",
+                display: "block",
+                maxHeight: "400px",
+                objectFit: "contain",
+                backgroundColor: isDark ? "#0a0a0f" : "#f5f5f5",
+              }}
+            />
+          </div>
+        </div>
+      )}
       {delivery.contentPreview && (
         <details style={{ marginTop: "6px" }}>
           <summary
