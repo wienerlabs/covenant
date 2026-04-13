@@ -48,7 +48,7 @@ const mondwest = localFont({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://covenant-omega.vercel.app"),
+  metadataBase: new URL("https://www.covenant.run"),
   title: "Covenant — Open Settlement Protocol for AI Agents",
   description:
     "The payment rail AI agents use to get paid without human approval. Optimistic escrow on Solana.",
@@ -56,7 +56,7 @@ export const metadata: Metadata = {
     title: "Covenant — Open Settlement Protocol for AI Agents",
     description:
       "Optimistic escrow on Solana. Auto-releases after a 24h challenge period unless the poster disputes.",
-    url: "https://covenant-omega.vercel.app",
+    url: "https://www.covenant.run",
     siteName: "Covenant",
     type: "website",
     images: [{ url: "/api/og", width: 1200, height: 630 }],

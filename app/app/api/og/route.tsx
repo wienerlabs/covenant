@@ -3,120 +3,44 @@ import { NextRequest } from "next/server";
 
 export const runtime = "edge";
 
-export async function GET(req: NextRequest) {
-  const type = req.nextUrl.searchParams.get("type");
-  const id = req.nextUrl.searchParams.get("id");
+/**
+ * OG image generator for covenant.run
+ *
+ * Clean, minimal, brand-aligned. Dark background + #fffeb2 accent.
+ * Loads PPMondwest font for the heading to match the site identity.
+ */
 
-  // Certificate OG image
-  if (type === "certificate" && id) {
-    return new ImageResponse(
-      (
-        <div
-          style={{
-            background: "linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)",
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            fontFamily: "monospace",
-            position: "relative",
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              inset: "16px",
-              border: "1px solid rgba(234,179,8,0.3)",
-              borderRadius: "16px",
-              display: "flex",
-            }}
-          />
-          <div
-            style={{
-              fontSize: 14,
-              color: "#fffeb2",
-              letterSpacing: "0.3em",
-              textTransform: "uppercase",
-              marginBottom: 24,
-            }}
-          >
-            Covenant Verification Certificate
-          </div>
-          <div
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: "50%",
-              backgroundColor: "rgba(34,197,94,0.15)",
-              border: "2px solid #22c55e",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 32,
-              color: "#22c55e",
-              marginBottom: 24,
-            }}
-          >
-            {"\u2713"}
-          </div>
-          <div
-            style={{
-              fontSize: 48,
-              fontWeight: 700,
-              color: "#22c55e",
-              letterSpacing: "0.05em",
-              marginBottom: 16,
-            }}
-          >
-            COVENANT VERIFIED
-          </div>
-          <div
-            style={{
-              fontSize: 18,
-              color: "rgba(255,255,255,0.5)",
-              marginBottom: 32,
-            }}
-          >
-            Certificate #{id.slice(0, 8).toUpperCase()}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              gap: 48,
-              fontSize: 14,
-              color: "rgba(255,255,255,0.4)",
-            }}
-          >
-            <span>SP1 ZK Proof</span>
-            <span>237,583 Cycles</span>
-            <span>SHA-256 Hash</span>
-          </div>
-          <div
-            style={{
-              position: "absolute",
-              bottom: 32,
-              fontSize: 12,
-              color: "rgba(234,179,8,0.5)",
-              letterSpacing: "0.15em",
-            }}
-          >
-            VERIFIED BY COVENANT ON SOLANA
-          </div>
-        </div>
-      ),
-      { width: 1200, height: 630 }
-    );
+export async function GET(req: NextRequest) {
+  // Load PPMondwest font for headings
+  let fontData: ArrayBuffer | null = null;
+  try {
+    const fontUrl = new URL("/fonts/PPMondwest-Regular.otf", req.url);
+    const fontRes = await fetch(fontUrl);
+    if (fontRes.ok) {
+      fontData = await fontRes.arrayBuffer();
+    }
+  } catch {
+    // Fallback to system font
   }
 
-  // Default OG image
+  const fonts = fontData
+    ? [
+        {
+          name: "PPMondwest",
+          data: fontData,
+          style: "normal" as const,
+          weight: 400 as const,
+        },
+      ]
+    : [];
+
+  const headingFont = fontData ? "PPMondwest" : "monospace";
+
   return new ImageResponse(
     (
       <div
         style={{
-          background:
-            "linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)",
+          background: "#0a0a0f",
           width: "100%",
           height: "100%",
           display: "flex",
@@ -124,52 +48,126 @@ export async function GET(req: NextRequest) {
           alignItems: "center",
           justifyContent: "center",
           fontFamily: "monospace",
+          position: "relative",
+          overflow: "hidden",
         }}
       >
+        {/* Subtle grid pattern */}
         <div
           style={{
-            fontSize: 72,
-            fontWeight: 700,
-            color: "#ffffff",
-            marginBottom: 20,
-            letterSpacing: "0.05em",
+            position: "absolute",
+            inset: 0,
+            backgroundImage:
+              "linear-gradient(rgba(255,254,178,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,254,178,0.03) 1px, transparent 1px)",
+            backgroundSize: "40px 40px",
+            display: "flex",
           }}
-        >
-          COVENANT
-        </div>
+        />
+
+        {/* Top accent line */}
         <div
           style={{
-            fontSize: 28,
-            color: "rgba(255,255,255,0.6)",
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "3px",
+            background: "linear-gradient(90deg, transparent 0%, #fffeb2 50%, transparent 100%)",
+            display: "flex",
           }}
-        >
-          Hire AI Agents. Pay on Proof.
-        </div>
-        <div
-          style={{
-            fontSize: 18,
-            color: "rgba(255,255,255,0.4)",
-            marginTop: 30,
-          }}
-        >
-          Trustless AI Freelance Marketplace on Solana
-        </div>
+        />
+
+        {/* Main content */}
         <div
           style={{
             display: "flex",
-            gap: 32,
-            marginTop: 48,
-            fontSize: 14,
-            color: "rgba(255,255,255,0.3)",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "8px",
           }}
         >
-          <span>ZK Proofs</span>
-          <span>USDC Escrow</span>
-          <span>On-Chain Settlement</span>
-          <span>x402 Payments</span>
+          {/* Protocol label */}
+          <div
+            style={{
+              fontSize: 14,
+              color: "rgba(255,254,178,0.6)",
+              letterSpacing: "0.35em",
+              textTransform: "uppercase",
+              marginBottom: "12px",
+            }}
+          >
+            Open Settlement Protocol
+          </div>
+
+          {/* COVENANT — main heading */}
+          <div
+            style={{
+              fontSize: 96,
+              fontWeight: 400,
+              fontFamily: headingFont,
+              color: "#fffeb2",
+              letterSpacing: "0.08em",
+              lineHeight: 1,
+            }}
+          >
+            COVENANT
+          </div>
+
+          {/* Two-word tagline */}
+          <div
+            style={{
+              fontSize: 32,
+              fontWeight: 400,
+              fontFamily: headingFont,
+              color: "rgba(255,255,255,0.85)",
+              letterSpacing: "0.15em",
+              marginTop: "4px",
+            }}
+          >
+            SETTLE AGENTS.
+          </div>
         </div>
+
+        {/* Bottom bar */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: "40px",
+            display: "flex",
+            alignItems: "center",
+            gap: "32px",
+            fontSize: 13,
+            color: "rgba(255,255,255,0.3)",
+            letterSpacing: "0.1em",
+          }}
+        >
+          <span>Solana</span>
+          <span style={{ color: "rgba(255,254,178,0.3)" }}>|</span>
+          <span>Optimistic Escrow</span>
+          <span style={{ color: "rgba(255,254,178,0.3)" }}>|</span>
+          <span>On-Chain</span>
+          <span style={{ color: "rgba(255,254,178,0.3)" }}>|</span>
+          <span style={{ color: "rgba(255,254,178,0.5)" }}>covenant.run</span>
+        </div>
+
+        {/* Bottom accent line */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: "3px",
+            background: "linear-gradient(90deg, transparent 0%, #fffeb2 50%, transparent 100%)",
+            display: "flex",
+          }}
+        />
       </div>
     ),
-    { width: 1200, height: 630 }
+    {
+      width: 1200,
+      height: 630,
+      fonts,
+    },
   );
 }
