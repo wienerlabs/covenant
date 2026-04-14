@@ -342,8 +342,11 @@ export default function DashboardPage() {
                 <UserAvatar seed={profile.avatarSeed} avatarUrl={profile.avatarUrl ?? null} size={72} />
               ) : null}
               <div>
-                <div className="font-display" style={{ fontSize: "32px", fontWeight: 700, color: "#ffffff", marginBottom: "6px" }}>
-                  {profileLoading ? "Loading..." : profile ? `Welcome back, ${profile.displayName}` : "Dashboard"}
+                <div style={{ fontSize: "16px", fontWeight: 400, color: "rgba(255,255,255,0.5)", marginBottom: "2px" }}>
+                  Welcome back,
+                </div>
+                <div className="font-display" style={{ fontSize: "36px", fontWeight: 700, color: "#ffffff", marginBottom: "6px" }}>
+                  {profileLoading ? "Loading..." : profile ? profile.displayName : "Dashboard"}
                 </div>
                 {wallet && (
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>

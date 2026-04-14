@@ -68,21 +68,26 @@ export async function POST(
       );
     }
 
-    // 1. Release escrow
+    // 1. Release escrow (skip for agent-fulfilled jobs — no real USDC was locked)
+    const isAgentJob = job.takerWallet.startsWith("covenant-agent-");
     let paymentTxHash: string | null = null;
-    try {
-      const result = await releaseFundsToTaker(job.takerWallet, job.amount);
-      paymentTxHash = result.txHash;
-    } catch (err) {
-      console.error("[finalize] escrow release failed:", err);
-      return NextResponse.json(
-        {
-          error:
-            "Escrow release failed; funds remain locked. Manual intervention required.",
-          detail: err instanceof Error ? err.message : String(err),
-        },
-        { status: 500 },
-      );
+    if (isAgentJob) {
+      paymentTxHash = "agent:finalized:" + crypto.randomBytes(12).toString("hex");
+    } else {
+      try {
+        const result = await releaseFundsToTaker(job.takerWallet, job.amount);
+        paymentTxHash = result.txHash;
+      } catch (err) {
+        console.error("[finalize] escrow release failed:", err);
+        return NextResponse.json(
+          {
+            error:
+              "Escrow release failed; funds remain locked. Manual intervention required.",
+            detail: err instanceof Error ? err.message : String(err),
+          },
+          { status: 500 },
+        );
+      }
     }
 
     // 2. Update DB
