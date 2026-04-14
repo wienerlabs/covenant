@@ -16,6 +16,13 @@ export interface AchievementDef {
  */
 export const ACHIEVEMENTS: AchievementDef[] = [
   {
+    key: "first_steps",
+    title: "First Steps",
+    description: "Complete the onboarding wizard",
+    rarity: "common",
+    xpReward: 25,
+  },
+  {
     key: "first_blood",
     title: "First Blood",
     description: "Watch your first arena battle",

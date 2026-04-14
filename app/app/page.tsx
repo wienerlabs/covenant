@@ -5,6 +5,7 @@ import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import LiveFeed from "@/components/LiveFeed";
 import GasTracker from "@/components/GasTracker";
+import OnboardingWizard from "@/components/OnboardingWizard";
 import { USDC_LOGO_URL } from "@/lib/constants";
 
 interface Stats {
@@ -45,6 +46,14 @@ export default function LandingPage() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [hireHover, setHireHover] = useState(false);
   const [postHover, setPostHover] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Show onboarding wizard for first-time visitors
+  useEffect(() => {
+    if (localStorage.getItem("covenant_onboarded") !== "true") {
+      setShowOnboarding(true);
+    }
+  }, []);
 
   // Fetch stats
   useEffect(() => {
@@ -524,6 +533,10 @@ export default function LandingPage() {
           </span>
         </div>
       </div>
+
+      {showOnboarding && (
+        <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
+      )}
     </div>
   );
 }

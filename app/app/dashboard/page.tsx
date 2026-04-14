@@ -130,6 +130,310 @@ const EVENT_LABELS: Record<string, string> = {
   x402_payment: "x402 Payment",
 };
 
+/* ---------- Analytics Types ---------- */
+
+interface DailyJob {
+  date: string;
+  count: number;
+}
+interface EarningEntry {
+  label: string;
+  amount: number;
+}
+interface CategoryEntry {
+  category: string;
+  count: number;
+  percentage: number;
+}
+interface DashboardStats {
+  dailyJobs: DailyJob[];
+  earningsTrend: EarningEntry[];
+  categoryDistribution: CategoryEntry[];
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  text_writing: "#a78bfa",
+  code_review: "#60a5fa",
+  translation: "#34d399",
+  data_labeling: "#fbbf24",
+  bug_bounty: "#f87171",
+  design: "#f472b6",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  text_writing: "Writing",
+  code_review: "Code Review",
+  translation: "Translation",
+  data_labeling: "Data Labeling",
+  bug_bounty: "Bug Bounty",
+  design: "Design",
+};
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/* ---------- Analytics Section ---------- */
+
+function AnalyticsSection({ wallet }: { wallet: string | undefined }) {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [chartLoading, setChartLoading] = useState(true);
+
+  useEffect(() => {
+    if (!wallet) return;
+    setChartLoading(true);
+    fetch(`/api/stats/dashboard?wallet=${wallet}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setStats(data); })
+      .catch(() => {})
+      .finally(() => setChartLoading(false));
+  }, [wallet]);
+
+  if (!wallet) return null;
+
+  const maxDailyCount = stats ? Math.max(...stats.dailyJobs.map((d) => d.count), 1) : 1;
+  const maxEarning = stats ? Math.max(...stats.earningsTrend.map((e) => e.amount), 1) : 1;
+
+  // Build conic-gradient for donut
+  let conicGradient = "conic-gradient(rgba(255,255,255,0.1) 0deg 360deg)";
+  if (stats && stats.categoryDistribution.length > 0) {
+    const segments: string[] = [];
+    let cumulative = 0;
+    for (const cat of stats.categoryDistribution) {
+      const start = cumulative;
+      const end = cumulative + (cat.percentage / 100) * 360;
+      const color = CATEGORY_COLORS[cat.category] || "rgba(255,255,255,0.3)";
+      segments.push(`${color} ${start}deg ${end}deg`);
+      cumulative = end;
+    }
+    conicGradient = `conic-gradient(${segments.join(", ")})`;
+  }
+
+  const chartCardStyle: React.CSSProperties = {
+    ...GLASS_CARD,
+    padding: "24px 20px",
+    display: "flex",
+    flexDirection: "column",
+  };
+
+  const chartTitleStyle: React.CSSProperties = {
+    fontSize: "13px",
+    textTransform: "uppercase",
+    letterSpacing: "0.1em",
+    color: "rgba(255,255,255,0.4)",
+    marginBottom: "20px",
+    fontWeight: 600,
+  };
+
+  const skeletonBar = (h: number, delay: number) => (
+    <div
+      key={delay}
+      className="shimmer"
+      style={{ width: "100%", height: `${h}px`, borderRadius: "4px", animationDelay: `${delay * 0.1}s` }}
+    />
+  );
+
+  return (
+    <div>
+      <div className="font-display" style={SECTION_HEADER}>Analytics</div>
+      <div
+        className="analytics-grid"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: "16px",
+        }}
+      >
+        {/* ── Chart 1: Weekly Activity (Bar Chart) ── */}
+        <div style={chartCardStyle}>
+          <div style={chartTitleStyle}>Weekly Activity</div>
+          {chartLoading ? (
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "8px", height: "120px" }}>
+              {[60, 90, 40, 110, 75, 50, 85].map((h, i) => skeletonBar(h, i))}
+            </div>
+          ) : stats && stats.dailyJobs.length > 0 ? (
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "8px", height: "120px", position: "relative" }}>
+              {stats.dailyJobs.map((day, i) => {
+                const pct = maxDailyCount > 0 ? (day.count / maxDailyCount) * 100 : 0;
+                const barH = Math.max(pct, 4); // min 4% so empty days still show a sliver
+                const dayName = DAY_NAMES[new Date(day.date + "T00:00:00").getDay()];
+                return (
+                  <div
+                    key={day.date}
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "6px",
+                      height: "100%",
+                      justifyContent: "flex-end",
+                    }}
+                  >
+                    <span style={{ fontSize: "11px", fontWeight: 700, color: day.count > 0 ? "#fffeb2" : "rgba(255,255,255,0.25)" }}>
+                      {day.count}
+                    </span>
+                    <div
+                      style={{
+                        width: "100%",
+                        height: `${barH}%`,
+                        backgroundColor: day.count > 0 ? "#fffeb2" : "rgba(255,255,255,0.08)",
+                        borderRadius: "4px 4px 2px 2px",
+                        transformOrigin: "bottom",
+                        animation: `bar-grow 0.5s ease-out ${i * 0.07}s both`,
+                      }}
+                    />
+                    <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      {dayName}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ height: "120px", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.25)", fontSize: "13px" }}>
+              No activity this week
+            </div>
+          )}
+        </div>
+
+        {/* ── Chart 2: Earnings Trend (Area bars) ── */}
+        <div style={chartCardStyle}>
+          <div style={chartTitleStyle}>Earnings Trend</div>
+          {chartLoading ? (
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "2px", height: "120px" }}>
+              {[50, 70, 30, 90, 60, 80, 45, 95, 55, 75].map((h, i) => skeletonBar(h, i))}
+            </div>
+          ) : stats && stats.earningsTrend.length > 0 ? (
+            <div style={{ position: "relative" }}>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: "2px", height: "120px" }}>
+                {stats.earningsTrend.map((entry, i) => {
+                  const pct = maxEarning > 0 ? (entry.amount / maxEarning) * 100 : 0;
+                  const barH = Math.max(pct, 6);
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "flex-end",
+                        height: "100%",
+                        gap: "4px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "100%",
+                          height: `${barH}%`,
+                          background: `linear-gradient(to top, rgba(255,254,178,0.3), #fffeb2)`,
+                          borderRadius: "3px 3px 1px 1px",
+                          transformOrigin: "bottom",
+                          animation: `bar-grow 0.5s ease-out ${i * 0.06}s both`,
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
+                <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
+                  ${stats.earningsTrend[0]?.amount.toFixed(0) ?? "0"}
+                </span>
+                <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
+                  ${stats.earningsTrend[stats.earningsTrend.length - 1]?.amount.toFixed(0) ?? "0"}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ height: "120px", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.25)", fontSize: "13px" }}>
+              No earnings yet
+            </div>
+          )}
+        </div>
+
+        {/* ── Chart 3: Category Distribution (Donut) ── */}
+        <div style={chartCardStyle}>
+          <div style={chartTitleStyle}>Category Distribution</div>
+          {chartLoading ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
+              <div className="shimmer" style={{ width: "100px", height: "100px", borderRadius: "50%" }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="shimmer" style={{ width: `${80 - i * 15}%`, height: "12px", borderRadius: "4px" }} />
+                ))}
+              </div>
+            </div>
+          ) : stats && stats.categoryDistribution.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
+              {/* Donut ring */}
+              <div
+                style={{
+                  width: "110px",
+                  height: "110px",
+                  borderRadius: "50%",
+                  background: conicGradient,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  animation: "donut-spin 0.6s ease-out both",
+                }}
+              >
+                <div
+                  style={{
+                    width: "66px",
+                    height: "66px",
+                    borderRadius: "50%",
+                    backgroundColor: "rgba(0,0,0,0.7)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexDirection: "column",
+                  }}
+                >
+                  <span style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff", lineHeight: 1 }}>
+                    {stats.categoryDistribution.reduce((s, c) => s + c.count, 0)}
+                  </span>
+                  <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    jobs
+                  </span>
+                </div>
+              </div>
+              {/* Legend */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+                {stats.categoryDistribution.map((cat) => {
+                  const color = CATEGORY_COLORS[cat.category] || "rgba(255,255,255,0.4)";
+                  const label = CATEGORY_LABELS[cat.category] || cat.category.replace(/_/g, " ");
+                  return (
+                    <div
+                      key={cat.category}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <div style={{ width: "8px", height: "8px", borderRadius: "2px", backgroundColor: color, flexShrink: 0 }} />
+                        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)", textTransform: "capitalize" }}>
+                          {label}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "12px", fontWeight: 600, color: "#ffffff" }}>{cat.count}</span>
+                        <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)" }}>{cat.percentage}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div style={{ height: "120px", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.25)", fontSize: "13px" }}>
+              No category data
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Component ---------- */
 
 export default function DashboardPage() {
@@ -476,6 +780,9 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+
+          {/* ── Section 2b: Analytics Charts ── */}
+          <AnalyticsSection wallet={wallet} />
 
           {/* ── Section 3: Wallet Balances ── */}
           <div>

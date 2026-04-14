@@ -119,4 +119,17 @@ body.light-mode .glass-card { background: rgba(0,0,0,0.05); border-color: #ddd; 
   .arena-panels { flex-direction: column !important; }
   .dashboard-stats { flex-wrap: wrap !important; gap: 12px !important; }
   .job-detail-grid { grid-template-columns: 1fr !important; }
+  .analytics-grid { grid-template-columns: 1fr !important; }
+}
+
+/* Bar-grow animation for chart bars */
+@keyframes bar-grow {
+  0% { transform: scaleY(0); }
+  100% { transform: scaleY(1); }
+}
+
+/* Donut spin-in animation */
+@keyframes donut-spin {
+  0% { transform: rotate(-90deg) scale(0.7); opacity: 0; }
+  100% { transform: rotate(0deg) scale(1); opacity: 1; }
 }

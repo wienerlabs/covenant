@@ -1,77 +1,107 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import UserAvatar from "./UserAvatar";
-import { SOL_LOGO_URL } from "@/lib/constants";
+import { useState, useEffect, useRef, useCallback } from "react";
 
-interface FeedItem {
-  text: string;
-  txHash: string | null;
-  status: "created" | "accepted" | "completed" | "cancelled";
-  avatarSeed: string;
-  avatarUrl: string | null;
-  wallet: string | null;
-  relativeTime: string;
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface ActivityItem {
+  id: string;
+  type: "job_event" | "achievement" | "arena_battle" | "transaction";
+  message: string;
+  wallet?: string;
+  amount?: number;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
 }
 
-function parseItem(raw: { text: string; txHash: string | null; wallet?: string | null; avatarUrl?: string | null; avatarSeed?: string | null }): FeedItem {
-  let status: FeedItem["status"] = "created";
-  if (raw.text.includes("COMPLETE") || raw.text.includes("VERIFIED") || raw.text.includes("RELEASED")) {
-    status = "completed";
-  } else if (raw.text.includes("ACCEPTED")) {
-    status = "accepted";
-  } else if (raw.text.includes("CANCELLED")) {
-    status = "cancelled";
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 10) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+/** Dot color by event type */
+function dotColor(type: ActivityItem["type"]): string {
+  switch (type) {
+    case "job_event":
+      return "#fffeb2";
+    case "achievement":
+      return "#a78bfa";
+    case "arena_battle":
+      return "#FF425E";
+    case "transaction":
+      return "#1E9E5F";
+    default:
+      return "rgba(255,255,255,0.7)";
   }
-
-  // Use profile avatarSeed/avatarUrl if available from API
-  const walletMatch = raw.text.match(/[A-Za-z0-9]{4}\.\.\.[A-Za-z0-9]{4}/);
-  const fallbackSeed = raw.wallet || (walletMatch ? walletMatch[0] : raw.text.slice(0, 12));
-
-  return {
-    text: raw.text,
-    txHash: raw.txHash,
-    status,
-    avatarSeed: raw.avatarSeed || fallbackSeed,
-    avatarUrl: raw.avatarUrl || null,
-    wallet: raw.wallet || null,
-    relativeTime: "just now",
-  };
 }
+
+/** Badge label by event type */
+function badgeLabel(type: ActivityItem["type"]): string {
+  switch (type) {
+    case "job_event":
+      return "JOB";
+    case "achievement":
+      return "ACHIEVEMENT";
+    case "arena_battle":
+      return "ARENA";
+    case "transaction":
+      return "TX";
+    default:
+      return "EVENT";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function LiveFeed() {
-  const [items, setItems] = useState<FeedItem[]>([]);
+  const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    async function fetchFeed() {
-      try {
-        const res = await fetch("/api/activity");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.items && data.items.length > 0) {
-            setItems(data.items.slice(0, 8).map((item: { text: string; txHash: string | null; wallet?: string | null; avatarUrl?: string | null; avatarSeed?: string | null }) => parseItem(item)));
-          }
+  const fetchFeed = useCallback(async () => {
+    try {
+      const res = await fetch("/api/activity/recent");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.items) {
+          setItems(data.items);
         }
-      } catch {
-        // silent
-      } finally {
-        setLoading(false);
       }
+    } catch {
+      // silent — keep last data
+    } finally {
+      setLoading(false);
     }
-    fetchFeed();
-    const poll = setInterval(fetchFeed, 8000);
-    return () => clearInterval(poll);
   }, []);
 
-  const statusColor = (status: FeedItem["status"]) => {
-    switch (status) {
-      case "completed": return "#fffeb2";
-      case "accepted": return "#fffeb2";
-      case "cancelled": return "#fca5a5";
-      default: return "rgba(255,255,255,0.7)";
+  useEffect(() => {
+    fetchFeed();
+    const poll = setInterval(fetchFeed, 10_000);
+    return () => clearInterval(poll);
+  }, [fetchFeed]);
+
+  // Auto-scroll to top when new items arrive
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
     }
-  };
+  }, [items]);
 
   return (
     <div
@@ -85,6 +115,7 @@ export default function LiveFeed() {
         overflow: "hidden",
       }}
     >
+      {/* Header */}
       <div
         style={{
           padding: "12px 16px",
@@ -118,76 +149,142 @@ export default function LiveFeed() {
         />
       </div>
 
+      {/* Scrollable body */}
       <div
+        ref={scrollRef}
         style={{
-          maxHeight: "300px",
+          maxHeight: "340px",
           overflowY: "auto",
-          padding: "8px 0",
+          padding: "4px 0",
         }}
       >
         {loading && (
-          <div style={{ padding: "24px 16px", textAlign: "center", fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>
+          <div
+            style={{
+              padding: "24px 16px",
+              textAlign: "center",
+              fontSize: "12px",
+              color: "rgba(255,255,255,0.4)",
+            }}
+          >
             Loading feed...
           </div>
         )}
 
         {!loading && items.length === 0 && (
-          <div style={{ padding: "24px 16px", textAlign: "center", fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>
+          <div
+            style={{
+              padding: "24px 16px",
+              textAlign: "center",
+              fontSize: "12px",
+              color: "rgba(255,255,255,0.4)",
+            }}
+          >
             No activity yet
           </div>
         )}
 
-        {items.map((item, i) => (
+        {items.map((item) => (
           <div
-            key={i}
+            key={item.id}
             style={{
               display: "flex",
               gap: "10px",
               padding: "8px 16px",
               alignItems: "flex-start",
               transition: "background 0.15s ease",
+              cursor: "default",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+            }}
           >
-            <div style={{ flexShrink: 0, marginTop: "2px" }}>
-              <UserAvatar seed={item.avatarSeed} avatarUrl={item.avatarUrl} size={28} />
+            {/* Colored dot + optional star for achievements */}
+            <div
+              style={{
+                flexShrink: 0,
+                marginTop: "4px",
+                display: "flex",
+                alignItems: "center",
+                gap: "3px",
+              }}
+            >
+              <span
+                style={{
+                  width: "8px",
+                  height: "8px",
+                  borderRadius: "50%",
+                  backgroundColor: dotColor(item.type),
+                  display: "inline-block",
+                  boxShadow: `0 0 6px ${dotColor(item.type)}`,
+                }}
+              />
+              {item.type === "achievement" && (
+                <span
+                  style={{
+                    fontSize: "12px",
+                    lineHeight: 1,
+                    color: "#a78bfa",
+                  }}
+                >
+                  &#9733;
+                </span>
+              )}
             </div>
+
+            {/* Content */}
             <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Badge pill + relative time */}
               <div
                 style={{
-                  fontSize: "11px",
-                  color: statusColor(item.status),
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  marginBottom: "2px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "9px",
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                    color: dotColor(item.type),
+                    backgroundColor: `${dotColor(item.type)}18`,
+                    padding: "1px 6px",
+                    borderRadius: "9999px",
+                    lineHeight: "16px",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {badgeLabel(item.type)}
+                </span>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "rgba(255,255,255,0.3)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {relativeTime(item.timestamp)}
+                </span>
+              </div>
+
+              {/* Message */}
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: "rgba(255,255,255,0.85)",
                   lineHeight: 1.4,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                 }}
               >
-                {item.text}
-              </div>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "2px" }}>
-                <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)" }}>
-                  {item.relativeTime}
-                </span>
-                {item.txHash && (
-                  <a
-                    href={`https://explorer.solana.com/tx/${item.txHash}?cluster=devnet`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      fontSize: "12px",
-                      color: "#5ba4f5",
-                      textDecoration: "none",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "2px",
-                    }}
-                  >
-                    <img src={SOL_LOGO_URL} alt="SOL" width={8} height={8} style={{ borderRadius: "50%" }} />
-                    tx
-                  </a>
-                )}
+                {item.message}
               </div>
             </div>
           </div>
