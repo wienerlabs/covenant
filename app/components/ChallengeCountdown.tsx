@@ -48,7 +48,7 @@ export default function ChallengeCountdown({
 
   const isDark = variant === "dark";
   const textColor = expired
-    ? "#1E9E5F"
+    ? "#ffffff"
     : isDark
       ? "#fffeb2"
       : "#000000";
@@ -74,7 +74,7 @@ export default function ChallengeCountdown({
     >
       <div
         style={{
-          fontSize: "10px",
+          fontSize: "12px",
           textTransform: "uppercase",
           letterSpacing: "0.08em",
           color: labelColor,
@@ -83,12 +83,13 @@ export default function ChallengeCountdown({
         {expired ? "Challenge period over" : label}
       </div>
       <div
+        className={expired ? "font-display" : undefined}
         style={{
-          fontFamily: "ui-monospace, monospace",
-          fontSize: "24px",
+          fontFamily: expired ? undefined : "ui-monospace, monospace",
+          fontSize: expired ? "28px" : "24px",
           fontWeight: 700,
           color: textColor,
-          letterSpacing: "0.04em",
+          letterSpacing: expired ? "0.06em" : "0.04em",
         }}
       >
         {expired ? "READY TO FINALIZE" : `${hh}:${mm}:${ss}`}
