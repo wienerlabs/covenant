@@ -387,8 +387,7 @@ export default function LandingPage() {
               { name: "Helius", logo: "https://assets-global.website-files.com/641ba798c17bb180d832b666/641baa0b1122fc6e5283f2e7_favicon.png" },
               { name: "Colosseum", logo: "https://www.colosseum.org/favicon.ico" },
               { name: "Coinbase", logo: "https://bookface-images.s3.amazonaws.com/small_logos/1169cb0b69fa7b338b5d51c2d3805f8f988bdfa5.png" },
-              { name: "OpenSea", logo: "https://bookface-images.s3.amazonaws.com/small_logos/be12a7a3bea106077960a6e544db5840291bb150.png" },
-              { name: "Protocol Labs", logo: "https://bookface-images.s3.amazonaws.com/small_logos/fd54c56e11e7dd30d3e421cedfe5bb4a57c001a3.png" },
+              { name: "Dialect", logo: "https://bookface-images.s3.amazonaws.com/small_logos/a2b901dbb91e775e6c41d297e3ec4cd19a3b0ec2.png" },
               { name: "QuickNode", logo: "https://bookface-images.s3.amazonaws.com/small_logos/3738c77c0ea3671e089e7ffa51492968ed674317.png" },
               { name: "Anthropic", logo: "https://cdn.worldvectorlogo.com/logos/anthropic-2.svg" },
             ].map((c) => (
