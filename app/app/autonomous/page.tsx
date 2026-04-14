@@ -400,12 +400,30 @@ export default function AutonomousPage() {
     <div style={{
       minHeight: "100vh",
       backgroundColor: "#0a0a14",
-      backgroundImage: "image-set(url('/poster-bg.webp') type('image/webp'), url('/poster-bg.png') type('image/png'))",
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-      backgroundAttachment: "fixed",
       color: "#ffffff",
+      position: "relative",
+      overflow: "hidden",
     }}>
+      {/* ASCII art video background */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="auto"
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          opacity: 0.35,
+        }}
+      >
+        <source src="/ascii-art.mp4" type="video/mp4" />
+      </video>
+      <div style={{ position: "fixed", inset: 0, zIndex: 1, backgroundColor: "rgba(0,0,0,0.5)" }} />
       <style>{`
         @keyframes count-up {
           from { opacity: 0.5; transform: translateY(4px); }
@@ -438,6 +456,7 @@ export default function AutonomousPage() {
         }
       `}</style>
 
+      <div style={{ position: "relative", zIndex: 2 }}>
       <NavBar activeTab="autonomous" variant="dark" />
 
       <div style={{ maxWidth: "960px", margin: "0 auto", padding: "40px 24px" }}>
@@ -1264,6 +1283,7 @@ export default function AutonomousPage() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

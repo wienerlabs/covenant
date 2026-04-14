@@ -284,7 +284,7 @@ export default function DashboardPage() {
     cursor: "pointer",
     border: active ? "1px solid #fffeb2" : "1px solid rgba(255,255,255,0.2)",
     borderRadius: "6px",
-    backgroundColor: active ? "rgba(66,189,255,0.12)" : "transparent",
+    backgroundColor: active ? "rgba(255,254,178,0.12)" : "transparent",
     color: active ? "#fffeb2" : "rgba(255,255,255,0.5)",
     backdropFilter: "blur(4px)",
     transition: "all 0.15s ease",
@@ -756,7 +756,7 @@ export default function DashboardPage() {
                               color: "#fffeb2",
                               textDecoration: "none",
                               padding: "3px 10px",
-                              border: "1px solid rgba(66,189,255,0.3)",
+                              border: "1px solid rgba(255,254,178,0.3)",
                               borderRadius: "4px",
                               transition: "all 0.15s ease",
                             }}
@@ -817,7 +817,7 @@ export default function DashboardPage() {
                   padding: "14px 20px",
                   border: "1px solid #fffeb2",
                   borderRadius: "8px",
-                  backgroundColor: "rgba(66,189,255,0.1)",
+                  backgroundColor: "rgba(255,254,178,0.1)",
                   color: "#fffeb2",
                   textDecoration: "none",
                   fontSize: "12px",
@@ -826,8 +826,8 @@ export default function DashboardPage() {
                   letterSpacing: "0.06em",
                   transition: "all 0.15s ease",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(66,189,255,0.2)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "rgba(66,189,255,0.1)"; }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(255,254,178,0.2)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "rgba(255,254,178,0.1)"; }}
               >
                 Post a Job
               </Link>

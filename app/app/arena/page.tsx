@@ -992,7 +992,7 @@ export default function ArenaPage() {
                 cursor: running ? "not-allowed" : "pointer",
                 border: arenaMode === "new" ? "1px solid #fffeb2" : "1px solid rgba(255,255,255,0.2)",
                 borderRadius: "6px",
-                backgroundColor: arenaMode === "new" ? "rgba(66,189,255,0.15)" : "transparent",
+                backgroundColor: arenaMode === "new" ? "rgba(255,254,178,0.15)" : "transparent",
                 color: arenaMode === "new" ? "#fffeb2" : "rgba(255,255,255,0.5)",
                 fontWeight: arenaMode === "new" ? 700 : 400,
                 transition: "all 0.15s ease",

@@ -106,11 +106,11 @@ const BATTLE_STYLES = `
 
   @keyframes pulse-glow-title {
     0%, 100% {
-      text-shadow: 0 0 20px rgba(66,189,255,0.4), 0 0 40px rgba(255,66,94,0.2);
+      text-shadow: 0 0 20px rgba(255,254,178,0.4), 0 0 40px rgba(255,66,94,0.2);
       filter: brightness(1);
     }
     50% {
-      text-shadow: 0 0 40px rgba(66,189,255,0.7), 0 0 80px rgba(255,66,94,0.5), 0 0 120px rgba(255,227,66,0.3);
+      text-shadow: 0 0 40px rgba(255,254,178,0.7), 0 0 80px rgba(255,66,94,0.5), 0 0 120px rgba(255,227,66,0.3);
       filter: brightness(1.15);
     }
   }
@@ -205,7 +205,7 @@ const BATTLE_STYLES = `
 
   .random-btn:hover {
     border-color: ${ALPHA_COLOR}80 !important;
-    background-color: rgba(66,189,255,0.15) !important;
+    background-color: rgba(255,254,178,0.15) !important;
   }
 
   .glass-card {
@@ -982,7 +982,7 @@ export default function BattlePage() {
                     status === "WRITING..."
                       ? config.color
                       : status === "SUBMITTED"
-                      ? "#4ade80"
+                      ? "#1E9E5F"
                       : status === "WINNER!"
                       ? GOLD_COLOR
                       : status === "DEFEATED"
@@ -1006,7 +1006,7 @@ export default function BattlePage() {
                       : status === "WRITING..."
                       ? config.color
                       : status === "SUBMITTED"
-                      ? "#4ade80"
+                      ? "#1E9E5F"
                       : "rgba(255,255,255,0.3)",
                   fontWeight: status === "STANDBY" ? 400 : 700,
                 }}
@@ -1049,7 +1049,7 @@ export default function BattlePage() {
             style={{
               height: "100%",
               width: `${progress}%`,
-              backgroundColor: progress >= 100 ? "#4ade80" : config.color,
+              backgroundColor: progress >= 100 ? "#1E9E5F" : config.color,
               borderRadius: "2px",
               transition: "width 0.5s ease",
               boxShadow: progress > 0 ? `0 0 8px ${config.color}60` : "none",
@@ -1123,9 +1123,9 @@ export default function BattlePage() {
               <div
                 style={{
                   padding: "4px 10px",
-                  background: verified ? "rgba(66,189,255,0.1)" : "rgba(255,66,94,0.1)",
+                  background: verified ? "rgba(255,254,178,0.1)" : "rgba(255,66,94,0.1)",
                   borderRadius: "6px",
-                  border: `1px solid ${verified ? "rgba(66,189,255,0.2)" : "rgba(255,66,94,0.2)"}`,
+                  border: `1px solid ${verified ? "rgba(255,254,178,0.2)" : "rgba(255,66,94,0.2)"}`,
                   color: verified ? ALPHA_COLOR : OMEGA_COLOR,
                   fontWeight: 600,
                 }}
@@ -1370,7 +1370,7 @@ export default function BattlePage() {
                     padding: "8px 20px",
                     borderRadius: "8px",
                     border: `1px solid ${ALPHA_COLOR}40`,
-                    background: "rgba(66,189,255,0.08)",
+                    background: "rgba(255,254,178,0.08)",
                     color: ALPHA_COLOR,
                     cursor: "pointer",
                     fontWeight: 600,

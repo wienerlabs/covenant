@@ -156,7 +156,7 @@ export default function EventsPage() {
                           rel="noopener noreferrer"
                           style={{
                             fontSize: "9px",
-                            color: "#5ba4f5",
+                            color: "#fffeb2",
                             textDecoration: "none",
                             display: "inline-flex",
                             alignItems: "center",

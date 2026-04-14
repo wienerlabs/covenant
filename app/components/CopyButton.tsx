@@ -36,7 +36,7 @@ export default function CopyButton({ text, label }: CopyButtonProps) {
       title={label || "Copy to clipboard"}
       style={{
         fontFamily: "inherit",
-        fontSize: "9px",
+        fontSize: "11px",
         textTransform: "uppercase",
         letterSpacing: "0.05em",
         padding: "1px 5px",

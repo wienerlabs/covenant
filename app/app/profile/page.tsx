@@ -325,7 +325,7 @@ export default function ProfilePage() {
                                   cursor: uploadingAvatar ? "not-allowed" : "pointer",
                                   border: "1px solid #fffeb2",
                                   borderRadius: "4px",
-                                  backgroundColor: uploadingAvatar ? "rgba(66,189,255,0.08)" : "rgba(66,189,255,0.15)",
+                                  backgroundColor: uploadingAvatar ? "rgba(255,254,178,0.08)" : "rgba(255,254,178,0.15)",
                                   color: "#fffeb2",
                                   transition: "all 0.15s ease",
                                   display: "inline-flex",
@@ -335,7 +335,7 @@ export default function ProfilePage() {
                               >
                                 {uploadingAvatar ? (
                                   <>
-                                    <span style={{ display: "inline-block", width: 10, height: 10, border: "2px solid rgba(66,189,255,0.3)", borderTopColor: "#fffeb2", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+                                    <span style={{ display: "inline-block", width: 10, height: 10, border: "2px solid rgba(255,254,178,0.3)", borderTopColor: "#fffeb2", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
                                     Saving
                                   </>
                                 ) : "Save"}

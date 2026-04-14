@@ -96,7 +96,7 @@ export default function LiveFeed() {
       >
         <span
           style={{
-            fontSize: "10px",
+            fontSize: "12px",
             textTransform: "uppercase",
             letterSpacing: "0.1em",
             color: "#ffffff",
@@ -167,7 +167,7 @@ export default function LiveFeed() {
                 {item.text}
               </div>
               <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "2px" }}>
-                <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)" }}>
+                <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)" }}>
                   {item.relativeTime}
                 </span>
                 {item.txHash && (
@@ -176,7 +176,7 @@ export default function LiveFeed() {
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
-                      fontSize: "9px",
+                      fontSize: "12px",
                       color: "#5ba4f5",
                       textDecoration: "none",
                       display: "inline-flex",

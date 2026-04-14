@@ -84,7 +84,7 @@ export default function JobTimeline({ job, submissions }: JobTimelineProps) {
       key: "delivered",
       label: "Delivered",
       active: true,
-      color: "#93c5fd",
+      color: "#fffeb2",
       icon: "\u25CF",
       timestamp: latestSub?.createdAt ?? job.updatedAt,
       detail: latestSub ? `${totalWords.toLocaleString()} words` : undefined,

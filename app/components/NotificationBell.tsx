@@ -102,7 +102,7 @@ export default function NotificationBell({ wallet, variant = "dark" }: Notificat
               right: "-4px",
               backgroundColor: "#FF425E",
               color: "#ffffff",
-              fontSize: "9px",
+              fontSize: "11px",
               fontWeight: 700,
               minWidth: "14px",
               height: "14px",
@@ -209,7 +209,7 @@ export default function NotificationBell({ wallet, variant = "dark" }: Notificat
                     >
                       <span
                         style={{
-                          fontSize: "9px",
+                          fontSize: "11px",
                           color: isDark ? "rgba(255,255,255,0.35)" : "#999",
                           textTransform: "uppercase",
                           letterSpacing: "0.03em",
@@ -223,7 +223,7 @@ export default function NotificationBell({ wallet, variant = "dark" }: Notificat
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{
-                            fontSize: "9px",
+                            fontSize: "11px",
                             color: "#60a5fa",
                             textDecoration: "none",
                           }}

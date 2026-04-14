@@ -78,7 +78,7 @@ export default function ReputationBadge({
   };
 
   const labelStyle: React.CSSProperties = {
-    fontSize: "9px",
+    fontSize: "11px",
     textTransform: "uppercase",
     letterSpacing: "0.1em",
     color: "rgba(255,255,255,0.5)",

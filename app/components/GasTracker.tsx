@@ -58,7 +58,7 @@ export default function GasTracker({ variant = "inline" }: GasTrackerProps) {
   return (
     <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
       <img src={SOL_LOGO_URL} alt="SOL" width={14} height={14} style={{ borderRadius: "50%" }} />
-      <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+      <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
         Gas:
       </span>
       <span style={{ fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "monospace" }}>

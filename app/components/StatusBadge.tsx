@@ -23,7 +23,7 @@ export default function StatusBadge({ status }: StatusBadgeProps) {
         border: `1px solid ${s.borderColor}`,
         borderRadius: "4px",
         padding: "2px 8px",
-        fontSize: "10px",
+        fontSize: "12px",
         textTransform: "uppercase",
         letterSpacing: "0.05em",
         backgroundColor: s.bg,
