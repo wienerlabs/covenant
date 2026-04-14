@@ -418,12 +418,12 @@ export default function AutonomousPage() {
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          opacity: 0.35,
+          opacity: 0.7,
         }}
       >
         <source src="/ascii-art.mp4" type="video/mp4" />
       </video>
-      <div style={{ position: "fixed", inset: 0, zIndex: 1, backgroundColor: "rgba(0,0,0,0.5)" }} />
+      <div style={{ position: "fixed", inset: 0, zIndex: 1, backgroundColor: "rgba(0,0,0,0.3)" }} />
       <style>{`
         @keyframes count-up {
           from { opacity: 0.5; transform: translateY(4px); }
