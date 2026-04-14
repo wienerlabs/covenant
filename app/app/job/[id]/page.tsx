@@ -3,10 +3,12 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useConnector } from "@solana/connector/react";
 import NavBar from "@/components/NavBar";
 import StatusBadge from "@/components/StatusBadge";
 import JobTimeline from "@/components/JobTimeline";
 import EscrowVisualizer from "@/components/EscrowVisualizer";
+import JobActionPanel from "@/components/JobActionPanel";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
 import { getCategoryById } from "@/lib/categories";
 import CopyButton from "@/components/CopyButton";
@@ -55,6 +57,26 @@ interface ProfileData {
   avatarUrl?: string | null;
 }
 
+interface DeliveryData {
+  workHash: string;
+  deliveryUri: string;
+  contentPreview?: string | null;
+  imageUrl?: string | null;
+  submittedAt: string;
+}
+
+interface DisputeDetail {
+  id: string;
+  challenger: string;
+  bond: number;
+  reasonText?: string | null;
+  resolution?: string | null;
+  approvalCount: number;
+  approvedBy: string[];
+  resolvedAt?: string | null;
+  raisedAt: string;
+}
+
 interface Job {
   id: string;
   title?: string;
@@ -72,6 +94,12 @@ interface Job {
   createdAt?: string;
   updatedAt?: string;
   submissions?: Submission[];
+  challengePeriod?: number;
+  challengeEndAt?: string | null;
+  deliveredAt?: string | null;
+  minWords?: number;
+  delivery?: DeliveryData | null;
+  dispute?: DisputeDetail | null;
 }
 
 function formatJobDate(dateStr: string): string {
@@ -88,6 +116,9 @@ export default function JobDetailPage() {
   const params = useParams();
   const id = params?.id as string;
 
+  const { account } = useConnector();
+  const currentWallet = account ?? null;
+
   const [job, setJob] = useState<Job | null>(null);
   const [disputes, setDisputes] = useState<DisputeData[]>([]);
   const [jobTransactions, setJobTransactions] = useState<TxRecord[]>([]);
@@ -95,7 +126,13 @@ export default function JobDetailPage() {
   const [takerRep, setTakerRep] = useState<RepData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const refreshJob = async () => {
+    try {
+      const res = await fetch(`/api/jobs/${id}`);
+      if (res.ok) setJob(await res.json());
+    } catch { /* ignore */ }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -162,42 +199,6 @@ export default function JobDetailPage() {
 
     return () => clearInterval(interval);
   }, [id]);
-
-  const handleAccept = async () => {
-    if (!job) return;
-    setActionLoading("accept");
-    try {
-      const res = await fetch(`/api/jobs/${job.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "accept" }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setJob(updated);
-      }
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleCancel = async () => {
-    if (!job) return;
-    setActionLoading("cancel");
-    try {
-      const res = await fetch(`/api/jobs/${job.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "cancel" }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setJob(updated);
-      }
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
   const specTitle =
     job?.title ||
@@ -863,70 +864,27 @@ export default function JobDetailPage() {
                 </div>
               )}
 
-              {/* Action buttons */}
-              <div style={{ display: "flex", gap: "12px" }}>
-                {job.status === "Open" && (
-                  <button
-                    onClick={handleAccept}
-                    disabled={actionLoading === "accept"}
-                    style={{
-                      fontFamily: "inherit",
-                      fontSize: "13px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      padding: "12px 28px",
-                      cursor: actionLoading ? "not-allowed" : "pointer",
-                      border: "1px solid rgba(255,255,255,0.3)",
-                      borderRadius: "8px",
-                      backgroundColor: actionLoading === "accept" ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.12)",
-                      color: "#fff",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    {actionLoading === "accept" ? "Accepting..." : "Accept Job"}
-                  </button>
-                )}
-                {job.status === "Accepted" && (
-                  <button
-                    onClick={() => alert("Use the Submit Work modal from the job list.")}
-                    style={{
-                      fontFamily: "inherit",
-                      fontSize: "13px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      padding: "12px 28px",
-                      cursor: "pointer",
-                      border: "1px solid rgba(255,255,255,0.3)",
-                      borderRadius: "8px",
-                      backgroundColor: "rgba(255,255,255,0.12)",
-                      color: "#fff",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    Submit Work
-                  </button>
-                )}
-                {job.status === "Open" && (
-                  <button
-                    onClick={handleCancel}
-                    disabled={actionLoading === "cancel"}
-                    style={{
-                      fontFamily: "inherit",
-                      fontSize: "13px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      padding: "12px 28px",
-                      cursor: actionLoading ? "not-allowed" : "pointer",
-                      border: "1px solid rgba(255,255,255,0.15)",
-                      borderRadius: "8px",
-                      backgroundColor: "transparent",
-                      color: "rgba(255,255,255,0.6)",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    {actionLoading === "cancel" ? "Cancelling..." : "Cancel Job"}
-                  </button>
-                )}
+              {/* Action Panel — handles all lifecycle states + delivery rendering */}
+              <div style={cardStyle}>
+                <JobActionPanel
+                  job={{
+                    id: job.id,
+                    status: job.status,
+                    posterWallet: job.posterWallet,
+                    takerWallet: job.takerWallet,
+                    amount: job.amount,
+                    challengePeriod: job.challengePeriod ?? 86400,
+                    challengeEndAt: job.challengeEndAt ?? null,
+                    deliveredAt: job.deliveredAt ?? null,
+                    minWords: job.minWords ?? 0,
+                    category: job.category,
+                    delivery: job.delivery ?? null,
+                    dispute: job.dispute ?? null,
+                  }}
+                  currentWallet={currentWallet}
+                  variant="dark"
+                  onJobUpdated={refreshJob}
+                />
               </div>
             </div>
           ) : null}

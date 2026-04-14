@@ -17,7 +17,7 @@ body {
      and every component that doesn't set its own font lands here. */
   font-family: var(--font-pixelify), "Pixelify Sans", sans-serif;
   color: #000000;
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -106,7 +106,7 @@ body.light-mode .glass-card { background: rgba(0,0,0,0.05); border-color: #ddd; 
 
 @media (max-width: 768px) {
   .hero-grid { grid-template-columns: 1fr !important; gap: 32px !important; }
-  .hero-title { font-size: 36px !important; }
+  .hero-title { font-size: 40px !important; }
   .hero-right { display: none !important; }
   .stats-bar { flex-wrap: wrap !important; gap: 16px !important; }
   .nav-tabs { display: none !important; }

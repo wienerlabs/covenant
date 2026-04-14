@@ -153,33 +153,15 @@ export default function LandingPage() {
           >
             {/* Left column */}
             <div>
-              {/* Covenant pixel mark — designed white-on-transparent so it
-                  reads cleanly against the dark landing background. Sized
-                  at 220px so it anchors the hero alongside the 48px
-                  headline rather than being an afterthought. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/covenant-logo.png"
-                alt="Covenant"
-                width={220}
-                height={220}
-                style={{
-                  width: "220px",
-                  height: "220px",
-                  marginLeft: "-24px",
-                  marginBottom: "8px",
-                  imageRendering: "pixelated",
-                }}
-              />
               <h1
                 className="hero-title"
                 style={{
-                  fontSize: "48px",
+                  fontSize: "60px",
                   fontWeight: 700,
                   lineHeight: 1.05,
-                  margin: "0 0 20px 0",
+                  margin: "0 0 24px 0",
                   textTransform: "uppercase",
-                  letterSpacing: "-0.02em",
+                  letterSpacing: "0.06em",
                   color: "#ffffff",
                 }}
               >
@@ -189,11 +171,11 @@ export default function LandingPage() {
               </h1>
               <p
                 style={{
-                  fontSize: "15px",
+                  fontSize: "17px",
                   color: "rgba(255, 255, 255, 0.65)",
                   lineHeight: 1.7,
                   margin: "0 0 32px 0",
-                  maxWidth: "520px",
+                  maxWidth: "540px",
                 }}
               >
                 The payment rail AI agents use to get paid without human
@@ -235,7 +217,7 @@ export default function LandingPage() {
                     >
                       <div
                         style={{
-                          fontSize: "10px",
+                          fontSize: "11px",
                           color: step.color,
                           fontWeight: 700,
                           letterSpacing: "0.1em",
@@ -246,7 +228,7 @@ export default function LandingPage() {
                       </div>
                       <div
                         style={{
-                          fontSize: "18px",
+                          fontSize: "20px",
                           fontWeight: 700,
                           color: "#ffffff",
                           textTransform: "uppercase",
@@ -257,9 +239,9 @@ export default function LandingPage() {
                       </div>
                       <div
                         style={{
-                          fontSize: "10px",
+                          fontSize: "12px",
                           color: "rgba(255,255,255,0.5)",
-                          lineHeight: 1.4,
+                          lineHeight: 1.5,
                         }}
                       >
                         {step.desc}
@@ -295,10 +277,10 @@ export default function LandingPage() {
                     onMouseLeave={() => setHireHover(false)}
                     style={{
                       fontFamily: "inherit",
-                      fontSize: "13px",
+                      fontSize: "15px",
                       textTransform: "uppercase",
                       letterSpacing: "0.05em",
-                      padding: "12px 28px",
+                      padding: "14px 32px",
                       cursor: "pointer",
                       border: "1px solid #ffffff",
                       borderRadius: "6px",
@@ -318,10 +300,10 @@ export default function LandingPage() {
                     onMouseLeave={() => setPostHover(false)}
                     style={{
                       fontFamily: "inherit",
-                      fontSize: "13px",
+                      fontSize: "15px",
                       textTransform: "uppercase",
                       letterSpacing: "0.05em",
-                      padding: "12px 28px",
+                      padding: "14px 32px",
                       cursor: "pointer",
                       border: "1px solid rgba(255, 255, 255, 0.5)",
                       borderRadius: "6px",
@@ -340,7 +322,7 @@ export default function LandingPage() {
               <Link
                 href="/try"
                 style={{
-                  fontSize: "12px",
+                  fontSize: "14px",
                   color: "rgba(255,255,255,0.45)",
                   textDecoration: "none",
                   transition: "color 0.15s ease",
@@ -392,7 +374,7 @@ export default function LandingPage() {
             </div>
             <div
               style={{
-                fontSize: "10px",
+                fontSize: "12px",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
                 color: "rgba(255,255,255,0.4)",
@@ -430,7 +412,7 @@ export default function LandingPage() {
             </div>
             <div
               style={{
-                fontSize: "10px",
+                fontSize: "12px",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
                 color: "rgba(255,255,255,0.4)",
@@ -452,7 +434,7 @@ export default function LandingPage() {
             </div>
             <div
               style={{
-                fontSize: "10px",
+                fontSize: "12px",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
                 color: "rgba(255,255,255,0.4)",
@@ -474,7 +456,7 @@ export default function LandingPage() {
             </div>
             <div
               style={{
-                fontSize: "10px",
+                fontSize: "12px",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
                 color: "rgba(255,255,255,0.4)",
@@ -488,7 +470,7 @@ export default function LandingPage() {
             <GasTracker variant="inline" />
             <div
               style={{
-                fontSize: "10px",
+                fontSize: "12px",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
                 color: "rgba(255,255,255,0.4)",
@@ -512,7 +494,7 @@ export default function LandingPage() {
         >
           <span
             style={{
-              fontSize: "10px",
+              fontSize: "12px",
               color: "rgba(255, 255, 255, 0.4)",
               textTransform: "uppercase",
               letterSpacing: "0.05em",
@@ -522,7 +504,7 @@ export default function LandingPage() {
           </span>
           <span
             style={{
-              fontSize: "10px",
+              fontSize: "12px",
               color: "rgba(255, 255, 255, 0.4)",
               textTransform: "uppercase",
               letterSpacing: "0.05em",
@@ -532,7 +514,7 @@ export default function LandingPage() {
           </span>
           <span
             style={{
-              fontSize: "10px",
+              fontSize: "12px",
               color: "rgba(255, 255, 255, 0.4)",
               textTransform: "uppercase",
               letterSpacing: "0.05em",

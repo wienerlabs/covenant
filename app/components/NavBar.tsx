@@ -130,7 +130,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
     if (isArena || isBattle) {
       return {
         fontFamily: "inherit",
-        fontSize: "11px",
+        fontSize: "14px",
         textTransform: "uppercase",
         letterSpacing: "0.06em",
         textDecoration: "none",
@@ -145,7 +145,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
 
     return {
       fontFamily: "inherit",
-      fontSize: "11px",
+      fontSize: "14px",
       textTransform: "uppercase",
       letterSpacing: "0.05em",
       textDecoration: "none",
@@ -163,42 +163,37 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
   return (
     <nav
       style={{
-        height: "64px",
+        height: "88px",
         borderBottom: isTransparent ? "none" : (isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #e0e0e0"),
         display: "flex",
         alignItems: "center",
-        padding: isTransparent ? "0 32px" : "0 20px",
+        padding: "0 32px",
         backgroundColor: "transparent",
         position: "relative",
         zIndex: 1000,
-        gap: "12px",
         flexWrap: "nowrap",
       }}
     >
+      {/* Left — Logo */}
       <Link
         href="/"
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "8px",
+          gap: "12px",
           textDecoration: "none",
           flexShrink: 0,
-          marginRight: "8px",
         }}
       >
-        {/* Pixel-art mark. Designed white-on-transparent; invert on light variant
-            so it stays readable against a light background. Sized at 40px so
-            the pixels are legible at 1x DPI — any smaller and the glyph
-            dissolves into noise. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/covenant-logo.png"
           alt="Covenant"
-          width={40}
-          height={40}
+          width={80}
+          height={80}
           style={{
-            width: "40px",
-            height: "40px",
+            width: "80px",
+            height: "80px",
             imageRendering: "pixelated",
             filter: isDark ? "none" : "invert(1)",
             flexShrink: 0,
@@ -206,9 +201,9 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         />
         <span
           style={{
-            fontSize: "11px",
+            fontSize: "18px",
             textTransform: "uppercase",
-            letterSpacing: "0.12em",
+            letterSpacing: "0.14em",
             color: isDark ? "#ffffff" : "#000000",
             fontWeight: 700,
           }}
@@ -217,7 +212,8 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         </span>
       </Link>
 
-      <div className="nav-tabs" style={{ display: "flex", gap: "16px", alignItems: "center", flex: 1 }}>
+      {/* Center — Tabs (flex:1 + centered) */}
+      <div className="nav-tabs" style={{ display: "flex", gap: "20px", alignItems: "center", flex: 1, justifyContent: "center" }}>
         {visibleTabs.map((tab) => (
           <Link
             key={tab.id}
@@ -236,7 +232,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
             onClick={() => setMoreOpen(!moreOpen)}
             style={{
               fontFamily: "inherit",
-              fontSize: "11px",
+              fontSize: "14px",
               textTransform: "uppercase",
               letterSpacing: "0.05em",
               background: "none",
@@ -252,12 +248,12 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
               transition: "all 0.15s ease",
               display: "flex",
               alignItems: "center",
-              gap: "4px",
+              gap: "5px",
             }}
           >
             More
             <span style={{
-              fontSize: "8px",
+              fontSize: "9px",
               transform: moreOpen ? "rotate(180deg)" : "rotate(0deg)",
               transition: "transform 0.15s ease",
             }}>
@@ -272,7 +268,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
                 top: "100%",
                 right: 0,
                 marginTop: "8px",
-                minWidth: "180px",
+                minWidth: "200px",
                 backgroundColor: isDark ? "rgba(20, 20, 30, 0.95)" : "#ffffff",
                 border: isDark ? "1px solid rgba(255,255,255,0.15)" : "1px solid #e0e0e0",
                 borderRadius: "8px",
@@ -290,8 +286,8 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
                   onFocus={() => onHoverLink(tab.id)}
                   style={{
                     display: "block",
-                    padding: "10px 16px",
-                    fontSize: "11px",
+                    padding: "11px 18px",
+                    fontSize: "14px",
                     textTransform: "uppercase",
                     letterSpacing: "0.05em",
                     textDecoration: "none",
@@ -333,7 +329,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
           border: "none",
           cursor: "pointer",
           color: isDark ? "#ffffff" : "#000000",
-          fontSize: "18px",
+          fontSize: "20px",
           padding: "4px",
         }}
       >
@@ -346,7 +342,7 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
           className="nav-mobile-menu"
           style={{
             position: "fixed",
-            top: "64px",
+            top: "88px",
             left: 0,
             right: 0,
             bottom: 0,
@@ -366,8 +362,8 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
               href={tab.href}
               onClick={() => setMobileOpen(false)}
               style={{
-                padding: "12px 16px",
-                fontSize: "13px",
+                padding: "14px 18px",
+                fontSize: "15px",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
                 textDecoration: "none",
@@ -389,8 +385,8 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
         </div>
       )}
 
-      {/* Right side — all in one flex row */}
-      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0, whiteSpace: "nowrap" }}>
+      {/* Right — Actions */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, whiteSpace: "nowrap" }}>
         <a
           href="https://x.com/WCovenant"
           target="_blank"
@@ -401,8 +397,8 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            width: "28px",
-            height: "28px",
+            width: "32px",
+            height: "32px",
             borderRadius: "6px",
             border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #e0e0e0",
             color: isDark ? "rgba(255,255,255,0.7)" : "#333",
@@ -418,10 +414,9 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
             e.currentTarget.style.backgroundColor = "transparent";
           }}
         >
-          {/* X / Twitter glyph */}
           <svg
-            width="13"
-            height="13"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="currentColor"
             aria-hidden="true"
@@ -429,19 +424,6 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
           </svg>
         </a>
-        <span
-          style={{
-            fontSize: "9px",
-            color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.25)",
-            border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)",
-            borderRadius: "4px",
-            padding: "2px 5px",
-            cursor: "default",
-          }}
-          title="Command Palette"
-        >
-          {"\u2318"}K
-        </span>
         {isConnected && profile && (
           <Link
             href="/profile"
@@ -450,12 +432,12 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
               display: "flex",
               alignItems: "center",
               gap: "5px",
-              padding: "3px 8px",
+              padding: "4px 8px",
               borderRadius: "6px",
               border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #e0e0e0",
             }}
           >
-            <UserAvatar seed={profile.avatarSeed} avatarUrl={profile.avatarUrl ?? null} size={20} />
+            <UserAvatar seed={profile.avatarSeed} avatarUrl={profile.avatarUrl ?? null} size={24} />
           </Link>
         )}
         {isConnected && account && <WalletBalance />}

@@ -18,10 +18,10 @@ export default function WalletButton() {
 
   const baseStyle: React.CSSProperties = {
     fontFamily: "inherit",
-    fontSize: "12px",
+    fontSize: "14px",
     textTransform: "uppercase",
     letterSpacing: "0.05em",
-    padding: "8px 20px",
+    padding: "10px 22px",
     cursor: isConnecting ? "wait" : "pointer",
     border: "1px solid #000000",
     borderRadius: "6px",
@@ -108,17 +108,17 @@ export default function WalletButton() {
           >
             <div
               style={{
-                fontSize: "10px",
+                fontSize: "12px",
                 textTransform: "uppercase",
                 letterSpacing: "0.1em",
                 color: "#999",
-                padding: "4px 8px",
+                padding: "6px 10px",
               }}
             >
               Select Wallet
             </div>
             {connectors.length === 0 && (
-              <div style={{ padding: "12px 8px", fontSize: "11px", color: "#999" }}>
+              <div style={{ padding: "12px 8px", fontSize: "13px", color: "#999" }}>
                 No wallets detected. Install Phantom or Solflare.
               </div>
             )}
@@ -140,7 +140,7 @@ export default function WalletButton() {
                   backgroundColor: "#ffffff",
                   cursor: connector.ready ? "pointer" : "not-allowed",
                   fontFamily: "inherit",
-                  fontSize: "12px",
+                  fontSize: "14px",
                   textAlign: "left",
                   width: "100%",
                   transition: "all 0.1s ease",
