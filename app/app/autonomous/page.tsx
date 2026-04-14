@@ -37,13 +37,13 @@ interface RunHistory {
 
 type PipelineStep = "SCAN" | "FIND" | "ACCEPT" | "WORK" | "SUBMIT" | "EARN";
 
-const PIPELINE_STEPS: { key: PipelineStep; emoji: string; label: string }[] = [
-  { key: "SCAN", emoji: "\u{1F50D}", label: "SCAN" },
-  { key: "FIND", emoji: "\u{1F4CB}", label: "FIND" },
-  { key: "ACCEPT", emoji: "\u2705", label: "ACCEPT" },
-  { key: "WORK", emoji: "\u2699\uFE0F", label: "WORK" },
-  { key: "SUBMIT", emoji: "\u{1F4E4}", label: "SUBMIT" },
-  { key: "EARN", emoji: "\u{1F4B0}", label: "EARN" },
+const PIPELINE_STEPS: { key: PipelineStep; num: string; label: string }[] = [
+  { key: "SCAN", num: "01", label: "SCAN" },
+  { key: "FIND", num: "02", label: "FIND" },
+  { key: "ACCEPT", num: "03", label: "ACCEPT" },
+  { key: "WORK", num: "04", label: "WORK" },
+  { key: "SUBMIT", num: "05", label: "SUBMIT" },
+  { key: "EARN", num: "06", label: "EARN" },
 ];
 
 const ALL_CATEGORIES = [
@@ -407,21 +407,13 @@ export default function AutonomousPage() {
       color: "#ffffff",
     }}>
       <style>{`
-        @keyframes pulse-green {
-          0%, 100% { box-shadow: 0 0 20px rgba(66, 255, 130, 0.3); }
-          50% { box-shadow: 0 0 40px rgba(66, 255, 130, 0.6); }
-        }
         @keyframes count-up {
           from { opacity: 0.5; transform: translateY(4px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes pipeline-glow {
-          0%, 100% { box-shadow: 0 0 8px rgba(66, 255, 130, 0.4), 0 0 16px rgba(66, 255, 130, 0.2); }
-          50% { box-shadow: 0 0 16px rgba(66, 255, 130, 0.7), 0 0 32px rgba(66, 255, 130, 0.4); }
-        }
-        @keyframes pipeline-pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.08); }
+        @keyframes pipeline-active {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
         }
         @keyframes dash-flow {
           0% { stroke-dashoffset: 12; }
@@ -439,10 +431,10 @@ export default function AutonomousPage() {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes earnings-pop {
-          0% { transform: scale(1); }
-          50% { transform: scale(1.15); }
-          100% { transform: scale(1); }
+        @keyframes loading-slide {
+          0% { transform: translateX(-100%); }
+          50% { transform: translateX(150%); }
+          100% { transform: translateX(-100%); }
         }
       `}</style>
 
@@ -529,7 +521,7 @@ export default function AutonomousPage() {
             backdropFilter: "blur(12px)",
             marginBottom: "24px",
           }}>
-            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "20px", textAlign: "center", fontFamily: "inherit" }}>
+            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "24px", textAlign: "center", fontFamily: "inherit" }}>
               Pipeline &mdash; Round {currentRound}
             </div>
             <div style={{
@@ -545,63 +537,65 @@ export default function AutonomousPage() {
                 const isPast = completedSteps.has(step.key);
                 return (
                   <div key={step.key} style={{ display: "flex", alignItems: "center" }}>
-                    {/* Step node */}
                     <div style={{
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "center",
                       gap: "8px",
-                      position: "relative",
                     }}>
                       <div style={{
                         width: "48px",
                         height: "48px",
-                        borderRadius: "12px",
+                        borderRadius: "10px",
                         display: "flex",
+                        flexDirection: "column",
                         alignItems: "center",
                         justifyContent: "center",
-                        fontSize: "20px",
+                        gap: "2px",
                         backgroundColor: isActive
-                          ? "rgba(66,255,130,0.15)"
+                          ? "rgba(255,254,178,0.1)"
                           : isCompleted
-                            ? "rgba(66,255,130,0.1)"
-                            : "rgba(255,255,255,0.04)",
+                            ? "rgba(255,254,178,0.06)"
+                            : "rgba(255,255,255,0.03)",
                         border: isActive
-                          ? "2px solid #42FF82"
+                          ? "1.5px solid #fffeb2"
                           : isCompleted
-                            ? "2px solid rgba(66,255,130,0.4)"
-                            : "1px solid rgba(255,255,255,0.1)",
-                        animation: isActive ? "pipeline-glow 1.5s ease-in-out infinite, pipeline-pulse 1.5s ease-in-out infinite" : "none",
+                            ? "1.5px solid rgba(255,254,178,0.35)"
+                            : "1px solid rgba(255,255,255,0.08)",
+                        animation: isActive ? "pipeline-active 1.5s ease-in-out infinite" : "none",
                         transition: "all 0.3s ease",
                       }}>
-                        {isCompleted ? (
-                          <span style={{ color: "#42FF82", fontSize: "18px" }}>{"\u2713"}</span>
-                        ) : (
-                          <span>{step.emoji}</span>
-                        )}
+                        <span style={{
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: isActive ? "#fffeb2" : isCompleted ? "rgba(255,254,178,0.6)" : "rgba(255,255,255,0.25)",
+                          letterSpacing: "0.04em",
+                          fontFamily: "inherit",
+                        }}>
+                          {isCompleted ? "\u2713" : step.num}
+                        </span>
                       </div>
                       <span style={{
-                        fontSize: "12px",
+                        fontSize: "11px",
                         fontWeight: 600,
-                        letterSpacing: "0.06em",
-                        color: isActive ? "#42FF82" : isPast ? "rgba(66,255,130,0.6)" : "rgba(255,255,255,0.3)",
+                        letterSpacing: "0.08em",
+                        color: isActive ? "#fffeb2" : isPast ? "rgba(255,254,178,0.5)" : "rgba(255,255,255,0.25)",
                         fontFamily: "inherit",
                         transition: "color 0.3s ease",
                       }}>
                         {step.label}
                       </span>
                     </div>
-                    {/* Connector line */}
                     {i < PIPELINE_STEPS.length - 1 && (
-                      <div style={{ width: "40px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "24px" }}>
-                        <svg width="40" height="2" viewBox="0 0 40 2" style={{ overflow: "visible" }}>
+                      <div style={{ width: "36px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "22px" }}>
+                        <svg width="36" height="2" viewBox="0 0 36 2">
                           <line
-                            x1="0" y1="1" x2="40" y2="1"
-                            stroke={isPast ? "#42FF82" : "rgba(255,255,255,0.15)"}
+                            x1="0" y1="1" x2="36" y2="1"
+                            stroke={isPast ? "rgba(255,254,178,0.4)" : "rgba(255,255,255,0.1)"}
                             strokeWidth="2"
                             strokeDasharray="6 6"
                             style={{
-                              animation: isActive ? "dash-flow 0.6s linear infinite" : "none",
+                              animation: isActive ? "dash-flow 0.8s linear infinite" : "none",
                             }}
                           />
                         </svg>
@@ -624,7 +618,7 @@ export default function AutonomousPage() {
               <div style={{
                 backgroundColor: "rgba(0,0,0,0.4)",
                 border: activeJob.status === "completed"
-                  ? "1px solid rgba(66,255,130,0.4)"
+                  ? "1px solid rgba(255,254,178,0.4)"
                   : "1px solid rgba(255,254,178,0.25)",
                 borderRadius: "12px",
                 padding: "20px 24px",
@@ -639,8 +633,7 @@ export default function AutonomousPage() {
                       height: "10px",
                       borderRadius: "50%",
                       backgroundColor: "#fffeb2",
-                      boxShadow: "0 0 8px rgba(255,254,178,0.5)",
-                      animation: "pipeline-pulse 1s ease-in-out infinite",
+                      animation: "pipeline-active 1.5s ease-in-out infinite",
                       flexShrink: 0,
                     }} />
                     <div style={{ minWidth: 0 }}>
@@ -704,11 +697,11 @@ export default function AutonomousPage() {
                     overflow: "hidden",
                   }}>
                     <div style={{
-                      width: activeJob.status === "submitting" ? "90%" : "60%",
+                      width: "40%",
                       height: "100%",
-                      background: "linear-gradient(90deg, #fffeb2, #42FF82)",
+                      backgroundColor: "#fffeb2",
                       borderRadius: "2px",
-                      transition: "width 1s ease",
+                      animation: "loading-slide 2s ease-in-out infinite",
                     }} />
                   </div>
                 )}
@@ -720,8 +713,8 @@ export default function AutonomousPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 {completedJobs.map((job, i) => (
                   <div key={job.id} style={{
-                    backgroundColor: "rgba(66,255,130,0.04)",
-                    border: "1px solid rgba(66,255,130,0.15)",
+                    backgroundColor: "rgba(255,254,178,0.04)",
+                    border: "1px solid rgba(255,254,178,0.15)",
                     borderRadius: "10px",
                     padding: "14px 20px",
                     backdropFilter: "blur(12px)",
@@ -730,7 +723,7 @@ export default function AutonomousPage() {
                   }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
-                        <span style={{ color: "#42FF82", fontSize: "14px" }}>{"\u2713"}</span>
+                        <span style={{ color: "#fffeb2", fontSize: "14px" }}>{"\u2713"}</span>
                         <span style={{ fontSize: "14px", fontWeight: 500, color: "rgba(255,255,255,0.6)", fontFamily: "inherit", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {job.title}
                         </span>
@@ -753,9 +746,9 @@ export default function AutonomousPage() {
                         <span style={{
                           fontSize: "14px",
                           fontWeight: 700,
-                          color: "#42FF82",
+                          color: "#fffeb2",
                           fontFamily: "inherit",
-                          animation: "earnings-pop 0.5s ease-out",
+                          animation: "fade-in 0.3s ease-out",
                           flexShrink: 0,
                         }}>
                           +{job.amount} USDC
@@ -795,9 +788,9 @@ export default function AutonomousPage() {
                         padding: "10px 22px",
                         fontSize: "14px",
                         fontWeight: maxRounds === n ? 700 : 400,
-                        backgroundColor: maxRounds === n ? "rgba(66,255,130,0.15)" : "rgba(255,255,255,0.05)",
-                        color: maxRounds === n ? "#42FF82" : "rgba(255,255,255,0.5)",
-                        border: maxRounds === n ? "1px solid rgba(66,255,130,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                        backgroundColor: maxRounds === n ? "rgba(255,254,178,0.1)" : "rgba(255,255,255,0.04)",
+                        color: maxRounds === n ? "#fffeb2" : "rgba(255,255,255,0.5)",
+                        border: maxRounds === n ? "1px solid rgba(255,254,178,0.3)" : "1px solid rgba(255,255,255,0.08)",
                         borderRadius: "8px",
                         cursor: "pointer",
                         fontFamily: "inherit",
@@ -885,16 +878,16 @@ export default function AutonomousPage() {
                       padding: "8px 24px",
                       fontSize: "13px",
                       fontWeight: speed === "fast" ? 700 : 400,
-                      backgroundColor: speed === "fast" ? "rgba(66,255,130,0.12)" : "rgba(255,255,255,0.04)",
-                      color: speed === "fast" ? "#42FF82" : "rgba(255,255,255,0.4)",
-                      border: speed === "fast" ? "1px solid rgba(66,255,130,0.35)" : "1px solid rgba(255,255,255,0.08)",
+                      backgroundColor: speed === "fast" ? "rgba(255,254,178,0.1)" : "rgba(255,255,255,0.04)",
+                      color: speed === "fast" ? "#fffeb2" : "rgba(255,255,255,0.4)",
+                      border: speed === "fast" ? "1px solid rgba(255,254,178,0.3)" : "1px solid rgba(255,255,255,0.08)",
                       borderRadius: "6px",
                       cursor: "pointer",
                       fontFamily: "inherit",
                       transition: "all 0.15s ease",
                     }}
                   >
-                    {"\u26A1"} Fast
+                    Fast
                   </button>
                   <button
                     onClick={() => setSpeed("thorough")}
@@ -911,7 +904,7 @@ export default function AutonomousPage() {
                       transition: "all 0.15s ease",
                     }}
                   >
-                    {"\u{1F9E0}"} Thorough
+                    Thorough
                   </button>
                 </div>
               </div>
@@ -924,13 +917,13 @@ export default function AutonomousPage() {
                   fontWeight: 700,
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
-                  backgroundColor: "#42FF82",
+                  backgroundColor: "#fffeb2",
                   color: "#000000",
                   border: "none",
                   borderRadius: "10px",
                   cursor: "pointer",
                   fontFamily: "inherit",
-                  animation: "pulse-green 2s ease infinite",
+                  transition: "all 0.2s ease",
                 }}
               >
                 RELEASE AGENT
@@ -940,7 +933,7 @@ export default function AutonomousPage() {
 
           {running && (
             <div>
-              <div style={{ fontSize: "15px", fontWeight: 600, color: "#42FF82", marginBottom: "14px", fontFamily: "inherit" }}>
+              <div style={{ fontSize: "15px", fontWeight: 600, color: "#fffeb2", marginBottom: "14px", fontFamily: "inherit" }}>
                 RUNNING &mdash; ROUND {currentRound}/{totalRoundsMax}
               </div>
               {/* Progress bar */}
@@ -954,7 +947,7 @@ export default function AutonomousPage() {
                 <div style={{
                   width: `${progressPercent}%`,
                   height: "100%",
-                  background: "linear-gradient(90deg, #42FF82, #fffeb2)",
+                  backgroundColor: "#fffeb2",
                   borderRadius: "3px",
                   transition: "width 0.5s ease",
                 }} />
@@ -988,7 +981,7 @@ export default function AutonomousPage() {
                   fontWeight: 600,
                   textTransform: "uppercase",
                   letterSpacing: "0.06em",
-                  backgroundColor: "#42FF82",
+                  backgroundColor: "#fffeb2",
                   color: "#000000",
                   border: "none",
                   borderRadius: "8px",
@@ -1031,12 +1024,11 @@ export default function AutonomousPage() {
                     <div style={{
                       width: "36px",
                       height: `${heightPercent}%`,
-                      background: "linear-gradient(180deg, #42FF82, #fffeb2)",
-                      borderRadius: "6px 6px 2px 2px",
+                      backgroundColor: "#fffeb2",
+                      borderRadius: "4px 4px 2px 2px",
                       animation: "bar-grow 0.6s ease-out",
                       transformOrigin: "bottom",
                       minHeight: "8px",
-                      boxShadow: "0 0 12px rgba(66,255,130,0.2)",
                     }} />
                     <span style={{
                       fontSize: "11px",
