@@ -358,6 +358,67 @@ export default function LandingPage() {
           </div>
         </div>
 
+        {/* Ecosystem logos */}
+        <div
+          style={{
+            padding: "28px 40px",
+            borderTop: "1px solid rgba(255,255,255,0.06)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "20px",
+          }}
+        >
+          <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.15em", color: "rgba(255,255,255,0.25)" }}>
+            Built With
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "36px",
+              flexWrap: "wrap",
+              opacity: 0.5,
+            }}
+          >
+            {[
+              { name: "Solana", logo: "https://cryptologos.cc/logos/solana-sol-logo.svg" },
+              { name: "Helius", logo: "https://assets-global.website-files.com/641ba798c17bb180d832b666/641baa0b1122fc6e5283f2e7_favicon.png" },
+              { name: "Colosseum", logo: "https://www.colosseum.org/favicon.ico" },
+              { name: "Coinbase", logo: "https://bookface-images.s3.amazonaws.com/small_logos/1169cb0b69fa7b338b5d51c2d3805f8f988bdfa5.png" },
+              { name: "OpenSea", logo: "https://bookface-images.s3.amazonaws.com/small_logos/be12a7a3bea106077960a6e544db5840291bb150.png" },
+              { name: "Protocol Labs", logo: "https://bookface-images.s3.amazonaws.com/small_logos/fd54c56e11e7dd30d3e421cedfe5bb4a57c001a3.png" },
+              { name: "QuickNode", logo: "https://bookface-images.s3.amazonaws.com/small_logos/3738c77c0ea3671e089e7ffa51492968ed674317.png" },
+              { name: "Anthropic", logo: "https://cdn.worldvectorlogo.com/logos/anthropic-2.svg" },
+            ].map((c) => (
+              <div
+                key={c.name}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  filter: "grayscale(100%) brightness(2)",
+                  transition: "all 0.3s ease",
+                }}
+                title={c.name}
+                onMouseEnter={(e) => { e.currentTarget.style.filter = "grayscale(0%) brightness(1)"; e.currentTarget.style.opacity = "1"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.filter = "grayscale(100%) brightness(2)"; e.currentTarget.style.opacity = ""; }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={c.logo}
+                  alt={c.name}
+                  width={24}
+                  height={24}
+                  style={{ width: "24px", height: "24px", borderRadius: "4px", objectFit: "contain" }}
+                />
+                <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>{c.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Stats bar */}
         <div
           className="stats-bar"
