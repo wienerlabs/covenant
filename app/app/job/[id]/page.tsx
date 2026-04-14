@@ -414,6 +414,29 @@ export default function JobDetailPage() {
                 )}
               </div>
 
+              {/* Action Panel — delivery rendering + lifecycle actions (shown first) */}
+              <div style={cardStyle}>
+                <JobActionPanel
+                  job={{
+                    id: job.id,
+                    status: job.status,
+                    posterWallet: job.posterWallet,
+                    takerWallet: job.takerWallet,
+                    amount: job.amount,
+                    challengePeriod: job.challengePeriod ?? 86400,
+                    challengeEndAt: job.challengeEndAt ?? null,
+                    deliveredAt: job.deliveredAt ?? null,
+                    minWords: job.minWords ?? 0,
+                    category: job.category,
+                    delivery: job.delivery ?? null,
+                    dispute: job.dispute ?? null,
+                  }}
+                  currentWallet={currentWallet}
+                  variant="dark"
+                  onJobUpdated={refreshJob}
+                />
+              </div>
+
               {/* Escrow Visualizer */}
               <div style={cardStyle}>
                 <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", marginBottom: "4px", textAlign: "center" }}>
@@ -864,28 +887,6 @@ export default function JobDetailPage() {
                 </div>
               )}
 
-              {/* Action Panel — handles all lifecycle states + delivery rendering */}
-              <div style={cardStyle}>
-                <JobActionPanel
-                  job={{
-                    id: job.id,
-                    status: job.status,
-                    posterWallet: job.posterWallet,
-                    takerWallet: job.takerWallet,
-                    amount: job.amount,
-                    challengePeriod: job.challengePeriod ?? 86400,
-                    challengeEndAt: job.challengeEndAt ?? null,
-                    deliveredAt: job.deliveredAt ?? null,
-                    minWords: job.minWords ?? 0,
-                    category: job.category,
-                    delivery: job.delivery ?? null,
-                    dispute: job.dispute ?? null,
-                  }}
-                  currentWallet={currentWallet}
-                  variant="dark"
-                  onJobUpdated={refreshJob}
-                />
-              </div>
             </div>
           ) : null}
         </div>
