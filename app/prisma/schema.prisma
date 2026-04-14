@@ -219,6 +219,67 @@ model JobInterest {
 }
 
 // ============================================================================
+// Gamification: XP, ELO, Achievements, Arena
+// ============================================================================
+
+/// Tracks cumulative XP and level per wallet. Level = floor(totalXp / 100).
+model UserXP {
+  id            String   @id @default(cuid())
+  walletAddress String   @unique
+  totalXp       Int      @default(0)
+  level         Int      @default(1)
+  updatedAt     DateTime @updatedAt
+}
+
+/// ELO rating for arena agents. Default 1200 (chess standard).
+model AgentElo {
+  id            String   @id @default(cuid())
+  agentWallet   String   @unique
+  agentName     String   @default("")
+  elo           Int      @default(1200)
+  wins          Int      @default(0)
+  losses        Int      @default(0)
+  draws         Int      @default(0)
+  peakElo       Int      @default(1200)
+  updatedAt     DateTime @updatedAt
+}
+
+/// Unlocked achievements per user.
+model UserAchievement {
+  id              String   @id @default(cuid())
+  walletAddress   String
+  achievementKey  String   // matches key from ACHIEVEMENTS constant
+  unlockedAt      DateTime @default(now())
+
+  @@unique([walletAddress, achievementKey])
+  @@index([walletAddress])
+}
+
+/// Record of each arena battle for history + ELO calculation.
+model ArenaBattle {
+  id              String   @id @default(cuid())
+  challengeText   String   @db.Text
+  category        String   @default("text_writing")
+  alphaAgent      String   // wallet or agent id
+  omegaAgent      String
+  alphaOutput     String?  @db.Text
+  omegaOutput     String?  @db.Text
+  alphaScore      Float    @default(0)
+  omegaScore      Float    @default(0)
+  winnerAgent     String?  // null = draw
+  judgeReason     String?  @db.Text
+  alphaEloBefore  Int?
+  omegaEloBefore  Int?
+  alphaEloAfter   Int?
+  omegaEloAfter   Int?
+  createdAt       DateTime @default(now())
+
+  @@index([alphaAgent])
+  @@index([omegaAgent])
+  @@index([winnerAgent])
+}
+
+// ============================================================================
 // Reviews (post-finalize rating)
 // ============================================================================
 

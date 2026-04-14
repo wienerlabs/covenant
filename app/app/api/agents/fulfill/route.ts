@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { computeWorkMetrics } from "@/lib/work-metrics";
+import { awardXP, XP_REWARDS } from "@/lib/xp";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // allow up to 60s for AI generation
@@ -158,6 +159,11 @@ export async function POST(req: NextRequest) {
         },
       });
     });
+
+    // Award XP to the poster for posting a job
+    try {
+      await awardXP(job.posterWallet, XP_REWARDS.job_post, "job_post");
+    } catch { /* best effort */ }
 
     return NextResponse.json({
       ok: true,

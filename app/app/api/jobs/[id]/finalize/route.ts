@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { releaseFundsToTaker } from "@/lib/escrow";
+import { awardXP, XP_REWARDS } from "@/lib/xp";
+import { checkAndUnlock } from "@/lib/achievements";
 import crypto from "crypto";
 
 /**
@@ -137,6 +139,16 @@ export async function POST(
       });
       return j;
     });
+
+    // Award XP + check achievements (best effort)
+    try {
+      await awardXP(job.posterWallet, XP_REWARDS.job_finalize, "job_finalize");
+      if (!isAgentJob) {
+        await awardXP(job.takerWallet, XP_REWARDS.job_complete, "job_complete");
+      }
+      await checkAndUnlock(job.posterWallet);
+      if (!isAgentJob) await checkAndUnlock(job.takerWallet);
+    } catch { /* best effort */ }
 
     // Best-effort Solana marker
     try {
