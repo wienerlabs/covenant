@@ -382,22 +382,38 @@ export default function LandingPage() {
               opacity: 0.5,
             }}
           >
-            {["Solana", "Helius", "Colosseum", "Coinbase", "Dialect", "QuickNode", "Anthropic"].map((name) => (
-              <span
-                key={name}
+            {[
+              { name: "Solana", logo: "https://github.com/solana.png" },
+              { name: "Helius", logo: "https://github.com/helius-labs.png" },
+              { name: "Colosseum", logo: "https://github.com/colosseumorg.png" },
+              { name: "Coinbase", logo: "https://github.com/coinbase.png" },
+              { name: "Dialect", logo: "https://github.com/dialectlabs.png" },
+              { name: "QuickNode", logo: "https://github.com/quiknode-labs.png" },
+              { name: "Anthropic", logo: "https://github.com/anthropics.png" },
+            ].map((c) => (
+              <div
+                key={c.name}
                 style={{
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  color: "rgba(255,255,255,0.35)",
-                  letterSpacing: "0.04em",
-                  transition: "color 0.2s ease",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  transition: "opacity 0.2s ease",
                   cursor: "default",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#fffeb2"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.35)"; }}
+                title={c.name}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = ""; }}
               >
-                {name}
-              </span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={c.logo}
+                  alt={c.name}
+                  width={28}
+                  height={28}
+                  style={{ width: "28px", height: "28px", borderRadius: "50%", objectFit: "cover" }}
+                />
+                <span style={{ fontSize: "14px", color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>{c.name}</span>
+              </div>
             ))}
           </div>
         </div>

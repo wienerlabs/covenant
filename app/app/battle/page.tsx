@@ -1502,7 +1502,7 @@ export default function BattlePage() {
             color: "#ffffff",
             lineHeight: 1,
             marginBottom: "4px",
-            fontFamily: "monospace",
+            fontFamily: "inherit",
           }}
         >
           {eloLoading ? (
@@ -1532,7 +1532,7 @@ export default function BattlePage() {
               border: "1px solid rgba(255,255,255,0.06)",
             }}
           >
-            <div style={{ fontWeight: 800, color: "#22CC44", fontSize: "16px" }}>
+            <div style={{ fontWeight: 800, color: "#22CC44", fontSize: "16px", fontFamily: "inherit" }}>
               {eloLoading ? "-" : eloData.wins}
             </div>
             <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -1547,7 +1547,7 @@ export default function BattlePage() {
               border: "1px solid rgba(255,255,255,0.06)",
             }}
           >
-            <div style={{ fontWeight: 800, color: OMEGA_COLOR, fontSize: "16px" }}>
+            <div style={{ fontWeight: 800, color: OMEGA_COLOR, fontSize: "16px", fontFamily: "inherit" }}>
               {eloLoading ? "-" : eloData.losses}
             </div>
             <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -1562,7 +1562,7 @@ export default function BattlePage() {
               border: "1px solid rgba(255,255,255,0.06)",
             }}
           >
-            <div style={{ fontWeight: 800, color: config.color, fontSize: "16px" }}>
+            <div style={{ fontWeight: 800, color: config.color, fontSize: "16px", fontFamily: "inherit" }}>
               {eloLoading ? "-" : wr}
             </div>
             <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -1671,7 +1671,7 @@ export default function BattlePage() {
               {renderAgentProfile(ALPHA_CONFIG, alphaElo, "left")}
 
               {/* VS + PixelBattle Preview */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", overflow: "hidden", position: "relative", zIndex: 0 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", overflow: "hidden", position: "relative", zIndex: 0, minWidth: "400px", minHeight: "250px", justifyContent: "center", margin: "0 16px" }}>
                 <div
                   className="font-display"
                   style={{
@@ -1692,8 +1692,8 @@ export default function BattlePage() {
                   omegaState="idle"
                   alphaHP={100}
                   omegaHP={100}
-                  width={260}
-                  height={100}
+                  width={400}
+                  height={180}
                 />
               </div>
 
