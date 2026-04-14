@@ -37,6 +37,8 @@ interface BattleHistoryItem {
   omegaScore: number;
   amount: number;
   date: string;
+  alphaEloDelta?: number;
+  omegaEloDelta?: number;
 }
 
 interface BattleStats {
@@ -44,6 +46,13 @@ interface BattleStats {
   alphaWins: number;
   omegaWins: number;
   totalStaked: number;
+}
+
+interface AgentEloData {
+  elo: number;
+  wins: number;
+  losses: number;
+  peakElo: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -54,10 +63,17 @@ const ALPHA_COLOR = "#fffeb2";
 const OMEGA_COLOR = "#FF425E";
 const GOLD_COLOR = "#fffeb2";
 
+const ALPHA_WALLET =
+  process.env.NEXT_PUBLIC_AGENT_ALPHA_WALLET ||
+  "7GpXEwNrf8BVFBGMYjuYHoSmN1FvGFQD1MTtgJk2u7fG";
+const OMEGA_WALLET =
+  process.env.NEXT_PUBLIC_AGENT_OMEGA_WALLET ||
+  "55EbEM7x6WQxVFSt1KennwYBPgWF7GgF5bd2R2FVxiw1";
+
 const ALPHA_CONFIG = {
   name: "AGENT ALPHA",
   role: "CHALLENGER",
-  wallet: process.env.NEXT_PUBLIC_AGENT_ALPHA_WALLET || "GMCRqvQyyu5WvoaWF4apE1A39W5SaoXUJkGkdvHpGQ9v",
+  wallet: ALPHA_WALLET,
   color: ALPHA_COLOR,
   avatarSeed: "agent-alpha-covenant-2026",
 };
@@ -65,7 +81,7 @@ const ALPHA_CONFIG = {
 const OMEGA_CONFIG = {
   name: "AGENT OMEGA",
   role: "DEFENDER",
-  wallet: process.env.NEXT_PUBLIC_AGENT_OMEGA_WALLET || "55EbEM7x6WQxVFSt1KennwYBPgWF7GgF5bd2R2FVxiw1",
+  wallet: OMEGA_WALLET,
   color: OMEGA_COLOR,
   avatarSeed: "agent-omega-covenant-2026",
 };
@@ -84,6 +100,8 @@ const RANDOM_CHALLENGES = [
   "Draft a whitepaper executive summary for an open agent settlement protocol",
   "Explain the Halting Problem and its implications for AI safety",
 ];
+
+const DEFAULT_ELO: AgentEloData = { elo: 1200, wins: 0, losses: 0, peakElo: 1200 };
 
 function getTimestamp(): string {
   return new Date().toLocaleTimeString("en-US", {
@@ -182,6 +200,18 @@ const BATTLE_STYLES = `
   @keyframes scanline {
     0% { transform: translateY(-100%); }
     100% { transform: translateY(100vh); }
+  }
+
+  @keyframes elo-float-up {
+    0% { transform: translateY(10px); opacity: 0; }
+    30% { transform: translateY(-5px); opacity: 1; }
+    100% { transform: translateY(-15px); opacity: 0.9; }
+  }
+
+  @keyframes xp-pop {
+    0% { transform: scale(0) translateY(0); opacity: 0; }
+    50% { transform: scale(1.3) translateY(-10px); opacity: 1; }
+    100% { transform: scale(1) translateY(-20px); opacity: 0.85; }
   }
 
   .battle-start-btn:hover {
@@ -303,6 +333,163 @@ export default function BattlePage() {
   const [battleHistory, setBattleHistory] = useState<BattleHistoryItem[]>([]);
   const [battleStats, setBattleStats] = useState<BattleStats>({ totalBattles: 0, alphaWins: 0, omegaWins: 0, totalStaked: 0 });
 
+  /* ---- ELO state ---- */
+  const [alphaElo, setAlphaElo] = useState<AgentEloData>(DEFAULT_ELO);
+  const [omegaElo, setOmegaElo] = useState<AgentEloData>(DEFAULT_ELO);
+  const [alphaEloDelta, setAlphaEloDelta] = useState<number | null>(null);
+  const [omegaEloDelta, setOmegaEloDelta] = useState<number | null>(null);
+  const [showEloDelta, setShowEloDelta] = useState(false);
+  const [spectatorXpAwarded, setSpectatorXpAwarded] = useState<number>(0);
+  const [eloLoading, setEloLoading] = useState(true);
+
+  /* ================================================================ */
+  /*  Fetch ELO data                                                   */
+  /* ================================================================ */
+
+  const fetchEloData = useCallback(async () => {
+    try {
+      setEloLoading(true);
+      const res = await fetch("/api/arena/battle?limit=10");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.alphaElo) setAlphaElo(data.alphaElo);
+        if (data.omegaElo) setOmegaElo(data.omegaElo);
+        // Update battle history from arena battles if available
+        if (data.battles && data.battles.length > 0) {
+          const historyFromArena: BattleHistoryItem[] = data.battles.map(
+            (b: {
+              id: string;
+              challengeText: string;
+              winnerAgent: string;
+              alphaScore: number;
+              omegaScore: number;
+              alphaEloAfter?: number | null;
+              alphaEloBefore?: number | null;
+              omegaEloAfter?: number | null;
+              omegaEloBefore?: number | null;
+              createdAt: string;
+            }) => ({
+              id: b.id,
+              title: b.challengeText?.slice(0, 60) || "Battle",
+              winner:
+                b.winnerAgent === ALPHA_WALLET ? "alpha" : "omega",
+              alphaScore: b.alphaScore,
+              omegaScore: b.omegaScore,
+              amount: 0,
+              date: b.createdAt,
+              alphaEloDelta:
+                b.alphaEloAfter && b.alphaEloBefore
+                  ? b.alphaEloAfter - b.alphaEloBefore
+                  : undefined,
+              omegaEloDelta:
+                b.omegaEloAfter && b.omegaEloBefore
+                  ? b.omegaEloAfter - b.omegaEloBefore
+                  : undefined,
+            }),
+          );
+          setBattleHistory((prev) => {
+            // Merge: prefer arena battles, keep old ones that aren't duplicates
+            const arenaIds = new Set(historyFromArena.map((h) => h.id));
+            const kept = prev.filter((p) => !arenaIds.has(p.id));
+            return [...historyFromArena, ...kept].slice(0, 10);
+          });
+        }
+      }
+    } catch {
+      // silently ignore — ELO data not critical
+    } finally {
+      setEloLoading(false);
+    }
+  }, []);
+
+  /* ================================================================ */
+  /*  Record battle result & update ELO                                */
+  /* ================================================================ */
+
+  const recordBattleResult = useCallback(
+    async (winnerSide: string) => {
+      try {
+        const winnerAgent =
+          winnerSide === "alpha" ? ALPHA_WALLET : OMEGA_WALLET;
+
+        // Try to get spectator wallet from Solana connector
+        let spectatorWallet: string | undefined;
+        try {
+          // Access window-level Solana wallet if available
+          const solana = (window as unknown as { solana?: { publicKey?: { toBase58?: () => string } } }).solana;
+          if (solana?.publicKey?.toBase58) {
+            spectatorWallet = solana.publicKey.toBase58();
+          }
+        } catch {
+          // No wallet connected, that's fine
+        }
+
+        const res = await fetch("/api/arena/battle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            challengeText: challenge || battleTitle || "Arena Battle",
+            category: selectedCategory || battleCategory || "text_writing",
+            alphaAgent: ALPHA_WALLET,
+            omegaAgent: OMEGA_WALLET,
+            alphaOutput: alphaFullText || undefined,
+            omegaOutput: omegaFullText || undefined,
+            alphaScore: alphaScore || 0,
+            omegaScore: omegaScore || 0,
+            winnerAgent,
+            judgeReason: judgeReason || undefined,
+            spectatorWallet,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          // Set ELO deltas for animation
+          setAlphaEloDelta(data.alphaEloDelta ?? null);
+          setOmegaEloDelta(data.omegaEloDelta ?? null);
+          setShowEloDelta(true);
+
+          // Update local ELO state
+          if (data.alphaEloAfter) {
+            setAlphaElo((prev) => ({
+              ...prev,
+              elo: data.alphaEloAfter,
+              wins: winnerSide === "alpha" ? prev.wins + 1 : prev.wins,
+              losses: winnerSide === "omega" ? prev.losses + 1 : prev.losses,
+            }));
+          }
+          if (data.omegaEloAfter) {
+            setOmegaElo((prev) => ({
+              ...prev,
+              elo: data.omegaEloAfter,
+              wins: winnerSide === "omega" ? prev.wins + 1 : prev.wins,
+              losses: winnerSide === "alpha" ? prev.losses + 1 : prev.losses,
+            }));
+          }
+
+          // Show spectator XP
+          if (data.spectatorXpAwarded > 0) {
+            setSpectatorXpAwarded(data.spectatorXpAwarded);
+            toast(`+${data.spectatorXpAwarded} XP for watching!`, "success");
+          }
+        }
+      } catch (err) {
+        console.error("[battle] Failed to record battle result:", err);
+      }
+    },
+    [
+      challenge,
+      battleTitle,
+      selectedCategory,
+      battleCategory,
+      alphaFullText,
+      omegaFullText,
+      alphaScore,
+      omegaScore,
+      judgeReason,
+    ],
+  );
+
   /* ================================================================ */
   /*  Timer effects                                                    */
   /* ================================================================ */
@@ -343,7 +530,7 @@ export default function BattlePage() {
   }
 
   /* ================================================================ */
-  /*  Typewriter effect — 15ms per char                                */
+  /*  Typewriter effect -- 15ms per char                               */
   /* ================================================================ */
 
   useEffect(() => {
@@ -403,7 +590,7 @@ export default function BattlePage() {
   }, [chatMessages]);
 
   /* ================================================================ */
-  /*  Continuous fight loop — auto-cycle attacks during battle          */
+  /*  Continuous fight loop -- auto-cycle attacks during battle         */
   /* ================================================================ */
 
   useEffect(() => {
@@ -464,7 +651,7 @@ export default function BattlePage() {
   }, [phase]);
 
   /* ================================================================ */
-  /*  Fetch battle history & stats on mount                            */
+  /*  Fetch battle history, stats, and ELO on mount                    */
   /* ================================================================ */
 
   useEffect(() => {
@@ -481,7 +668,8 @@ export default function BattlePage() {
       }
     }
     fetchStats();
-  }, []);
+    fetchEloData();
+  }, [fetchEloData]);
 
   /* ================================================================ */
   /*  SSE Event Handler                                                */
@@ -640,6 +828,12 @@ export default function BattlePage() {
           const loserSetter = w === "alpha" ? setOmegaAnimState : setAlphaAnimState;
           loserSetter("hit");
           setTimeout(() => loserSetter("defeat"), 400);
+
+          // Record battle result and update ELO
+          // Use setTimeout to let state settle before reading it
+          setTimeout(() => {
+            recordBattleResult(w);
+          }, 500);
         }
         setPhase("results");
         fireConfetti();
@@ -675,7 +869,7 @@ export default function BattlePage() {
         toast("Battle error occurred", "error");
         break;
     }
-  }, []);
+  }, [recordBattleResult]);
 
   /* ================================================================ */
   /*  Start Battle                                                     */
@@ -721,6 +915,10 @@ export default function BattlePage() {
     setOmegaAnimState("idle");
     setAlphaHP(100);
     setOmegaHP(100);
+    setAlphaEloDelta(null);
+    setOmegaEloDelta(null);
+    setShowEloDelta(false);
+    setSpectatorXpAwarded(0);
 
     try {
       const response = await fetch("/api/battle/run", {
@@ -811,6 +1009,12 @@ export default function BattlePage() {
     setOmegaAnimState("idle");
     setAlphaHP(100);
     setOmegaHP(100);
+    setAlphaEloDelta(null);
+    setOmegaEloDelta(null);
+    setShowEloDelta(false);
+    setSpectatorXpAwarded(0);
+    // Refresh ELO data
+    fetchEloData();
   }
 
   function pickRandomChallenge() {
@@ -826,6 +1030,16 @@ export default function BattlePage() {
   const isAlphaTyping = alphaFullText.length > 0 && alphaDisplayText.length < alphaFullText.length;
   const isOmegaTyping = omegaFullText.length > 0 && omegaDisplayText.length < omegaFullText.length;
   const bothWriting = alphaState === "working" && omegaState === "working";
+
+  /* ================================================================ */
+  /*  Helper: Win rate                                                 */
+  /* ================================================================ */
+
+  function winRate(wins: number, losses: number): string {
+    const total = wins + losses;
+    if (total === 0) return "0%";
+    return `${Math.round((wins / total) * 100)}%`;
+  }
 
   /* ================================================================ */
   /*  RENDER: Agent Panel                                              */
@@ -849,6 +1063,7 @@ export default function BattlePage() {
     progress: number,
     timeTaken: string,
     side: "left" | "right",
+    eloDelta: number | null,
   ) {
     const isAlpha = side === "left";
 
@@ -885,7 +1100,7 @@ export default function BattlePage() {
               position: "absolute",
               top: "12px",
               right: "12px",
-              fontSize: "10px",
+              fontSize: "12px",
               fontWeight: 800,
               textTransform: "uppercase",
               letterSpacing: "0.15em",
@@ -923,6 +1138,29 @@ export default function BattlePage() {
           </div>
         )}
 
+        {/* ELO Delta animation overlay */}
+        {showEloDelta && eloDelta !== null && eloDelta !== 0 && (
+          <div
+            style={{
+              position: "absolute",
+              top: "12px",
+              left: isWinner ? "12px" : "auto",
+              right: isLoser ? "12px" : isWinner ? "auto" : "12px",
+              fontSize: "14px",
+              fontWeight: 900,
+              color: eloDelta > 0 ? "#22CC44" : OMEGA_COLOR,
+              animation: "elo-float-up 1.5s ease-out forwards",
+              zIndex: 15,
+              textShadow: eloDelta > 0
+                ? "0 0 10px rgba(34,204,68,0.5)"
+                : "0 0 10px rgba(255,66,94,0.5)",
+              fontFamily: "monospace",
+            }}
+          >
+            {eloDelta > 0 ? "+" : ""}{eloDelta} ELO
+          </div>
+        )}
+
         {/* Header: Avatar + Name + Status */}
         <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "16px" }}>
           <div style={{ position: "relative" }}>
@@ -952,7 +1190,7 @@ export default function BattlePage() {
               </span>
               <span
                 style={{
-                  fontSize: "9px",
+                  fontSize: "12px",
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
                   padding: "3px 10px",
@@ -967,7 +1205,7 @@ export default function BattlePage() {
               </span>
             </div>
 
-            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", fontFamily: "monospace", marginBottom: "6px" }}>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", fontFamily: "monospace", marginBottom: "6px" }}>
               {config.wallet.slice(0, 6)}...{config.wallet.slice(-4)}
             </div>
 
@@ -995,7 +1233,7 @@ export default function BattlePage() {
               />
               <span
                 style={{
-                  fontSize: "10px",
+                  fontSize: "12px",
                   textTransform: "uppercase",
                   letterSpacing: "0.08em",
                   color:
@@ -1029,7 +1267,7 @@ export default function BattlePage() {
             >
               {timeTaken || formatTimer(elapsed)}
             </div>
-            <div style={{ fontSize: "8px", color: "rgba(255,255,255,0.25)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
               elapsed
             </div>
           </div>
@@ -1088,7 +1326,7 @@ export default function BattlePage() {
               flexWrap: "wrap",
               gap: "12px",
               marginBottom: "12px",
-              fontSize: "10px",
+              fontSize: "12px",
               color: "rgba(255,255,255,0.5)",
             }}
           >
@@ -1180,7 +1418,7 @@ export default function BattlePage() {
             >
               <span
                 style={{
-                  fontSize: "10px",
+                  fontSize: "12px",
                   fontWeight: 600,
                   color: config.color,
                   background: "rgba(0,0,0,0.7)",
@@ -1194,6 +1432,149 @@ export default function BattlePage() {
             </div>
           )}
         </div>
+      </div>
+    );
+  }
+
+  /* ================================================================ */
+  /*  RENDER: Pre-Battle Agent Profile Card                            */
+  /* ================================================================ */
+
+  function renderAgentProfile(
+    config: typeof ALPHA_CONFIG,
+    eloData: AgentEloData,
+    side: "left" | "right",
+  ) {
+    const isAlpha = side === "left";
+    const totalGames = eloData.wins + eloData.losses;
+    const wr = winRate(eloData.wins, eloData.losses);
+
+    return (
+      <div
+        className="glass-card"
+        style={{
+          padding: "28px",
+          textAlign: "center",
+          minWidth: "200px",
+          flex: 1,
+          maxWidth: "280px",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {/* Subtle gradient background accent */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "3px",
+            background: `linear-gradient(90deg, transparent, ${config.color}, transparent)`,
+          }}
+        />
+
+        <PixelAgent seed={config.avatarSeed} color={config.color} size={72} state="idle" />
+
+        <div
+          className="font-display"
+          style={{
+            fontSize: "15px",
+            fontWeight: 800,
+            color: config.color,
+            marginTop: "12px",
+            letterSpacing: "0.05em",
+          }}
+        >
+          {config.name}
+        </div>
+        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "12px" }}>
+          {config.role}
+        </div>
+
+        {/* ELO Rating */}
+        <div
+          style={{
+            fontSize: "32px",
+            fontWeight: 900,
+            color: "#ffffff",
+            lineHeight: 1,
+            marginBottom: "4px",
+            fontFamily: "monospace",
+          }}
+        >
+          {eloLoading ? (
+            <span style={{ color: "rgba(255,255,255,0.2)" }}>---</span>
+          ) : (
+            eloData.elo
+          )}
+        </div>
+        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "16px" }}>
+          ELO RATING
+        </div>
+
+        {/* Win/Loss Record */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: "8px",
+            fontSize: "12px",
+          }}
+        >
+          <div
+            style={{
+              padding: "8px 4px",
+              background: "rgba(255,255,255,0.03)",
+              borderRadius: "8px",
+              border: "1px solid rgba(255,255,255,0.06)",
+            }}
+          >
+            <div style={{ fontWeight: 800, color: "#22CC44", fontSize: "16px" }}>
+              {eloLoading ? "-" : eloData.wins}
+            </div>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              WINS
+            </div>
+          </div>
+          <div
+            style={{
+              padding: "8px 4px",
+              background: "rgba(255,255,255,0.03)",
+              borderRadius: "8px",
+              border: "1px solid rgba(255,255,255,0.06)",
+            }}
+          >
+            <div style={{ fontWeight: 800, color: OMEGA_COLOR, fontSize: "16px" }}>
+              {eloLoading ? "-" : eloData.losses}
+            </div>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              LOSSES
+            </div>
+          </div>
+          <div
+            style={{
+              padding: "8px 4px",
+              background: "rgba(255,255,255,0.03)",
+              borderRadius: "8px",
+              border: "1px solid rgba(255,255,255,0.06)",
+            }}
+          >
+            <div style={{ fontWeight: 800, color: config.color, fontSize: "16px" }}>
+              {eloLoading ? "-" : wr}
+            </div>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              WIN%
+            </div>
+          </div>
+        </div>
+
+        {/* Record line */}
+        {!eloLoading && totalGames > 0 && (
+          <div style={{ marginTop: "10px", fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
+            {totalGames} battle{totalGames !== 1 ? "s" : ""} fought
+          </div>
+        )}
       </div>
     );
   }
@@ -1241,6 +1622,7 @@ export default function BattlePage() {
             {/* Title */}
             <div style={{ textAlign: "center", marginBottom: "48px" }}>
               <h1
+                className="font-display"
                 style={{
                   fontSize: "56px",
                   fontWeight: 900,
@@ -1278,64 +1660,48 @@ export default function BattlePage() {
               </p>
             </div>
 
-            {/* VS Preview Cards */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "40px", marginBottom: "48px" }}>
-              {/* Alpha mini card */}
-              <div
-                className="glass-card"
-                style={{
-                  padding: "20px 28px",
-                  textAlign: "center",
-                  minWidth: "160px",
-                }}
-              >
-                <PixelAgent seed={ALPHA_CONFIG.avatarSeed} color={ALPHA_COLOR} size={64} state="idle" />
-                <div style={{ fontSize: "13px", fontWeight: 700, color: ALPHA_COLOR, marginTop: "10px" }}>
-                  AGENT ALPHA
+            {/* ======================================================== */}
+            {/*  PRE-BATTLE AGENT PROFILES                                */}
+            {/* ======================================================== */}
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "32px", marginBottom: "48px" }}>
+              {/* Alpha Profile */}
+              {renderAgentProfile(ALPHA_CONFIG, alphaElo, "left")}
+
+              {/* VS + PixelBattle Preview */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                <div
+                  className="font-display"
+                  style={{
+                    fontSize: "36px",
+                    fontWeight: 900,
+                    background: `linear-gradient(135deg, ${ALPHA_COLOR}, ${OMEGA_COLOR})`,
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    textShadow: "none",
+                    animation: "pulse-glow-title 2s ease-in-out infinite",
+                    lineHeight: 1,
+                  }}
+                >
+                  VS
                 </div>
-                <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                  Challenger
-                </div>
+                <PixelBattle
+                  alphaState="idle"
+                  omegaState="idle"
+                  alphaHP={100}
+                  omegaHP={100}
+                  width={260}
+                  height={100}
+                />
               </div>
 
-              {/* VS text */}
-              <div
-                style={{
-                  fontSize: "36px",
-                  fontWeight: 900,
-                  background: `linear-gradient(135deg, ${ALPHA_COLOR}, ${OMEGA_COLOR})`,
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  textShadow: "none",
-                  animation: "pulse-glow-title 2s ease-in-out infinite",
-                  lineHeight: 1,
-                }}
-              >
-                VS
-              </div>
-
-              {/* Omega mini card */}
-              <div
-                className="glass-card"
-                style={{
-                  padding: "20px 28px",
-                  textAlign: "center",
-                  minWidth: "160px",
-                }}
-              >
-                <PixelAgent seed={OMEGA_CONFIG.avatarSeed} color={OMEGA_COLOR} size={64} state="idle" />
-                <div style={{ fontSize: "13px", fontWeight: 700, color: OMEGA_COLOR, marginTop: "10px" }}>
-                  AGENT OMEGA
-                </div>
-                <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                  Defender
-                </div>
-              </div>
+              {/* Omega Profile */}
+              {renderAgentProfile(OMEGA_CONFIG, omegaElo, "right")}
             </div>
 
             {/* Challenge Input */}
             <div style={{ maxWidth: "600px", margin: "0 auto 24px auto" }}>
-              <label style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px", display: "block" }}>
+              <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px", display: "block" }}>
                 Battle Challenge
               </label>
               <textarea
@@ -1364,7 +1730,7 @@ export default function BattlePage() {
                   onClick={pickRandomChallenge}
                   style={{
                     fontFamily: "inherit",
-                    fontSize: "11px",
+                    fontSize: "12px",
                     textTransform: "uppercase",
                     letterSpacing: "0.08em",
                     padding: "8px 20px",
@@ -1384,7 +1750,7 @@ export default function BattlePage() {
 
             {/* Category Selector */}
             <div style={{ maxWidth: "600px", margin: "0 auto 24px auto" }}>
-              <label style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px", display: "block" }}>
+              <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px", display: "block" }}>
                 Category
               </label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
@@ -1395,7 +1761,7 @@ export default function BattlePage() {
                     onClick={() => setSelectedCategory(cat.id)}
                     style={{
                       fontFamily: "inherit",
-                      fontSize: "11px",
+                      fontSize: "12px",
                       padding: "8px 16px",
                       borderRadius: "20px",
                       border:
@@ -1423,7 +1789,7 @@ export default function BattlePage() {
 
             {/* Stakes Selector */}
             <div style={{ maxWidth: "600px", margin: "0 auto 32px auto" }}>
-              <label style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px", display: "block" }}>
+              <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px", display: "block" }}>
                 Stakes
               </label>
               <div style={{ display: "flex", gap: "12px" }}>
@@ -1455,7 +1821,7 @@ export default function BattlePage() {
                         selectedStake === amount ? `0 0 20px ${GOLD_COLOR}20` : "none",
                     }}
                   >
-                    {amount} <span style={{ fontSize: "10px", fontWeight: 400, opacity: 0.6 }}>USDC</span>
+                    {amount} <span style={{ fontSize: "12px", fontWeight: 400, opacity: 0.6 }}>USDC</span>
                   </button>
                 ))}
               </div>
@@ -1486,7 +1852,7 @@ export default function BattlePage() {
               >
                 START BATTLE
               </button>
-              <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "12px", maxWidth: "500px", margin: "12px auto 0 auto" }}>
+              <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", marginTop: "12px", maxWidth: "500px", margin: "12px auto 0 auto" }}>
                 Both agents will compete. AI judge decides. Winner takes all.
               </p>
             </div>
@@ -1503,6 +1869,7 @@ export default function BattlePage() {
             {battleTitle && (
               <div style={{ textAlign: "center", marginBottom: "20px" }}>
                 <h2
+                  className="font-display"
                   style={{
                     fontSize: "28px",
                     fontWeight: 900,
@@ -1519,7 +1886,7 @@ export default function BattlePage() {
                   {battleCategory && (
                     <span
                       style={{
-                        fontSize: "9px",
+                        fontSize: "12px",
                         background: `${GOLD_COLOR}20`,
                         border: `1px solid ${GOLD_COLOR}30`,
                         borderRadius: "4px",
@@ -1561,7 +1928,7 @@ export default function BattlePage() {
                   <div style={{ fontSize: "24px", fontWeight: 800, color: stat.color as string, marginBottom: "4px" }}>
                     {stat.value}
                   </div>
-                  <div style={{ fontSize: "8px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+                  <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
                     {stat.label}
                   </div>
                 </div>
@@ -1613,6 +1980,7 @@ export default function BattlePage() {
                 alphaProgress,
                 alphaTime,
                 "left",
+                alphaEloDelta,
               )}
 
               {/* Center Divider with VS */}
@@ -1676,7 +2044,7 @@ export default function BattlePage() {
                   }}
                 >
                   <div style={{ fontWeight: 700 }}>{formatTimer(totalElapsed)}</div>
-                  <div style={{ fontSize: "7px", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)" }}>
+                  <div style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)" }}>
                     total
                   </div>
                 </div>
@@ -1701,6 +2069,7 @@ export default function BattlePage() {
                 omegaProgress,
                 omegaTime,
                 "right",
+                omegaEloDelta,
               )}
             </div>
           </div>
@@ -1732,6 +2101,7 @@ export default function BattlePage() {
               }}
             />
             <div
+              className="font-display"
               style={{
                 fontSize: "24px",
                 fontWeight: 900,
@@ -1766,6 +2136,7 @@ export default function BattlePage() {
           >
             {/* Winner name */}
             <div
+              className="font-display"
               style={{
                 fontSize: "36px",
                 fontWeight: 900,
@@ -1787,7 +2158,7 @@ export default function BattlePage() {
                 gap: "24px",
                 fontSize: "48px",
                 fontWeight: 900,
-                marginBottom: "20px",
+                marginBottom: "12px",
                 lineHeight: 1,
               }}
             >
@@ -1799,9 +2170,78 @@ export default function BattlePage() {
                 {omegaScore !== null ? omegaScore : "?"}
               </span>
             </div>
-            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.15em", textTransform: "uppercase" }}>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: "16px" }}>
               ALPHA &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; OMEGA
             </div>
+
+            {/* ELO Delta Display */}
+            {showEloDelta && (alphaEloDelta !== null || omegaEloDelta !== null) && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  gap: "48px",
+                  marginBottom: "12px",
+                  animation: "slide-up 0.6s ease-out",
+                }}
+              >
+                <div style={{ textAlign: "center" }}>
+                  <div
+                    style={{
+                      fontSize: "18px",
+                      fontWeight: 900,
+                      fontFamily: "monospace",
+                      color: alphaEloDelta && alphaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR,
+                      textShadow: alphaEloDelta && alphaEloDelta > 0
+                        ? "0 0 10px rgba(34,204,68,0.4)"
+                        : "0 0 10px rgba(255,66,94,0.4)",
+                    }}
+                  >
+                    {alphaEloDelta !== null ? (alphaEloDelta > 0 ? `+${alphaEloDelta}` : alphaEloDelta) : "..."}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    ALPHA ELO
+                  </div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div
+                    style={{
+                      fontSize: "18px",
+                      fontWeight: 900,
+                      fontFamily: "monospace",
+                      color: omegaEloDelta && omegaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR,
+                      textShadow: omegaEloDelta && omegaEloDelta > 0
+                        ? "0 0 10px rgba(34,204,68,0.4)"
+                        : "0 0 10px rgba(255,66,94,0.4)",
+                    }}
+                  >
+                    {omegaEloDelta !== null ? (omegaEloDelta > 0 ? `+${omegaEloDelta}` : omegaEloDelta) : "..."}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    OMEGA ELO
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Spectator XP badge */}
+            {spectatorXpAwarded > 0 && (
+              <div
+                style={{
+                  display: "inline-block",
+                  padding: "6px 16px",
+                  borderRadius: "20px",
+                  background: "rgba(34,204,68,0.15)",
+                  border: "1px solid rgba(34,204,68,0.3)",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  color: "#22CC44",
+                  animation: "xp-pop 0.8s ease-out forwards",
+                }}
+              >
+                +{spectatorXpAwarded} XP for watching!
+              </div>
+            )}
           </div>
         )}
 
@@ -1817,8 +2257,9 @@ export default function BattlePage() {
               style={{ padding: "28px", marginBottom: "20px" }}
             >
               <div
+                className="font-display"
                 style={{
-                  fontSize: "11px",
+                  fontSize: "14px",
                   fontWeight: 700,
                   color: "rgba(255,255,255,0.3)",
                   textTransform: "uppercase",
@@ -1871,6 +2312,11 @@ export default function BattlePage() {
                   { label: "Time", alpha: alphaTime || formatTimer(alphaElapsed), omega: omegaTime || formatTimer(omegaElapsed) },
                   { label: "Hash", alpha: alphaHash ? `${alphaHash.slice(0, 10)}...` : "-", omega: omegaHash ? `${omegaHash.slice(0, 10)}...` : "-" },
                   { label: "Delivery", alpha: alphaVerified ? "\u2713 Committed" : "Pending", omega: omegaVerified ? "\u2713 Committed" : "Pending" },
+                  {
+                    label: "ELO",
+                    alpha: alphaEloDelta !== null ? `${alphaElo.elo} (${alphaEloDelta > 0 ? "+" : ""}${alphaEloDelta})` : `${alphaElo.elo}`,
+                    omega: omegaEloDelta !== null ? `${omegaElo.elo} (${omegaEloDelta > 0 ? "+" : ""}${omegaEloDelta})` : `${omegaElo.elo}`,
+                  },
                 ].map((row) => (
                   <div key={row.label} style={{ display: "contents" }}>
                     <div
@@ -1880,7 +2326,7 @@ export default function BattlePage() {
                         fontWeight: 600,
                         borderBottom: "1px solid rgba(255,255,255,0.04)",
                         textTransform: "uppercase",
-                        fontSize: "10px",
+                        fontSize: "12px",
                         letterSpacing: "0.05em",
                       }}
                     >
@@ -1890,10 +2336,12 @@ export default function BattlePage() {
                       style={{
                         padding: "10px 12px",
                         textAlign: "center",
-                        color: "rgba(255,255,255,0.7)",
-                        fontFamily: row.label === "Hash" ? "monospace" : "inherit",
+                        color: row.label === "ELO" && alphaEloDelta !== null
+                          ? (alphaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR)
+                          : "rgba(255,255,255,0.7)",
+                        fontFamily: row.label === "Hash" || row.label === "ELO" ? "monospace" : "inherit",
                         borderBottom: "1px solid rgba(255,255,255,0.04)",
-                        fontWeight: row.label === "Score" ? 700 : 400,
+                        fontWeight: row.label === "Score" || row.label === "ELO" ? 700 : 400,
                       }}
                     >
                       {row.alpha}
@@ -1902,10 +2350,12 @@ export default function BattlePage() {
                       style={{
                         padding: "10px 12px",
                         textAlign: "center",
-                        color: "rgba(255,255,255,0.7)",
-                        fontFamily: row.label === "Hash" ? "monospace" : "inherit",
+                        color: row.label === "ELO" && omegaEloDelta !== null
+                          ? (omegaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR)
+                          : "rgba(255,255,255,0.7)",
+                        fontFamily: row.label === "Hash" || row.label === "ELO" ? "monospace" : "inherit",
                         borderBottom: "1px solid rgba(255,255,255,0.04)",
-                        fontWeight: row.label === "Score" ? 700 : 400,
+                        fontWeight: row.label === "Score" || row.label === "ELO" ? 700 : 400,
                       }}
                     >
                       {row.omega}
@@ -1922,8 +2372,9 @@ export default function BattlePage() {
                 style={{ padding: "24px", marginBottom: "20px" }}
               >
                 <div
+                  className="font-display"
                   style={{
-                    fontSize: "11px",
+                    fontSize: "14px",
                     fontWeight: 700,
                     color: "rgba(255,255,255,0.3)",
                     textTransform: "uppercase",
@@ -1947,7 +2398,7 @@ export default function BattlePage() {
                 >
                   &ldquo;{judgeReason}&rdquo;
                 </div>
-                <div style={{ marginTop: "10px", fontSize: "10px", color: "rgba(255,255,255,0.25)" }}>
+                <div style={{ marginTop: "10px", fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
                   Judge: Claude Haiku 4.5
                 </div>
               </div>
@@ -1964,8 +2415,9 @@ export default function BattlePage() {
                 }}
               >
                 <div
+                  className="font-display"
                   style={{
-                    fontSize: "11px",
+                    fontSize: "14px",
                     fontWeight: 700,
                     color: "rgba(255,255,255,0.3)",
                     textTransform: "uppercase",
@@ -2033,7 +2485,7 @@ export default function BattlePage() {
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
-                        fontSize: "10px",
+                        fontSize: "12px",
                         color: "rgba(255,255,255,0.3)",
                         textDecoration: "none",
                         fontFamily: "monospace",
@@ -2072,7 +2524,7 @@ export default function BattlePage() {
                 BATTLE AGAIN
               </button>
               {totalTime && (
-                <div style={{ marginTop: "10px", fontSize: "11px", color: "rgba(255,255,255,0.25)" }}>
+                <div style={{ marginTop: "10px", fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
                   Completed in {totalTime}
                 </div>
               )}
@@ -2081,7 +2533,7 @@ export default function BattlePage() {
         )}
 
         {/* ============================================================ */}
-        {/*  Agent Chat — always show when messages exist                 */}
+        {/*  Agent Chat -- always show when messages exist                */}
         {/* ============================================================ */}
 
         {chatMessages.length > 0 && (
@@ -2090,8 +2542,9 @@ export default function BattlePage() {
             style={{ padding: "20px", marginBottom: "28px" }}
           >
             <div
+              className="font-display"
               style={{
-                fontSize: "11px",
+                fontSize: "14px",
                 fontWeight: 700,
                 color: "rgba(255,255,255,0.3)",
                 textTransform: "uppercase",
@@ -2129,7 +2582,7 @@ export default function BattlePage() {
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
                         <span
                           style={{
-                            fontSize: "9px",
+                            fontSize: "12px",
                             fontWeight: 800,
                             color: agentColor,
                             textTransform: "uppercase",
@@ -2138,7 +2591,7 @@ export default function BattlePage() {
                         >
                           {isAlpha ? "Alpha" : "Omega"}
                         </span>
-                        <span style={{ fontSize: "8px", color: "rgba(255,255,255,0.15)" }}>
+                        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.15)" }}>
                           {msg.timestamp}
                         </span>
                       </div>
@@ -2174,8 +2627,9 @@ export default function BattlePage() {
             style={{ padding: "24px", marginBottom: "28px" }}
           >
             <div
+              className="font-display"
               style={{
-                fontSize: "11px",
+                fontSize: "14px",
                 fontWeight: 700,
                 color: "rgba(255,255,255,0.3)",
                 textTransform: "uppercase",
@@ -2191,16 +2645,16 @@ export default function BattlePage() {
                   key={battle.id}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "100px 1fr 120px 80px",
+                    gridTemplateColumns: "100px 1fr 120px 100px 80px",
                     alignItems: "center",
                     padding: "12px 16px",
                     background: "rgba(255,255,255,0.02)",
                     borderRadius: "10px",
                     border: "1px solid rgba(255,255,255,0.04)",
-                    fontSize: "11px",
+                    fontSize: "12px",
                   }}
                 >
-                  <div style={{ color: "rgba(255,255,255,0.3)", fontFamily: "monospace", fontSize: "10px" }}>
+                  <div style={{ color: "rgba(255,255,255,0.3)", fontFamily: "monospace", fontSize: "12px" }}>
                     {new Date(battle.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   </div>
                   <div style={{ color: "rgba(255,255,255,0.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -2211,13 +2665,29 @@ export default function BattlePage() {
                     <span style={{ color: "rgba(255,255,255,0.2)", margin: "0 6px" }}>&mdash;</span>
                     <span style={{ color: OMEGA_COLOR, fontWeight: 700 }}>{battle.omegaScore}</span>
                   </div>
+                  {/* ELO deltas column */}
+                  <div style={{ textAlign: "center", fontFamily: "monospace", fontSize: "12px" }}>
+                    {battle.alphaEloDelta !== undefined && battle.omegaEloDelta !== undefined ? (
+                      <>
+                        <span style={{ color: battle.alphaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR, fontWeight: 700 }}>
+                          {battle.alphaEloDelta > 0 ? "+" : ""}{battle.alphaEloDelta}
+                        </span>
+                        <span style={{ color: "rgba(255,255,255,0.15)", margin: "0 4px" }}>/</span>
+                        <span style={{ color: battle.omegaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR, fontWeight: 700 }}>
+                          {battle.omegaEloDelta > 0 ? "+" : ""}{battle.omegaEloDelta}
+                        </span>
+                      </>
+                    ) : (
+                      <span style={{ color: "rgba(255,255,255,0.15)" }}>--</span>
+                    )}
+                  </div>
                   <div
                     style={{
                       textAlign: "right",
                       color: battle.winner === "alpha" ? ALPHA_COLOR : OMEGA_COLOR,
                       fontWeight: 700,
                       textTransform: "uppercase",
-                      fontSize: "10px",
+                      fontSize: "12px",
                     }}
                   >
                     {battle.winner === "alpha" ? "Alpha" : "Omega"}
@@ -2258,7 +2728,7 @@ export default function BattlePage() {
                 <div style={{ fontSize: "24px", fontWeight: 800, color: stat.color as string, marginBottom: "4px" }}>
                   {stat.value}
                 </div>
-                <div style={{ fontSize: "8px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
                   {stat.label}
                 </div>
               </div>
@@ -2273,8 +2743,9 @@ export default function BattlePage() {
             style={{ padding: "24px" }}
           >
             <div
+              className="font-display"
               style={{
-                fontSize: "11px",
+                fontSize: "14px",
                 fontWeight: 700,
                 color: "rgba(255,255,255,0.3)",
                 textTransform: "uppercase",
@@ -2290,16 +2761,16 @@ export default function BattlePage() {
                   key={battle.id}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "100px 1fr 120px 80px",
+                    gridTemplateColumns: "100px 1fr 120px 100px 80px",
                     alignItems: "center",
                     padding: "12px 16px",
                     background: "rgba(255,255,255,0.02)",
                     borderRadius: "10px",
                     border: "1px solid rgba(255,255,255,0.04)",
-                    fontSize: "11px",
+                    fontSize: "12px",
                   }}
                 >
-                  <div style={{ color: "rgba(255,255,255,0.3)", fontFamily: "monospace", fontSize: "10px" }}>
+                  <div style={{ color: "rgba(255,255,255,0.3)", fontFamily: "monospace", fontSize: "12px" }}>
                     {new Date(battle.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   </div>
                   <div style={{ color: "rgba(255,255,255,0.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -2310,13 +2781,29 @@ export default function BattlePage() {
                     <span style={{ color: "rgba(255,255,255,0.2)", margin: "0 6px" }}>&mdash;</span>
                     <span style={{ color: OMEGA_COLOR, fontWeight: 700 }}>{battle.omegaScore}</span>
                   </div>
+                  {/* ELO deltas column */}
+                  <div style={{ textAlign: "center", fontFamily: "monospace", fontSize: "12px" }}>
+                    {battle.alphaEloDelta !== undefined && battle.omegaEloDelta !== undefined ? (
+                      <>
+                        <span style={{ color: battle.alphaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR, fontWeight: 700 }}>
+                          {battle.alphaEloDelta > 0 ? "+" : ""}{battle.alphaEloDelta}
+                        </span>
+                        <span style={{ color: "rgba(255,255,255,0.15)", margin: "0 4px" }}>/</span>
+                        <span style={{ color: battle.omegaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR, fontWeight: 700 }}>
+                          {battle.omegaEloDelta > 0 ? "+" : ""}{battle.omegaEloDelta}
+                        </span>
+                      </>
+                    ) : (
+                      <span style={{ color: "rgba(255,255,255,0.15)" }}>--</span>
+                    )}
+                  </div>
                   <div
                     style={{
                       textAlign: "right",
                       color: battle.winner === "alpha" ? ALPHA_COLOR : OMEGA_COLOR,
                       fontWeight: 700,
                       textTransform: "uppercase",
-                      fontSize: "10px",
+                      fontSize: "12px",
                     }}
                   >
                     {battle.winner === "alpha" ? "Alpha" : "Omega"}

@@ -2,76 +2,143 @@
 
 import { useState, useEffect } from "react";
 import NavBar from "@/components/NavBar";
-import UserAvatar from "@/components/UserAvatar";
-import ReputationScore from "@/components/ReputationScore";
 import LoadingSkeleton from "@/components/LoadingSkeleton";
 import { USDC_LOGO_URL } from "@/lib/constants";
 import { formatAddress } from "@/lib/format";
 
-interface TakerEntry {
+/* ---------- Types ---------- */
+
+interface UserEntry {
   rank: number;
   wallet: string;
   displayName: string;
-  avatarSeed: string;
-  avatarUrl: string | null;
+  totalXp: number;
+  level: number;
   jobsCompleted: number;
   totalEarned: number;
 }
 
-interface PosterEntry {
-  rank: number;
-  wallet: string;
-  displayName: string;
-  avatarSeed: string;
-  avatarUrl: string | null;
-  jobsPosted: number;
-  totalSpent: number;
+interface AgentEntry {
+  agentWallet: string;
+  agentName: string;
+  elo: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  peakElo: number;
 }
+
+type Tab = "users" | "agents";
+
+/* ---------- Style constants ---------- */
+
+const GLASS_CARD: React.CSSProperties = {
+  backgroundColor: "rgba(0,0,0,0.3)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: "12px",
+  backdropFilter: "blur(16px)",
+};
+
+const BRAND = "#fffeb2";
+
+/* ---------- Helpers ---------- */
 
 function rankColor(rank: number): string {
-  if (rank === 1) return "#FFD700";
-  if (rank === 2) return "#C0C0C0";
-  if (rank === 3) return "#CD7F32";
-  return "rgba(255,255,255,0.5)";
+  if (rank === 1) return "#fffeb2";          // gold
+  if (rank === 2) return "rgba(255,255,255,0.6)"; // silver
+  if (rank === 3) return "#cd7f32";          // bronze
+  return "rgba(255,255,255,0.45)";
 }
 
-export default function LeaderboardPage() {
-  const [topTakers, setTopTakers] = useState<TakerEntry[]>([]);
-  const [topPosters, setTopPosters] = useState<PosterEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+function rankLabel(rank: number): string {
+  if (rank === 1) return "1st";
+  if (rank === 2) return "2nd";
+  if (rank === 3) return "3rd";
+  return `${rank}`;
+}
 
+/* ---------- Component ---------- */
+
+export default function LeaderboardPage() {
+  const [tab, setTab] = useState<Tab>("users");
+  const [users, setUsers] = useState<UserEntry[]>([]);
+  const [agents, setAgents] = useState<AgentEntry[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [loadingAgents, setLoadingAgents] = useState(true);
+
+  // Fetch users (XP leaderboard)
   useEffect(() => {
-    async function fetchLeaderboard() {
+    async function fetchUsers() {
       try {
         const res = await fetch("/api/leaderboard");
         if (res.ok) {
           const data = await res.json();
-          setTopTakers(data.topTakers || []);
-          setTopPosters(data.topPosters || []);
+          setUsers(data.users || []);
         }
       } catch {
         // silently fail
       } finally {
-        setLoading(false);
+        setLoadingUsers(false);
       }
     }
-    fetchLeaderboard();
+    fetchUsers();
   }, []);
 
-  const headerCellStyle: React.CSSProperties = {
-    fontSize: "9px",
+  // Fetch agents (ELO leaderboard)
+  useEffect(() => {
+    async function fetchAgents() {
+      try {
+        const res = await fetch("/api/elo/leaderboard");
+        if (res.ok) {
+          const data = await res.json();
+          setAgents(data || []);
+        }
+      } catch {
+        // silently fail
+      } finally {
+        setLoadingAgents(false);
+      }
+    }
+    fetchAgents();
+  }, []);
+
+  const isLoading = tab === "users" ? loadingUsers : loadingAgents;
+
+  /* ---------- Tab button style (matches dashboard) ---------- */
+
+  const tabBtnStyle = (active: boolean): React.CSSProperties => ({
+    fontFamily: "inherit",
+    fontSize: "14px",
     textTransform: "uppercase",
-    letterSpacing: "0.1em",
+    letterSpacing: "0.08em",
+    padding: "10px 28px",
+    cursor: "pointer",
+    border: active ? `1px solid ${BRAND}` : "1px solid rgba(255,255,255,0.2)",
+    borderRadius: "6px",
+    backgroundColor: active ? "rgba(255,254,178,0.12)" : "transparent",
+    color: active ? BRAND : "rgba(255,255,255,0.5)",
+    backdropFilter: "blur(4px)",
+    transition: "all 0.15s ease",
+    fontWeight: active ? 600 : 400,
+  });
+
+  /* ---------- Table styles ---------- */
+
+  const headerCellStyle: React.CSSProperties = {
+    fontSize: "13px",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
     color: "rgba(255,255,255,0.35)",
-    padding: "8px 12px",
+    padding: "14px 16px",
     textAlign: "left",
     borderBottom: "1px solid rgba(255,255,255,0.1)",
+    fontWeight: 600,
   };
 
   const cellStyle: React.CSSProperties = {
-    fontSize: "12px",
+    fontSize: "14px",
     color: "rgba(255,255,255,0.8)",
-    padding: "10px 12px",
+    padding: "14px 16px",
     borderBottom: "1px solid rgba(255,255,255,0.06)",
   };
 
@@ -84,33 +151,60 @@ export default function LeaderboardPage() {
     },
   };
 
-  const cardStyle: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: "10px",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    backdropFilter: "blur(16px)",
-    overflow: "hidden",
-  };
+  /* ---------- Level badge ---------- */
 
-  const cardTitleStyle: React.CSSProperties = {
-    fontSize: "13px",
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    color: "#ffffff",
-    padding: "16px 16px 12px",
-  };
+  const levelBadge = (level: number) => (
+    <span
+      style={{
+        display: "inline-block",
+        fontSize: "11px",
+        fontWeight: 700,
+        letterSpacing: "0.06em",
+        color: BRAND,
+        backgroundColor: "rgba(255,254,178,0.14)",
+        border: `1px solid rgba(255,254,178,0.3)`,
+        borderRadius: "999px",
+        padding: "2px 10px",
+        whiteSpace: "nowrap",
+      }}
+    >
+      LV.{level}
+    </span>
+  );
+
+  /* ---------- Empty state ---------- */
 
   const emptyMessage = (
-    <div style={{
-      padding: "40px 16px",
-      textAlign: "center",
-      fontSize: "13px",
-      color: "rgba(255,255,255,0.4)",
-    }}>
-      No data yet — run the demo to populate!
+    <div
+      style={{
+        padding: "60px 16px",
+        textAlign: "center",
+        fontSize: "14px",
+        color: "rgba(255,255,255,0.4)",
+      }}
+    >
+      No data yet
     </div>
   );
+
+  /* ---------- Loading skeleton rows ---------- */
+
+  const loadingRows = (
+    <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <LoadingSkeleton width="30px" height="16px" />
+          <LoadingSkeleton width="120px" height="16px" />
+          <div style={{ flex: 1 }} />
+          <LoadingSkeleton width="60px" height="16px" />
+          <LoadingSkeleton width="50px" height="16px" />
+          <LoadingSkeleton width="70px" height="16px" />
+        </div>
+      ))}
+    </div>
+  );
+
+  /* ---------- Render ---------- */
 
   return (
     <div
@@ -127,7 +221,8 @@ export default function LeaderboardPage() {
           position: "fixed",
           inset: 0,
           zIndex: 0,
-          backgroundImage: "image-set(url('/poster-bg.webp') type('image/webp'), url('/poster-bg.png') type('image/png'))",
+          backgroundImage:
+            "image-set(url('/poster-bg.webp') type('image/webp'), url('/poster-bg.png') type('image/png'))",
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
@@ -142,133 +237,387 @@ export default function LeaderboardPage() {
       />
 
       {/* Content */}
-      <div style={{ position: "relative", zIndex: 2, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <div
+        style={{
+          position: "relative",
+          zIndex: 2,
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         <NavBar activeTab="leaderboard" variant="dark" />
 
-        <div style={{ flex: 1, padding: "40px 24px" }}>
-          <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
+        <div style={{ flex: 1, padding: "48px 24px 80px" }}>
+          <div style={{ maxWidth: "960px", margin: "0 auto" }}>
+            {/* Title */}
             <h1
               style={{
-                fontSize: "28px",
+                fontFamily: "var(--font-display, inherit)",
+                fontSize: "42px",
                 fontWeight: 700,
                 color: "#ffffff",
                 textTransform: "uppercase",
-                letterSpacing: "0.05em",
-                margin: "0 0 32px 0",
+                letterSpacing: "0.06em",
+                margin: "0 0 40px 0",
                 textAlign: "center",
               }}
             >
               Leaderboard
             </h1>
 
-            {loading ? (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px" }}>
-                {[1, 2].map((i) => (
-                  <div key={i} style={cardStyle}>
-                    <div style={cardTitleStyle}><LoadingSkeleton width="120px" height="16px" /></div>
-                    <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                      {[1, 2, 3, 4, 5].map((j) => (
-                        <div key={j} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          <div className="shimmer" style={{ width: "32px", height: "32px", borderRadius: "50%" }} />
-                          <div className="shimmer" style={{ flex: 1, height: "14px", borderRadius: "4px" }} />
-                          <div className="shimmer" style={{ width: "50px", height: "14px", borderRadius: "4px" }} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px" }}>
-                {/* Top Workers */}
-                <div style={cardStyle}>
-                  <div style={cardTitleStyle}>Top Workers</div>
-                  {topTakers.length === 0 ? emptyMessage : (
-                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                      <thead>
-                        <tr>
-                          <th style={headerCellStyle}>Rank</th>
-                          <th style={headerCellStyle}>Agent</th>
-                          <th style={{ ...headerCellStyle, textAlign: "center" }}>Score</th>
-                          <th style={{ ...headerCellStyle, textAlign: "right" }}>Completed</th>
-                          <th style={{ ...headerCellStyle, textAlign: "right" }}>Earned</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {topTakers.map((t) => (
-                          <tr key={t.wallet} style={{ transition: "background-color 0.15s ease" }} {...rowHoverProps}>
-                            <td style={{ ...cellStyle, fontWeight: 700, color: rankColor(t.rank), width: "50px" }}>
-                              {t.rank}
-                            </td>
-                            <td style={cellStyle}>
-                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <UserAvatar seed={t.avatarSeed} avatarUrl={t.avatarUrl} size={32} />
-                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "120px" }}>
-                                  {t.displayName.length > 20 ? formatAddress(t.displayName) : t.displayName}
-                                </span>
-                              </div>
-                            </td>
-                            <td style={{ ...cellStyle, textAlign: "center", verticalAlign: "middle" }}>
-                              <div style={{ transform: "scale(0.5)", transformOrigin: "center", display: "inline-block" }}>
-                                <ReputationScore completed={t.jobsCompleted} failed={0} />
-                              </div>
-                            </td>
-                            <td style={{ ...cellStyle, textAlign: "right" }}>{t.jobsCompleted}</td>
-                            <td style={{ ...cellStyle, textAlign: "right" }}>
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                <img src={USDC_LOGO_URL} alt="USDC" width={14} height={14} style={{ borderRadius: "50%" }} />
-                                {t.totalEarned.toFixed(2)}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
+            {/* Tabs */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                gap: "12px",
+                marginBottom: "32px",
+              }}
+            >
+              <button
+                onClick={() => setTab("users")}
+                style={tabBtnStyle(tab === "users")}
+              >
+                Users
+              </button>
+              <button
+                onClick={() => setTab("agents")}
+                style={tabBtnStyle(tab === "agents")}
+              >
+                Agents
+              </button>
+            </div>
 
-                {/* Top Posters */}
-                <div style={cardStyle}>
-                  <div style={cardTitleStyle}>Top Posters</div>
-                  {topPosters.length === 0 ? emptyMessage : (
-                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            {/* Card */}
+            <div style={{ ...GLASS_CARD, overflow: "hidden" }}>
+              {isLoading ? (
+                loadingRows
+              ) : tab === "users" ? (
+                /* ── Users (XP) Table ── */
+                users.length === 0 ? (
+                  emptyMessage
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        minWidth: "700px",
+                      }}
+                    >
                       <thead>
                         <tr>
-                          <th style={headerCellStyle}>Rank</th>
-                          <th style={headerCellStyle}>Poster</th>
-                          <th style={{ ...headerCellStyle, textAlign: "right" }}>Jobs Posted</th>
-                          <th style={{ ...headerCellStyle, textAlign: "right" }}>Total Spent</th>
+                          <th style={{ ...headerCellStyle, width: "60px" }}>
+                            Rank
+                          </th>
+                          <th style={headerCellStyle}>Wallet</th>
+                          <th
+                            style={{
+                              ...headerCellStyle,
+                              textAlign: "center",
+                            }}
+                          >
+                            Level
+                          </th>
+                          <th
+                            style={{
+                              ...headerCellStyle,
+                              textAlign: "right",
+                            }}
+                          >
+                            Total XP
+                          </th>
+                          <th
+                            style={{
+                              ...headerCellStyle,
+                              textAlign: "right",
+                            }}
+                          >
+                            Jobs Done
+                          </th>
+                          <th
+                            style={{
+                              ...headerCellStyle,
+                              textAlign: "right",
+                            }}
+                          >
+                            Total Earned
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
-                        {topPosters.map((p) => (
-                          <tr key={p.wallet} style={{ transition: "background-color 0.15s ease" }} {...rowHoverProps}>
-                            <td style={{ ...cellStyle, fontWeight: 700, color: rankColor(p.rank), width: "50px" }}>
-                              {p.rank}
+                        {users.map((u) => (
+                          <tr
+                            key={u.wallet}
+                            style={{ transition: "background-color 0.15s ease" }}
+                            {...rowHoverProps}
+                          >
+                            {/* Rank */}
+                            <td
+                              style={{
+                                ...cellStyle,
+                                fontWeight: 700,
+                                color: rankColor(u.rank),
+                                fontSize: u.rank <= 3 ? "16px" : "14px",
+                              }}
+                            >
+                              {rankLabel(u.rank)}
                             </td>
+
+                            {/* Wallet */}
                             <td style={cellStyle}>
-                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <UserAvatar seed={p.avatarSeed} avatarUrl={p.avatarUrl} size={32} />
-                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "120px" }}>
-                                  {p.displayName.length > 20 ? formatAddress(p.displayName) : p.displayName}
-                                </span>
-                              </div>
+                              <span
+                                style={{
+                                  fontFamily: "monospace",
+                                  fontSize: "13px",
+                                  color:
+                                    u.rank <= 3
+                                      ? rankColor(u.rank)
+                                      : "rgba(255,255,255,0.7)",
+                                }}
+                              >
+                                {u.displayName.length > 20
+                                  ? formatAddress(u.displayName)
+                                  : u.displayName}
+                              </span>
                             </td>
-                            <td style={{ ...cellStyle, textAlign: "right" }}>{p.jobsPosted}</td>
-                            <td style={{ ...cellStyle, textAlign: "right" }}>
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                <img src={USDC_LOGO_URL} alt="USDC" width={14} height={14} style={{ borderRadius: "50%" }} />
-                                {p.totalSpent.toFixed(2)}
+
+                            {/* Level */}
+                            <td
+                              style={{
+                                ...cellStyle,
+                                textAlign: "center",
+                              }}
+                            >
+                              {levelBadge(u.level)}
+                            </td>
+
+                            {/* Total XP */}
+                            <td
+                              style={{
+                                ...cellStyle,
+                                textAlign: "right",
+                                fontWeight: 600,
+                                color: BRAND,
+                                fontVariantNumeric: "tabular-nums",
+                              }}
+                            >
+                              {u.totalXp.toLocaleString()}
+                            </td>
+
+                            {/* Jobs Completed */}
+                            <td
+                              style={{
+                                ...cellStyle,
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                              }}
+                            >
+                              {u.jobsCompleted}
+                            </td>
+
+                            {/* Total Earned */}
+                            <td
+                              style={{
+                                ...cellStyle,
+                                textAlign: "right",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "5px",
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              >
+                                <img
+                                  src={USDC_LOGO_URL}
+                                  alt="USDC"
+                                  width={14}
+                                  height={14}
+                                  style={{ borderRadius: "50%" }}
+                                />
+                                {u.totalEarned.toFixed(2)}
                               </span>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  )}
+                  </div>
+                )
+              ) : /* ── Agents (ELO) Table ── */
+              agents.length === 0 ? (
+                emptyMessage
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                      minWidth: "700px",
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        <th style={{ ...headerCellStyle, width: "60px" }}>
+                          Rank
+                        </th>
+                        <th style={headerCellStyle}>Agent Name</th>
+                        <th
+                          style={{
+                            ...headerCellStyle,
+                            textAlign: "right",
+                          }}
+                        >
+                          ELO Rating
+                        </th>
+                        <th
+                          style={{
+                            ...headerCellStyle,
+                            textAlign: "center",
+                          }}
+                        >
+                          W / L
+                        </th>
+                        <th
+                          style={{
+                            ...headerCellStyle,
+                            textAlign: "right",
+                          }}
+                        >
+                          Win Rate
+                        </th>
+                        <th
+                          style={{
+                            ...headerCellStyle,
+                            textAlign: "right",
+                          }}
+                        >
+                          Peak ELO
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {agents.map((a, i) => {
+                        const rank = i + 1;
+                        const totalGames = a.wins + a.losses + a.draws;
+                        const winRate =
+                          totalGames > 0
+                            ? ((a.wins / totalGames) * 100).toFixed(1)
+                            : "0.0";
+
+                        return (
+                          <tr
+                            key={a.agentWallet}
+                            style={{
+                              transition: "background-color 0.15s ease",
+                            }}
+                            {...rowHoverProps}
+                          >
+                            {/* Rank */}
+                            <td
+                              style={{
+                                ...cellStyle,
+                                fontWeight: 700,
+                                color: rankColor(rank),
+                                fontSize: rank <= 3 ? "16px" : "14px",
+                              }}
+                            >
+                              {rankLabel(rank)}
+                            </td>
+
+                            {/* Agent Name */}
+                            <td style={cellStyle}>
+                              <span
+                                style={{
+                                  fontWeight: 600,
+                                  color:
+                                    rank <= 3
+                                      ? rankColor(rank)
+                                      : "rgba(255,255,255,0.85)",
+                                }}
+                              >
+                                {a.agentName || formatAddress(a.agentWallet)}
+                              </span>
+                            </td>
+
+                            {/* ELO Rating */}
+                            <td
+                              style={{
+                                ...cellStyle,
+                                textAlign: "right",
+                                fontWeight: 700,
+                                fontSize: "15px",
+                                color: BRAND,
+                                fontVariantNumeric: "tabular-nums",
+                              }}
+                            >
+                              {a.elo}
+                            </td>
+
+                            {/* W / L */}
+                            <td
+                              style={{
+                                ...cellStyle,
+                                textAlign: "center",
+                                fontVariantNumeric: "tabular-nums",
+                              }}
+                            >
+                              <span style={{ color: "#22c55e" }}>
+                                {a.wins}
+                              </span>
+                              <span
+                                style={{
+                                  color: "rgba(255,255,255,0.25)",
+                                  margin: "0 4px",
+                                }}
+                              >
+                                /
+                              </span>
+                              <span style={{ color: "#FF425E" }}>
+                                {a.losses}
+                              </span>
+                            </td>
+
+                            {/* Win Rate */}
+                            <td
+                              style={{
+                                ...cellStyle,
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                                color:
+                                  parseFloat(winRate) >= 60
+                                    ? "#22c55e"
+                                    : parseFloat(winRate) >= 40
+                                      ? "rgba(255,255,255,0.7)"
+                                      : "#FF425E",
+                              }}
+                            >
+                              {winRate}%
+                            </td>
+
+                            {/* Peak ELO */}
+                            <td
+                              style={{
+                                ...cellStyle,
+                                textAlign: "right",
+                                fontVariantNumeric: "tabular-nums",
+                                color: "rgba(255,255,255,0.5)",
+                              }}
+                            >
+                              {a.peakElo}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

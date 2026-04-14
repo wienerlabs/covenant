@@ -5,6 +5,8 @@ import { useConnector } from "@solana/connector/react";
 import Link from "next/link";
 import useProfile from "@/hooks/useProfile";
 import useReputation from "@/hooks/useReputation";
+import useXp from "@/hooks/useXp";
+import useAchievements from "@/hooks/useAchievements";
 import UserAvatar from "@/components/UserAvatar";
 import ReputationScore from "@/components/ReputationScore";
 import WalletButton from "@/components/WalletButton";
@@ -17,6 +19,8 @@ export default function ProfilePage() {
   const wallet = isConnected && account ? account : undefined;
   const { profile, loading, refetch } = useProfile(wallet);
   const { reputation } = useReputation(wallet || null);
+  const { xp } = useXp(wallet || null);
+  const { achievements } = useAchievements(wallet || null);
 
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
@@ -422,8 +426,22 @@ export default function ProfilePage() {
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                          <div style={{ fontSize: "24px", fontWeight: 700, color: "#fff", marginBottom: "4px" }}>
+                          <div style={{ fontSize: "24px", fontWeight: 700, color: "#fff", marginBottom: "4px", display: "flex", alignItems: "center", gap: "10px" }}>
                             {profile.displayName}
+                            <span style={{
+                              fontSize: "12px",
+                              fontWeight: 700,
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              padding: "2px 10px",
+                              borderRadius: "4px",
+                              backgroundColor: "rgba(255,254,178,0.15)",
+                              border: "1px solid #fffeb2",
+                              color: "#fffeb2",
+                              whiteSpace: "nowrap",
+                            }}>
+                              Level {xp.level}
+                            </span>
                           </div>
                           <button
                             onClick={openEdit}
@@ -472,6 +490,152 @@ export default function ProfilePage() {
                     <div style={{ marginTop: "20px", fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
                       Member since {new Date(profile.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
                     </div>
+                  </>
+                )}
+              </div>
+
+              {/* XP & Level */}
+              <div style={{
+                backgroundColor: "rgba(0,0,0,0.3)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: "12px",
+                backdropFilter: "blur(16px)",
+                padding: "24px 32px",
+              }}>
+                <div className="font-display" style={{ fontSize: "20px", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginBottom: "20px", letterSpacing: "0.08em" }}>
+                  XP &amp; Level
+                </div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "12px", marginBottom: "16px" }}>
+                  <span className="font-display" style={{ fontSize: "48px", fontWeight: 700, color: "#fffeb2", lineHeight: 1 }}>
+                    {xp.level}
+                  </span>
+                  <span style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Level
+                  </span>
+                  <span style={{ fontSize: "14px", color: "rgba(255,255,255,0.35)", marginLeft: "auto" }}>
+                    {xp.totalXp.toLocaleString()} XP total
+                  </span>
+                </div>
+                {/* XP progress bar */}
+                <div style={{ marginBottom: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)" }}>
+                      {xp.xpInCurrentLevel} / {xp.xpRequiredForLevel} XP
+                    </span>
+                    <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>
+                      {xp.xpToNextLevel} XP to next level
+                    </span>
+                  </div>
+                  <div style={{
+                    width: "100%",
+                    height: "8px",
+                    borderRadius: "4px",
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    overflow: "hidden",
+                  }}>
+                    <div style={{
+                      width: xp.xpRequiredForLevel > 0 ? `${(xp.xpInCurrentLevel / xp.xpRequiredForLevel) * 100}%` : "0%",
+                      height: "100%",
+                      borderRadius: "4px",
+                      backgroundColor: "#fffeb2",
+                      transition: "width 0.5s ease",
+                    }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Achievements */}
+              <div style={{
+                backgroundColor: "rgba(0,0,0,0.3)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: "12px",
+                backdropFilter: "blur(16px)",
+                padding: "24px 32px",
+              }}>
+                <div className="font-display" style={{ fontSize: "20px", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginBottom: "20px", letterSpacing: "0.08em" }}>
+                  Achievements
+                </div>
+                {achievements.length === 0 ? (
+                  <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.35)", textAlign: "center", padding: "24px 0" }}>
+                    No achievements yet. Complete jobs and activities to earn badges.
+                  </div>
+                ) : (
+                  <>
+                  <style>{`.achievements-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; } @media (max-width: 640px) { .achievements-grid { grid-template-columns: repeat(2, 1fr) !important; } }`}</style>
+                  <div className="achievements-grid">
+                    {achievements.map((a) => {
+                      const rarityColors: Record<string, string> = {
+                        common: "rgba(255,255,255,0.5)",
+                        rare: "#fffeb2",
+                        epic: "#a78bfa",
+                        legendary: "#FF425E",
+                      };
+                      const borderColor = rarityColors[a.rarity] || rarityColors.common;
+                      return (
+                        <div
+                          key={a.key}
+                          className="achievements-grid-item"
+                          style={{
+                            backgroundColor: "rgba(255,255,255,0.05)",
+                            border: `1px solid ${a.unlocked ? borderColor : "rgba(255,255,255,0.08)"}`,
+                            borderRadius: "10px",
+                            padding: "16px 12px",
+                            textAlign: "center",
+                            opacity: a.unlocked ? 1 : 0.3,
+                            transition: "opacity 0.2s ease",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: "8px",
+                          }}
+                        >
+                          {a.unlocked ? (
+                            <div style={{
+                              width: "40px",
+                              height: "40px",
+                              borderRadius: "50%",
+                              backgroundColor: `${borderColor}22`,
+                              border: `2px solid ${borderColor}`,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={borderColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                              </svg>
+                            </div>
+                          ) : (
+                            <div style={{
+                              width: "40px",
+                              height: "40px",
+                              borderRadius: "50%",
+                              backgroundColor: "rgba(255,255,255,0.05)",
+                              border: "2px solid rgba(255,255,255,0.15)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "18px",
+                              color: "rgba(255,255,255,0.3)",
+                              fontWeight: 700,
+                            }}>
+                              ?
+                            </div>
+                          )}
+                          <div style={{ fontSize: "12px", fontWeight: 600, color: a.unlocked ? "#fff" : "rgba(255,255,255,0.5)", lineHeight: 1.3 }}>
+                            {a.unlocked ? a.title : "???"}
+                          </div>
+                          {a.unlocked && (
+                            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", lineHeight: 1.3 }}>
+                              {a.description}
+                            </div>
+                          )}
+                          <div style={{ fontSize: "12px", color: "#fffeb2", fontWeight: 600, marginTop: "auto" }}>
+                            +{a.xpReward} XP
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                   </>
                 )}
               </div>

@@ -1,32 +1,58 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { xpToLevel } from "@/lib/xp";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    // Top Takers: profiles + reputation, ordered by jobsCompleted desc
-    const reputations = await prisma.reputation.findMany({
-      orderBy: { jobsCompleted: "desc" },
-      take: 10,
+    // ── Users leaderboard: ranked by XP ──
+    const xpRecords = await prisma.userXP.findMany({
+      orderBy: { totalXp: "desc" },
+      take: 50,
     });
 
-    const takerWallets = reputations.map((r) => r.walletAddress);
-    const takerProfiles = await prisma.profile.findMany({
-      where: { walletAddress: { in: takerWallets } },
-    });
-    const takerProfileMap = new Map(takerProfiles.map((p) => [p.walletAddress, p]));
+    const xpWallets = xpRecords.map((x) => x.walletAddress);
 
-    const topTakers = reputations.map((r, i) => {
-      const profile = takerProfileMap.get(r.walletAddress);
+    // Fetch profiles + reputation for those wallets in parallel
+    const [profiles, reputations] = await Promise.all([
+      prisma.profile.findMany({
+        where: { walletAddress: { in: xpWallets } },
+      }),
+      prisma.reputation.findMany({
+        where: { walletAddress: { in: xpWallets } },
+      }),
+    ]);
+
+    const profileMap = new Map(profiles.map((p) => [p.walletAddress, p]));
+    const repMap = new Map(reputations.map((r) => [r.walletAddress, r]));
+
+    const users = xpRecords.map((x, i) => {
+      const profile = profileMap.get(x.walletAddress);
+      const rep = repMap.get(x.walletAddress);
       return {
         rank: i + 1,
-        wallet: r.walletAddress,
-        displayName: profile?.displayName || r.walletAddress,
-        avatarSeed: profile?.avatarSeed || hashWallet(r.walletAddress),
+        wallet: x.walletAddress,
+        displayName: profile?.displayName || x.walletAddress,
+        avatarSeed: profile?.avatarSeed || hashWallet(x.walletAddress),
         avatarUrl: profile?.avatarUrl || null,
-        jobsCompleted: r.jobsCompleted,
-        totalEarned: r.totalEarned,
+        totalXp: x.totalXp,
+        level: xpToLevel(x.totalXp),
+        jobsCompleted: rep?.jobsCompleted ?? 0,
+        totalEarned: rep?.totalEarned ?? 0,
       };
     });
+
+    // ── Legacy fields (kept for backward compat) ──
+    const topTakers = users.slice(0, 10).map((u) => ({
+      rank: u.rank,
+      wallet: u.wallet,
+      displayName: u.displayName,
+      avatarSeed: u.avatarSeed,
+      avatarUrl: u.avatarUrl,
+      jobsCompleted: u.jobsCompleted,
+      totalEarned: u.totalEarned,
+    }));
 
     // Top Posters: count jobs per posterWallet, join with profiles
     const posterGroups = await prisma.job.groupBy({
@@ -56,7 +82,7 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ topTakers, topPosters });
+    return NextResponse.json({ users, topTakers, topPosters });
   } catch (error) {
     console.error("GET /api/leaderboard error:", error);
     return NextResponse.json(
