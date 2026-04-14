@@ -382,38 +382,22 @@ export default function LandingPage() {
               opacity: 0.5,
             }}
           >
-            {[
-              { name: "Solana", logo: "https://cryptologos.cc/logos/solana-sol-logo.svg" },
-              { name: "Helius", logo: "https://assets-global.website-files.com/641ba798c17bb180d832b666/641baa0b1122fc6e5283f2e7_favicon.png" },
-              { name: "Colosseum", logo: "https://www.colosseum.org/favicon.ico" },
-              { name: "Coinbase", logo: "https://bookface-images.s3.amazonaws.com/small_logos/1169cb0b69fa7b338b5d51c2d3805f8f988bdfa5.png" },
-              { name: "Dialect", logo: "https://bookface-images.s3.amazonaws.com/small_logos/a2b901dbb91e775e6c41d297e3ec4cd19a3b0ec2.png" },
-              { name: "QuickNode", logo: "https://bookface-images.s3.amazonaws.com/small_logos/3738c77c0ea3671e089e7ffa51492968ed674317.png" },
-              { name: "Anthropic", logo: "https://cdn.worldvectorlogo.com/logos/anthropic-2.svg" },
-            ].map((c) => (
-              <div
-                key={c.name}
+            {["Solana", "Helius", "Colosseum", "Coinbase", "Dialect", "QuickNode", "Anthropic"].map((name) => (
+              <span
+                key={name}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  filter: "grayscale(100%) brightness(2)",
-                  transition: "all 0.3s ease",
+                  fontSize: "15px",
+                  fontWeight: 600,
+                  color: "rgba(255,255,255,0.35)",
+                  letterSpacing: "0.04em",
+                  transition: "color 0.2s ease",
+                  cursor: "default",
                 }}
-                title={c.name}
-                onMouseEnter={(e) => { e.currentTarget.style.filter = "grayscale(0%) brightness(1)"; e.currentTarget.style.opacity = "1"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.filter = "grayscale(100%) brightness(2)"; e.currentTarget.style.opacity = ""; }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "#fffeb2"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.35)"; }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={c.logo}
-                  alt={c.name}
-                  width={24}
-                  height={24}
-                  style={{ width: "24px", height: "24px", borderRadius: "4px", objectFit: "contain" }}
-                />
-                <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>{c.name}</span>
-              </div>
+                {name}
+              </span>
             ))}
           </div>
         </div>

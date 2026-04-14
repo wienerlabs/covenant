@@ -244,6 +244,7 @@ const BATTLE_STYLES = `
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 16px;
+    overflow: hidden;
   }
 
   .glass-card-strong {
@@ -1460,6 +1461,7 @@ export default function BattlePage() {
           maxWidth: "280px",
           position: "relative",
           overflow: "hidden",
+          zIndex: 1,
         }}
       >
         {/* Subtle gradient background accent */}
@@ -1669,7 +1671,7 @@ export default function BattlePage() {
               {renderAgentProfile(ALPHA_CONFIG, alphaElo, "left")}
 
               {/* VS + PixelBattle Preview */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", overflow: "hidden", position: "relative", zIndex: 0 }}>
                 <div
                   className="font-display"
                   style={{
@@ -1781,7 +1783,7 @@ export default function BattlePage() {
                       letterSpacing: "0.05em",
                     }}
                   >
-                    {cat.tag} {cat.label}
+                    {cat.label}
                   </button>
                 ))}
               </div>
