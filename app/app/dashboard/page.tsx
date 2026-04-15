@@ -17,7 +17,9 @@ import EmptyState from "@/components/EmptyState";
 import Pagination from "@/components/Pagination";
 import { formatAddress } from "@/lib/format";
 import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
-import { getCategoryById } from "@/lib/categories";
+import { getCategoryById, JOB_CATEGORIES } from "@/lib/categories";
+import { AVAILABLE_MODELS } from "@/lib/models";
+import PixelAgent from "@/components/PixelAgent";
 
 /* ---------- Types ---------- */
 
@@ -443,7 +445,7 @@ export default function DashboardPage() {
   const { reputation } = useReputation(wallet);
   const { sol, usdc, loading: balanceLoading, refetch: refetchBalance } = useWalletBalance(wallet);
 
-  const [tab, setTab] = useState<"posted" | "taken">("posted");
+  const [tab, setTab] = useState<"posted" | "taken" | "agents">("posted");
   const [postedJobs, setPostedJobs] = useState<JobData[]>([]);
   const [takenJobs, setTakenJobs] = useState<JobData[]>([]);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
@@ -452,6 +454,13 @@ export default function DashboardPage() {
   const [faucetMsg, setFaucetMsg] = useState<string | null>(null);
   const [jobPage, setJobPage] = useState(1);
   const JOBS_PER_PAGE = 10;
+
+  /* -- My Agents state -- */
+  const [myAgents, setMyAgents] = useState<any[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Record<string, any>>({});
+  const [savingAgent, setSavingAgent] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!wallet) return;
@@ -534,6 +543,81 @@ export default function DashboardPage() {
   useEffect(() => {
     setJobPage(1);
   }, [tab]);
+
+  // Fetch my agents when tab switches to "agents"
+  useEffect(() => {
+    if (tab === "agents" && wallet) {
+      setAgentsLoading(true);
+      fetch("/api/hosted-agents")
+        .then((r) => r.json())
+        .then((all) => {
+          setMyAgents(
+            (Array.isArray(all) ? all : []).filter(
+              (a: any) => a.walletAddress === wallet
+            )
+          );
+        })
+        .catch(() => setMyAgents([]))
+        .finally(() => setAgentsLoading(false));
+    }
+  }, [tab, wallet]);
+
+  function startEditing(agent: any) {
+    setEditingAgent(agent.id);
+    setEditForm({
+      name: agent.name || "",
+      systemPrompt: agent.systemPrompt || "",
+      model: agent.model || "",
+      category: agent.category || "",
+      minPrice: agent.minPrice ?? 0,
+      maxPrice: agent.maxPrice ?? 0,
+      pricePerPrompt: agent.pricePerPrompt ?? 0,
+      webEnabled: agent.webEnabled ?? false,
+    });
+  }
+
+  async function handleSaveAgent(agentId: string) {
+    if (!wallet) return;
+    setSavingAgent(true);
+    try {
+      const res = await fetch(`/api/hosted-agents/${agentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: wallet, ...editForm }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setMyAgents((prev) =>
+          prev.map((a) => (a.id === agentId ? updated : a))
+        );
+        setEditingAgent(null);
+      }
+    } catch {
+      // silent
+    } finally {
+      setSavingAgent(false);
+    }
+  }
+
+  async function handleToggleActive(agent: any) {
+    if (!wallet) return;
+    const newActive = !agent.active;
+    try {
+      const res = await fetch(`/api/hosted-agents/${agent.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: wallet, active: newActive }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setMyAgents((prev) =>
+          prev.map((a) => (a.id === agent.id ? updated : a))
+        );
+      }
+    } catch {
+      // silent
+    }
+  }
 
   async function handleFaucet() {
     if (!wallet) return;
@@ -880,128 +964,561 @@ export default function DashboardPage() {
               <button style={tabBtnStyle(tab === "taken")} onClick={() => setTab("taken")}>
                 Taken ({takenJobs.length})
               </button>
+              <button style={tabBtnStyle(tab === "agents")} onClick={() => setTab("agents")}>
+                My Agents ({myAgents.length})
+              </button>
             </div>
 
-            {loading ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {[1, 2, 3].map((i) => <JobCardSkeleton key={i} />)}
-              </div>
-            ) : pagedJobs.length === 0 ? (
-              <EmptyState
-                title="No Jobs Yet"
-                subtitle={tab === "posted" ? "Jobs you post will appear here." : "Jobs you take will appear here."}
-                type="jobs"
-              />
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {pagedJobs.map((job) => {
-                  const cat = getCategoryById(job.category || "text_writing");
-                  const title = (job.specJson?.title as string) || `Job ${job.id.slice(0, 8)}`;
-                  const completedSub = job.status === "Completed" && job.submissions
-                    ? job.submissions.find((s) => s.outputText)
-                    : null;
-                  const hasVerifiedSub = job.submissions?.some((s) => s.verified);
-                  return (
-                    <div
-                      key={job.id}
-                      style={{
-                        ...GLASS_CARD,
-                        padding: "14px 20px",
-                        transition: "border-color 0.15s ease",
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
-                          <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed"} />
-                          <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)", backgroundColor: "rgba(255,255,255,0.06)", whiteSpace: "nowrap" }}>
-                            {cat.tag}
-                          </span>
-                          <span style={{ fontSize: "14px", fontWeight: 500, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {title}
-                          </span>
-                          {hasVerifiedSub && (
-                            <span style={{
-                              fontSize: "11px",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.04em",
-                              padding: "3px 10px",
-                              borderRadius: "4px",
-                              backgroundColor: "rgba(255,227,66,0.1)",
-                              border: "1px solid rgba(255,227,66,0.3)",
-                              color: "#fffeb2",
-                              fontWeight: 700,
-                              whiteSpace: "nowrap",
-                            }}>
-                              ZK Verified
-                            </span>
+            {/* ── Job cards (posted / taken tabs) ── */}
+            {tab !== "agents" && (
+              <>
+                {loading ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {[1, 2, 3].map((i) => <JobCardSkeleton key={i} />)}
+                  </div>
+                ) : pagedJobs.length === 0 ? (
+                  <EmptyState
+                    title="No Jobs Yet"
+                    subtitle={tab === "posted" ? "Jobs you post will appear here." : "Jobs you take will appear here."}
+                    type="jobs"
+                  />
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {pagedJobs.map((job) => {
+                      const cat = getCategoryById(job.category || "text_writing");
+                      const title = (job.specJson?.title as string) || `Job ${job.id.slice(0, 8)}`;
+                      const completedSub = job.status === "Completed" && job.submissions
+                        ? job.submissions.find((s) => s.outputText)
+                        : null;
+                      const hasVerifiedSub = job.submissions?.some((s) => s.verified);
+                      return (
+                        <div
+                          key={job.id}
+                          style={{
+                            ...GLASS_CARD,
+                            padding: "14px 20px",
+                            transition: "border-color 0.15s ease",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
+                              <StatusBadge status={job.status as "Open" | "Accepted" | "Completed" | "Cancelled" | "Disputed"} />
+                              <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)", backgroundColor: "rgba(255,255,255,0.06)", whiteSpace: "nowrap" }}>
+                                {cat.tag}
+                              </span>
+                              <span style={{ fontSize: "14px", fontWeight: 500, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {title}
+                              </span>
+                              {hasVerifiedSub && (
+                                <span style={{
+                                  fontSize: "11px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.04em",
+                                  padding: "3px 10px",
+                                  borderRadius: "4px",
+                                  backgroundColor: "rgba(255,227,66,0.1)",
+                                  border: "1px solid rgba(255,227,66,0.3)",
+                                  color: "#fffeb2",
+                                  fontWeight: 700,
+                                  whiteSpace: "nowrap",
+                                }}>
+                                  ZK Verified
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                <img src={job.paymentToken === "SOL" ? SOL_LOGO_URL : USDC_LOGO_URL} alt={job.paymentToken || "USDC"} width={14} height={14} style={{ borderRadius: "50%" }} />
+                                <span style={{ fontSize: "13px", fontWeight: 600, color: "#ffffff" }}>
+                                  {job.amount.toFixed(2)}
+                                </span>
+                              </div>
+                              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)" }}>
+                                {new Date(job.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                              </span>
+                              <Link
+                                href={`/job/${job.id}`}
+                                style={{
+                                  fontSize: "12px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.05em",
+                                  color: "#fffeb2",
+                                  textDecoration: "none",
+                                  padding: "5px 14px",
+                                  border: "1px solid rgba(255,254,178,0.3)",
+                                  borderRadius: "4px",
+                                  transition: "all 0.15s ease",
+                                }}
+                              >
+                                View
+                              </Link>
+                            </div>
+                          </div>
+                          {completedSub && completedSub.outputText && (
+                            <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                              <div style={{
+                                fontSize: "13px",
+                                color: "rgba(255,255,255,0.45)",
+                                lineHeight: 1.5,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                maxWidth: "100%",
+                              }}>
+                                {completedSub.outputText.slice(0, 150)}...
+                              </div>
+                              <Link
+                                href={`/job/${job.id}`}
+                                style={{
+                                  fontSize: "12px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.05em",
+                                  color: "#FF425E",
+                                  textDecoration: "none",
+                                  marginTop: "6px",
+                                  display: "inline-block",
+                                }}
+                              >
+                                View Full Output &rarr;
+                              </Link>
+                            </div>
                           )}
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                            <img src={job.paymentToken === "SOL" ? SOL_LOGO_URL : USDC_LOGO_URL} alt={job.paymentToken || "USDC"} width={14} height={14} style={{ borderRadius: "50%" }} />
-                            <span style={{ fontSize: "13px", fontWeight: 600, color: "#ffffff" }}>
-                              {job.amount.toFixed(2)}
-                            </span>
-                          </div>
-                          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)" }}>
-                            {new Date(job.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                          </span>
-                          <Link
-                            href={`/job/${job.id}`}
-                            style={{
-                              fontSize: "12px",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.05em",
-                              color: "#fffeb2",
-                              textDecoration: "none",
-                              padding: "5px 14px",
-                              border: "1px solid rgba(255,254,178,0.3)",
-                              borderRadius: "4px",
-                              transition: "all 0.15s ease",
-                            }}
-                          >
-                            View
-                          </Link>
-                        </div>
-                      </div>
-                      {completedSub && completedSub.outputText && (
-                        <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                          <div style={{
-                            fontSize: "13px",
-                            color: "rgba(255,255,255,0.45)",
-                            lineHeight: 1.5,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            maxWidth: "100%",
-                          }}>
-                            {completedSub.outputText.slice(0, 150)}...
-                          </div>
-                          <Link
-                            href={`/job/${job.id}`}
-                            style={{
-                              fontSize: "12px",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.05em",
-                              color: "#FF425E",
-                              textDecoration: "none",
-                              marginTop: "6px",
-                              display: "inline-block",
-                            }}
-                          >
-                            View Full Output &rarr;
-                          </Link>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {sortedJobs.length > JOBS_PER_PAGE && (
-                  <Pagination page={jobPage} totalPages={totalPages} onPageChange={setJobPage} />
+                      );
+                    })}
+                    {sortedJobs.length > JOBS_PER_PAGE && (
+                      <Pagination page={jobPage} totalPages={totalPages} onPageChange={setJobPage} />
+                    )}
+                  </div>
                 )}
-              </div>
+              </>
+            )}
+
+            {/* ── Agent cards (agents tab) ── */}
+            {tab === "agents" && (
+              <>
+                {agentsLoading ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {[1, 2, 3].map((i) => <JobCardSkeleton key={i} />)}
+                  </div>
+                ) : myAgents.length === 0 ? (
+                  <EmptyState
+                    title="No Agents Yet"
+                    subtitle="Agents you create will appear here. Build one from the Agent Builder."
+                    type="jobs"
+                  />
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    {myAgents.map((agent) => {
+                      const catInfo = getCategoryById(agent.category || "text_writing");
+                      const modelInfo = AVAILABLE_MODELS.find((m) => m.id === agent.model);
+                      const isEditing = editingAgent === agent.id;
+
+                      return (
+                        <div
+                          key={agent.id}
+                          style={{
+                            ...GLASS_CARD,
+                            padding: "20px 24px",
+                            transition: "border-color 0.15s ease",
+                            opacity: agent.active ? 1 : 0.6,
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+                        >
+                          {/* ── Agent card header ── */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "16px", minWidth: 0 }}>
+                              {/* Avatar */}
+                              <div style={{ flexShrink: 0 }}>
+                                {agent.avatarUrl ? (
+                                  <img
+                                    src={agent.avatarUrl}
+                                    alt={agent.name}
+                                    width={48}
+                                    height={48}
+                                    style={{ borderRadius: "8px", objectFit: "cover" }}
+                                  />
+                                ) : (
+                                  <PixelAgent
+                                    seed={agent.avatarSeed || agent.id}
+                                    color="#fffeb2"
+                                    size={48}
+                                  />
+                                )}
+                              </div>
+
+                              <div style={{ minWidth: 0 }}>
+                                <div className="font-display" style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff", marginBottom: "4px" }}>
+                                  {agent.name}
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                  <span style={{
+                                    fontSize: "11px",
+                                    padding: "2px 8px",
+                                    borderRadius: "4px",
+                                    border: "1px solid rgba(255,255,255,0.15)",
+                                    color: "rgba(255,255,255,0.7)",
+                                    backgroundColor: "rgba(255,255,255,0.06)",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.05em",
+                                  }}>
+                                    {catInfo.tag}
+                                  </span>
+                                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
+                                    {modelInfo?.name || agent.model}
+                                  </span>
+                                  {agent.webEnabled && (
+                                    <span style={{
+                                      fontSize: "10px",
+                                      padding: "2px 6px",
+                                      borderRadius: "3px",
+                                      backgroundColor: "rgba(34,197,94,0.15)",
+                                      border: "1px solid rgba(34,197,94,0.3)",
+                                      color: "#22c55e",
+                                      textTransform: "uppercase",
+                                      letterSpacing: "0.04em",
+                                    }}>
+                                      Web
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+                              {/* Stats */}
+                              <div style={{ display: "flex", alignItems: "center", gap: "16px", marginRight: "8px" }}>
+                                <div style={{ textAlign: "center" }}>
+                                  <div style={{ fontSize: "16px", fontWeight: 700, color: "#ffffff" }}>{agent.jobsCompleted ?? 0}</div>
+                                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Jobs</div>
+                                </div>
+                                <div style={{ textAlign: "center" }}>
+                                  <div style={{ fontSize: "16px", fontWeight: 700, color: "#ffffff" }}>${(agent.totalEarned ?? 0).toFixed(2)}</div>
+                                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Earned</div>
+                                </div>
+                                <div style={{ textAlign: "center" }}>
+                                  <div style={{ fontSize: "16px", fontWeight: 700, color: "#fffeb2" }}>${agent.pricePerPrompt ?? 0}/prompt</div>
+                                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Price</div>
+                                </div>
+                              </div>
+
+                              {/* Active toggle */}
+                              <button
+                                onClick={() => handleToggleActive(agent)}
+                                style={{
+                                  fontFamily: "inherit",
+                                  fontSize: "11px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.06em",
+                                  padding: "6px 14px",
+                                  cursor: "pointer",
+                                  border: agent.active ? "1px solid #22c55e" : "1px solid rgba(255,255,255,0.2)",
+                                  borderRadius: "4px",
+                                  backgroundColor: agent.active ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.06)",
+                                  color: agent.active ? "#22c55e" : "rgba(255,255,255,0.4)",
+                                  transition: "all 0.15s ease",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {agent.active ? "Active" : "Inactive"}
+                              </button>
+
+                              {/* Edit button */}
+                              <button
+                                onClick={() => isEditing ? setEditingAgent(null) : startEditing(agent)}
+                                style={{
+                                  fontFamily: "inherit",
+                                  fontSize: "11px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.06em",
+                                  padding: "6px 14px",
+                                  cursor: "pointer",
+                                  border: isEditing ? "1px solid #fffeb2" : "1px solid rgba(255,255,255,0.2)",
+                                  borderRadius: "4px",
+                                  backgroundColor: isEditing ? "rgba(255,254,178,0.12)" : "transparent",
+                                  color: isEditing ? "#fffeb2" : "rgba(255,255,255,0.5)",
+                                  transition: "all 0.15s ease",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {isEditing ? "Cancel" : "Edit"}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* ── Inline Edit Form ── */}
+                          {isEditing && (
+                            <div style={{
+                              marginTop: "16px",
+                              paddingTop: "16px",
+                              borderTop: "1px solid rgba(255,255,255,0.08)",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "14px",
+                            }}>
+                              {/* Row 1: Name + Category + Model */}
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                                <div>
+                                  <label style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.4)", marginBottom: "6px", display: "block" }}>
+                                    Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editForm.name || ""}
+                                    onChange={(e) => setEditForm((f: Record<string, any>) => ({ ...f, name: e.target.value }))}
+                                    style={{
+                                      width: "100%",
+                                      fontFamily: "inherit",
+                                      fontSize: "13px",
+                                      padding: "8px 12px",
+                                      border: "1px solid rgba(255,255,255,0.15)",
+                                      borderRadius: "6px",
+                                      backgroundColor: "rgba(0,0,0,0.3)",
+                                      color: "#ffffff",
+                                      outline: "none",
+                                      boxSizing: "border-box",
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.4)", marginBottom: "6px", display: "block" }}>
+                                    Category
+                                  </label>
+                                  <select
+                                    value={editForm.category || ""}
+                                    onChange={(e) => setEditForm((f: Record<string, any>) => ({ ...f, category: e.target.value }))}
+                                    style={{
+                                      width: "100%",
+                                      fontFamily: "inherit",
+                                      fontSize: "13px",
+                                      padding: "8px 12px",
+                                      border: "1px solid rgba(255,255,255,0.15)",
+                                      borderRadius: "6px",
+                                      backgroundColor: "rgba(0,0,0,0.3)",
+                                      color: "#ffffff",
+                                      outline: "none",
+                                      boxSizing: "border-box",
+                                    }}
+                                  >
+                                    {JOB_CATEGORIES.map((c) => (
+                                      <option key={c.id} value={c.id}>{c.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.4)", marginBottom: "6px", display: "block" }}>
+                                    Model
+                                  </label>
+                                  <select
+                                    value={editForm.model || ""}
+                                    onChange={(e) => setEditForm((f: Record<string, any>) => ({ ...f, model: e.target.value }))}
+                                    style={{
+                                      width: "100%",
+                                      fontFamily: "inherit",
+                                      fontSize: "13px",
+                                      padding: "8px 12px",
+                                      border: "1px solid rgba(255,255,255,0.15)",
+                                      borderRadius: "6px",
+                                      backgroundColor: "rgba(0,0,0,0.3)",
+                                      color: "#ffffff",
+                                      outline: "none",
+                                      boxSizing: "border-box",
+                                    }}
+                                  >
+                                    {AVAILABLE_MODELS.map((m) => (
+                                      <option key={m.id} value={m.id} disabled={!m.available}>
+                                        {m.name} ({m.cost})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Row 2: System Prompt */}
+                              <div>
+                                <label style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.4)", marginBottom: "6px", display: "block" }}>
+                                  System Prompt
+                                </label>
+                                <textarea
+                                  value={editForm.systemPrompt || ""}
+                                  onChange={(e) => setEditForm((f: Record<string, any>) => ({ ...f, systemPrompt: e.target.value }))}
+                                  rows={4}
+                                  style={{
+                                    width: "100%",
+                                    fontFamily: "inherit",
+                                    fontSize: "13px",
+                                    padding: "10px 12px",
+                                    border: "1px solid rgba(255,255,255,0.15)",
+                                    borderRadius: "6px",
+                                    backgroundColor: "rgba(0,0,0,0.3)",
+                                    color: "#ffffff",
+                                    outline: "none",
+                                    resize: "vertical",
+                                    lineHeight: 1.5,
+                                    boxSizing: "border-box",
+                                  }}
+                                />
+                              </div>
+
+                              {/* Row 3: Price fields + Web toggle */}
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", alignItems: "end" }}>
+                                <div>
+                                  <label style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.4)", marginBottom: "6px", display: "block" }}>
+                                    Min Price ($)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={editForm.minPrice ?? 0}
+                                    onChange={(e) => setEditForm((f: Record<string, any>) => ({ ...f, minPrice: parseFloat(e.target.value) || 0 }))}
+                                    style={{
+                                      width: "100%",
+                                      fontFamily: "inherit",
+                                      fontSize: "13px",
+                                      padding: "8px 12px",
+                                      border: "1px solid rgba(255,255,255,0.15)",
+                                      borderRadius: "6px",
+                                      backgroundColor: "rgba(0,0,0,0.3)",
+                                      color: "#ffffff",
+                                      outline: "none",
+                                      boxSizing: "border-box",
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.4)", marginBottom: "6px", display: "block" }}>
+                                    Max Price ($)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={editForm.maxPrice ?? 0}
+                                    onChange={(e) => setEditForm((f: Record<string, any>) => ({ ...f, maxPrice: parseFloat(e.target.value) || 0 }))}
+                                    style={{
+                                      width: "100%",
+                                      fontFamily: "inherit",
+                                      fontSize: "13px",
+                                      padding: "8px 12px",
+                                      border: "1px solid rgba(255,255,255,0.15)",
+                                      borderRadius: "6px",
+                                      backgroundColor: "rgba(0,0,0,0.3)",
+                                      color: "#ffffff",
+                                      outline: "none",
+                                      boxSizing: "border-box",
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.4)", marginBottom: "6px", display: "block" }}>
+                                    Price / Prompt ($)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.001"
+                                    value={editForm.pricePerPrompt ?? 0}
+                                    onChange={(e) => setEditForm((f: Record<string, any>) => ({ ...f, pricePerPrompt: parseFloat(e.target.value) || 0 }))}
+                                    style={{
+                                      width: "100%",
+                                      fontFamily: "inherit",
+                                      fontSize: "13px",
+                                      padding: "8px 12px",
+                                      border: "1px solid rgba(255,255,255,0.15)",
+                                      borderRadius: "6px",
+                                      backgroundColor: "rgba(0,0,0,0.3)",
+                                      color: "#ffffff",
+                                      outline: "none",
+                                      boxSizing: "border-box",
+                                    }}
+                                  />
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingBottom: "2px" }}>
+                                  <label style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.4)" }}>
+                                    Web Search
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditForm((f: Record<string, any>) => ({ ...f, webEnabled: !f.webEnabled }))}
+                                    style={{
+                                      width: "40px",
+                                      height: "22px",
+                                      borderRadius: "11px",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      backgroundColor: editForm.webEnabled ? "#fffeb2" : "rgba(255,255,255,0.15)",
+                                      position: "relative",
+                                      transition: "background-color 0.2s ease",
+                                    }}
+                                  >
+                                    <div style={{
+                                      width: "16px",
+                                      height: "16px",
+                                      borderRadius: "50%",
+                                      backgroundColor: editForm.webEnabled ? "#000000" : "rgba(255,255,255,0.4)",
+                                      position: "absolute",
+                                      top: "3px",
+                                      left: editForm.webEnabled ? "21px" : "3px",
+                                      transition: "left 0.2s ease, background-color 0.2s ease",
+                                    }} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Row 4: Save button */}
+                              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "4px" }}>
+                                <button
+                                  onClick={() => setEditingAgent(null)}
+                                  style={{
+                                    fontFamily: "inherit",
+                                    fontSize: "12px",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.06em",
+                                    padding: "8px 20px",
+                                    cursor: "pointer",
+                                    border: "1px solid rgba(255,255,255,0.2)",
+                                    borderRadius: "6px",
+                                    backgroundColor: "transparent",
+                                    color: "rgba(255,255,255,0.5)",
+                                    transition: "all 0.15s ease",
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={() => handleSaveAgent(agent.id)}
+                                  disabled={savingAgent}
+                                  style={{
+                                    fontFamily: "inherit",
+                                    fontSize: "12px",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.06em",
+                                    padding: "8px 24px",
+                                    cursor: savingAgent ? "not-allowed" : "pointer",
+                                    border: "1px solid #fffeb2",
+                                    borderRadius: "6px",
+                                    backgroundColor: "rgba(255,254,178,0.12)",
+                                    color: "#fffeb2",
+                                    transition: "all 0.15s ease",
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {savingAgent ? "Saving..." : "Save Changes"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
 

@@ -123,6 +123,9 @@ interface HostedAgentData {
   webEnabled?: boolean;
   jobsCompleted: number;
   totalEarned: number;
+  pricePerPrompt?: number;
+  displayName?: string | null;
+  totalRevenue?: number;
 }
 
 function getCategoryColor(cat: string): string {
@@ -418,16 +421,20 @@ export default function AgentsPage() {
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px" }}>
                 {hostedAgents.map((ha) => {
+                  const isSolana = ha.category === "solana_agent";
                   const catColor = getCategoryColor(ha.category);
+                  const walletTruncated = `${ha.walletAddress.slice(0, 4)}...${ha.walletAddress.slice(-4)}`;
                   return (
                     <div
                       key={ha.id}
                       style={{
-                        border: `1px solid ${catColor}30`,
+                        border: isSolana
+                          ? "1px solid rgba(153,69,255,0.3)"
+                          : `1px solid ${catColor}30`,
                         borderRadius: "16px",
                         backgroundColor: "rgba(0,0,0,0.35)",
                         backdropFilter: "blur(16px)",
-                        padding: "28px 24px",
+                        padding: isSolana ? "32px 24px" : "28px 24px",
                         display: "flex",
                         flexDirection: "column",
                         alignItems: "center",
@@ -435,11 +442,17 @@ export default function AgentsPage() {
                         transition: "border-color 0.2s ease, box-shadow 0.2s ease",
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = `${catColor}60`;
-                        e.currentTarget.style.boxShadow = `0 0 30px ${catColor}15`;
+                        e.currentTarget.style.borderColor = isSolana
+                          ? "rgba(153,69,255,0.5)"
+                          : `${catColor}60`;
+                        e.currentTarget.style.boxShadow = isSolana
+                          ? "0 0 30px rgba(153,69,255,0.1)"
+                          : `0 0 30px ${catColor}15`;
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = `${catColor}30`;
+                        e.currentTarget.style.borderColor = isSolana
+                          ? "rgba(153,69,255,0.3)"
+                          : `${catColor}30`;
                         e.currentTarget.style.boxShadow = "none";
                       }}
                     >
@@ -480,15 +493,43 @@ export default function AgentsPage() {
                         </span>
                       </div>
 
+                      {/* Solana/Sendai/ElizaOS logos row */}
+                      {isSolana && (
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "center" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="https://github.com/solana.png" alt="Solana" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="https://github.com/sendaifun.png" alt="Sendai" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="https://github.com/elizaOS.png" alt="ElizaOS" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
+                        </div>
+                      )}
+
+                      {/* Creator name (prominent for Solana agents) */}
+                      {isSolana && (
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>
+                          Created by {ha.displayName || walletTruncated}
+                        </div>
+                      )}
+
                       {/* Model */}
                       <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                         {ha.model}
                       </div>
 
-                      {/* Price range */}
-                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#fffeb2" }}>
-                        {ha.minPrice}-{ha.maxPrice} USDC
-                      </div>
+                      {/* Price per prompt for Solana agents */}
+                      {isSolana && ha.pricePerPrompt !== undefined && (
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "#fffeb2" }}>
+                          {ha.pricePerPrompt} USDC/prompt
+                        </div>
+                      )}
+
+                      {/* Price range (non-Solana) */}
+                      {!isSolana && (
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "#fffeb2" }}>
+                          {ha.minPrice}-{ha.maxPrice} USDC
+                        </div>
+                      )}
 
                       {/* Stats */}
                       <div style={{ display: "flex", gap: "20px", fontSize: "11px" }}>
@@ -506,10 +547,12 @@ export default function AgentsPage() {
                         </div>
                       </div>
 
-                      {/* Creator wallet */}
-                      <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)" }}>
-                        by {ha.walletAddress.slice(0, 4)}...{ha.walletAddress.slice(-4)}
-                      </div>
+                      {/* Creator wallet (non-Solana only since Solana shows it above) */}
+                      {!isSolana && (
+                        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)" }}>
+                          by {walletTruncated}
+                        </div>
+                      )}
 
                       {/* On-chain badge */}
                       {ha.onChainTx && (
@@ -546,7 +589,7 @@ export default function AgentsPage() {
                       )}
 
                       {/* Solana Agent badge */}
-                      {ha.category === "solana_agent" && (
+                      {isSolana && (
                         <span style={{
                           fontSize: "11px", fontWeight: 600, textTransform: "uppercase",
                           letterSpacing: "0.06em", padding: "3px 10px", borderRadius: "4px",
@@ -556,33 +599,60 @@ export default function AgentsPage() {
                         </span>
                       )}
 
-                      {/* Hire button */}
-                      <button
-                        onClick={() => setSelectedHosted(ha)}
-                        style={{
-                          fontFamily: "inherit",
-                          fontSize: "13px",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          padding: "12px 24px",
-                          width: "100%",
-                          cursor: "pointer",
-                          border: "1px solid #fffeb2",
-                          borderRadius: "8px",
-                          backgroundColor: "#fffeb2",
-                          color: "#000000",
-                          fontWeight: 700,
-                          transition: "all 0.2s ease",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = "#fffeb2cc";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = "#fffeb2";
-                        }}
-                      >
-                        Hire
-                      </button>
+                      {/* Hire / Chat button */}
+                      {isSolana ? (
+                        <Link
+                          href={`/chat/${ha.id}`}
+                          style={{
+                            fontFamily: "inherit",
+                            fontSize: "13px",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            padding: "12px 24px",
+                            width: "100%",
+                            cursor: "pointer",
+                            border: "1px solid #fffeb2",
+                            borderRadius: "8px",
+                            backgroundColor: "#fffeb2",
+                            color: "#000000",
+                            fontWeight: 700,
+                            transition: "all 0.2s ease",
+                            textDecoration: "none",
+                            textAlign: "center",
+                            display: "block",
+                            boxSizing: "border-box",
+                          }}
+                        >
+                          Chat with Agent
+                        </Link>
+                      ) : (
+                        <button
+                          onClick={() => setSelectedHosted(ha)}
+                          style={{
+                            fontFamily: "inherit",
+                            fontSize: "13px",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            padding: "12px 24px",
+                            width: "100%",
+                            cursor: "pointer",
+                            border: "1px solid #fffeb2",
+                            borderRadius: "8px",
+                            backgroundColor: "#fffeb2",
+                            color: "#000000",
+                            fontWeight: 700,
+                            transition: "all 0.2s ease",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "#fffeb2cc";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "#fffeb2";
+                          }}
+                        >
+                          Hire Agent
+                        </button>
+                      )}
                     </div>
                   );
                 })}

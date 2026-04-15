@@ -28,7 +28,16 @@ interface AgentEntry {
   peakElo: number;
 }
 
-type Tab = "users" | "agents";
+interface CreatorEntry {
+  rank: number;
+  wallet: string;
+  agentCount: number;
+  topAgentName: string;
+  totalRevenue: number;
+  totalJobs: number;
+}
+
+type Tab = "users" | "agents" | "creators";
 
 /* ---------- Style constants ---------- */
 
@@ -64,7 +73,9 @@ export default function LeaderboardPage() {
   const [users, setUsers] = useState<UserEntry[]>([]);
   const [agents, setAgents] = useState<AgentEntry[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [creators, setCreators] = useState<CreatorEntry[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
+  const [loadingCreators, setLoadingCreators] = useState(true);
 
   // Fetch users (XP leaderboard)
   useEffect(() => {
@@ -102,7 +113,75 @@ export default function LeaderboardPage() {
     fetchAgents();
   }, []);
 
-  const isLoading = tab === "users" ? loadingUsers : loadingAgents;
+  // Fetch creators (hosted agents grouped by wallet)
+  useEffect(() => {
+    async function fetchCreators() {
+      try {
+        const res = await fetch("/api/hosted-agents");
+        if (res.ok) {
+          const data: {
+            walletAddress: string;
+            name: string;
+            totalRevenue: number;
+            jobsCompleted: number;
+          }[] = await res.json();
+
+          // Group by walletAddress
+          const grouped = new Map<
+            string,
+            { agents: number; revenue: number; jobs: number; topName: string; topRevenue: number }
+          >();
+
+          for (const agent of data) {
+            const existing = grouped.get(agent.walletAddress);
+            if (existing) {
+              existing.agents += 1;
+              existing.revenue += agent.totalRevenue;
+              existing.jobs += agent.jobsCompleted;
+              if (agent.totalRevenue > existing.topRevenue) {
+                existing.topName = agent.name;
+                existing.topRevenue = agent.totalRevenue;
+              }
+            } else {
+              grouped.set(agent.walletAddress, {
+                agents: 1,
+                revenue: agent.totalRevenue,
+                jobs: agent.jobsCompleted,
+                topName: agent.name,
+                topRevenue: agent.totalRevenue,
+              });
+            }
+          }
+
+          // Sort by total revenue descending
+          const sorted = Array.from(grouped.entries())
+            .sort((a, b) => b[1].revenue - a[1].revenue)
+            .map(([wallet, info], i) => ({
+              rank: i + 1,
+              wallet,
+              agentCount: info.agents,
+              topAgentName: info.topName,
+              totalRevenue: info.revenue,
+              totalJobs: info.jobs,
+            }));
+
+          setCreators(sorted);
+        }
+      } catch {
+        // silently fail
+      } finally {
+        setLoadingCreators(false);
+      }
+    }
+    fetchCreators();
+  }, []);
+
+  const isLoading =
+    tab === "users"
+      ? loadingUsers
+      : tab === "agents"
+        ? loadingAgents
+        : loadingCreators;
 
   /* ---------- Tab button style (matches dashboard) ---------- */
 
@@ -287,6 +366,12 @@ export default function LeaderboardPage() {
               >
                 Agents
               </button>
+              <button
+                onClick={() => setTab("creators")}
+                style={tabBtnStyle(tab === "creators")}
+              >
+                Creators
+              </button>
             </div>
 
             {/* Card */}
@@ -448,7 +533,8 @@ export default function LeaderboardPage() {
                     </table>
                   </div>
                 )
-              ) : /* ── Agents (ELO) Table ── */
+              ) : tab === "agents" ? (
+                /* ── Agents (ELO) Table ── */
               agents.length === 0 ? (
                 emptyMessage
               ) : (
@@ -613,6 +699,153 @@ export default function LeaderboardPage() {
                           </tr>
                         );
                       })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+              ) : /* ── Creators (Revenue) Table ── */
+              creators.length === 0 ? (
+                emptyMessage
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                      minWidth: "700px",
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        <th style={{ ...headerCellStyle, width: "60px" }}>
+                          Rank
+                        </th>
+                        <th style={headerCellStyle}>Creator</th>
+                        <th
+                          style={{
+                            ...headerCellStyle,
+                            textAlign: "center",
+                          }}
+                        >
+                          Agents
+                        </th>
+                        <th style={headerCellStyle}>Top Agent</th>
+                        <th
+                          style={{
+                            ...headerCellStyle,
+                            textAlign: "right",
+                          }}
+                        >
+                          Total Revenue
+                        </th>
+                        <th
+                          style={{
+                            ...headerCellStyle,
+                            textAlign: "right",
+                          }}
+                        >
+                          Total Jobs
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {creators.map((c) => (
+                        <tr
+                          key={c.wallet}
+                          style={{ transition: "background-color 0.15s ease" }}
+                          {...rowHoverProps}
+                        >
+                          {/* Rank */}
+                          <td
+                            style={{
+                              ...cellStyle,
+                              fontWeight: 700,
+                              color: rankColor(c.rank),
+                              fontSize: c.rank <= 3 ? "16px" : "14px",
+                            }}
+                          >
+                            {rankLabel(c.rank)}
+                          </td>
+
+                          {/* Creator Wallet */}
+                          <td style={cellStyle}>
+                            <span
+                              style={{
+                                fontFamily: "monospace",
+                                fontSize: "13px",
+                                color:
+                                  c.rank <= 3
+                                    ? rankColor(c.rank)
+                                    : "rgba(255,255,255,0.7)",
+                              }}
+                            >
+                              {formatAddress(c.wallet)}
+                            </span>
+                          </td>
+
+                          {/* Agent Count */}
+                          <td
+                            style={{
+                              ...cellStyle,
+                              textAlign: "center",
+                              fontVariantNumeric: "tabular-nums",
+                            }}
+                          >
+                            {c.agentCount}
+                          </td>
+
+                          {/* Top Agent Name */}
+                          <td style={cellStyle}>
+                            <span
+                              style={{
+                                fontWeight: 600,
+                                color: "rgba(255,255,255,0.85)",
+                              }}
+                            >
+                              {c.topAgentName}
+                            </span>
+                          </td>
+
+                          {/* Total Revenue */}
+                          <td
+                            style={{
+                              ...cellStyle,
+                              textAlign: "right",
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                fontWeight: 600,
+                                color: BRAND,
+                                fontVariantNumeric: "tabular-nums",
+                              }}
+                            >
+                              <img
+                                src={USDC_LOGO_URL}
+                                alt="USDC"
+                                width={14}
+                                height={14}
+                                style={{ borderRadius: "50%" }}
+                              />
+                              {c.totalRevenue.toFixed(2)}
+                            </span>
+                          </td>
+
+                          {/* Total Jobs */}
+                          <td
+                            style={{
+                              ...cellStyle,
+                              textAlign: "right",
+                              fontVariantNumeric: "tabular-nums",
+                            }}
+                          >
+                            {c.totalJobs}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>

@@ -165,6 +165,8 @@ model HostedAgent {
   avatarSeed    String
   avatarUrl     String?  // uploaded profile image URL
   webEnabled    Boolean  @default(false)
+  pricePerPrompt Float   @default(0.05) // USDC per chat message, creator sets this
+  totalRevenue  Float    @default(0)    // accumulated revenue from chat usage
   metadataUri   String?  // on-chain metadata JSON URL
   onChainTx     String?  // Solana memo TX signature
   active        Boolean  @default(true)
@@ -357,6 +359,18 @@ model ProtocolFee {
   createdAt DateTime @default(now())
 
   @@index([paidBy])
+}
+
+/// Per-message revenue ledger for hosted agents.
+model AgentRevenue {
+  id            String   @id @default(cuid())
+  agentId       String
+  userWallet    String
+  amount        Float    // USDC charged for this prompt
+  createdAt     DateTime @default(now())
+
+  @@index([agentId])
+  @@index([userWallet])
 }
 
 /// Referral tracking.
