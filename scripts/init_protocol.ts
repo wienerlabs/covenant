@@ -28,7 +28,7 @@ import * as fs from "fs";
 
 dotenv.config({ path: path.join(__dirname, "../app/.env") });
 
-const PROGRAM_ID = new PublicKey("AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ");
+const PROGRAM_ID = new PublicKey("5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT");
 
 class NodeWallet {
   constructor(readonly payer: Keypair) {}

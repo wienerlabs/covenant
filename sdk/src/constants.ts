@@ -2,7 +2,7 @@ import { PublicKey } from "@solana/web3.js";
 
 /** Covenant program ID on Solana devnet / mainnet-beta. */
 export const COVENANT_PROGRAM_ID = new PublicKey(
-  "AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ",
+  "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT",
 );
 
 /** Devnet USDC mint (faucet-backed test mint used by covenant demos). */

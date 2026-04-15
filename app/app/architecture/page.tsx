@@ -75,7 +75,7 @@ const COMPONENTS: ArchComponent[] = [
     detail: "HApt...PTNo",
     row: 2,
     col: 1,
-    expandedInfo: "Anchor framework smart contract deployed at AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ. Manages escrow creation, acceptance, submission verification, and fund release.",
+    expandedInfo: "Anchor framework smart contract deployed at 5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT. Manages escrow creation, acceptance, submission verification, and fund release.",
   },
   {
     id: "zkvm",
@@ -91,7 +91,7 @@ const COMPONENTS: ArchComponent[] = [
 const DETAIL_CARDS = [
   {
     label: "Program ID",
-    value: "AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ",
+    value: "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT",
   },
   {
     label: "Database",

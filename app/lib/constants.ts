@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 
 export const PROGRAM_ID = new PublicKey(
-  "AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ"
+  "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT"
 );
 
 export const DEVNET_ENDPOINT = "https://api.devnet.solana.com";
