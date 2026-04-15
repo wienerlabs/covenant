@@ -5,6 +5,26 @@ import { useConnector } from "@solana/connector/react";
 import { SOL_LOGO_URL, USDC_LOGO_URL } from "@/lib/constants";
 import { onBalanceRefresh } from "@/lib/balance-bus";
 
+const CACHE_KEY = "covenant_balance_cache";
+
+function getCachedBalance(wallet: string): { sol: number; usdc: number } | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data.wallet === wallet && Date.now() - data.ts < 60_000) {
+      return { sol: data.sol, usdc: data.usdc };
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function setCachedBalance(wallet: string, sol: number, usdc: number) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ wallet, sol, usdc, ts: Date.now() }));
+  } catch { /* ignore */ }
+}
+
 export default function WalletBalance() {
   const { isConnected, account } = useConnector();
   const [sol, setSol] = useState<number | null>(null);
@@ -14,18 +34,31 @@ export default function WalletBalance() {
   const accountRef = useRef(account);
   accountRef.current = account;
 
+  // Load from cache instantly on mount
+  useEffect(() => {
+    if (isConnected && account) {
+      const cached = getCachedBalance(account);
+      if (cached) {
+        setSol(cached.sol);
+        setUsdc(cached.usdc);
+      }
+    }
+  }, [isConnected, account]);
+
   const fetchBalance = useCallback(async (highlight = false) => {
     const wallet = accountRef.current;
     if (!wallet) return;
     try {
-      // Cache-bust so the browser never holds a stale 10-second cached result
       const res = await fetch(`/api/balance/${wallet}?t=${Date.now()}`, {
         cache: "no-store",
       });
       if (res.ok) {
         const data = await res.json();
-        setSol(data.sol ?? 0);
-        setUsdc(data.usdc ?? 0);
+        const newSol = data.sol ?? 0;
+        const newUsdc = data.usdc ?? 0;
+        setSol(newSol);
+        setUsdc(newUsdc);
+        setCachedBalance(wallet, newSol, newUsdc);
         if (highlight) {
           setFlash(true);
           setTimeout(() => setFlash(false), 1200);
@@ -46,8 +79,6 @@ export default function WalletBalance() {
     void fetchBalance(false);
     intervalRef.current = setInterval(() => fetchBalance(false), 10000);
 
-    // Listen for imperative refreshes from any component that just moved
-    // the user's wallet balance (CreateJobForm, DisputeModal, etc.)
     const unsubscribe = onBalanceRefresh(() => {
       void fetchBalance(true);
     });
