@@ -202,7 +202,7 @@ const inputStyle: React.CSSProperties = {
 };
 
 const labelStyle: React.CSSProperties = {
-  fontSize: "12px",
+  fontSize: "14px",
   fontWeight: 700,
   color: "rgba(255,255,255,0.5)",
   textTransform: "uppercase",
@@ -579,7 +579,7 @@ export default function CreateAgentPage() {
                 </h1>
                 <p
                   style={{
-                    fontSize: "14px",
+                    fontSize: "16px",
                     color: "rgba(255,255,255,0.45)",
                     margin: 0,
                     maxWidth: "520px",
@@ -657,7 +657,7 @@ export default function CreateAgentPage() {
                           onClick={() => setCategory(cat.id)}
                           style={{
                             fontFamily: "inherit",
-                            fontSize: "12px",
+                            fontSize: "14px",
                             padding: "8px 16px",
                             borderRadius: "20px",
                             border:
@@ -679,7 +679,7 @@ export default function CreateAgentPage() {
                             letterSpacing: "0.05em",
                           }}
                         >
-                          <span style={{ marginRight: "6px", opacity: 0.6, fontSize: "10px" }}>
+                          <span style={{ marginRight: "6px", opacity: 0.6, fontSize: "12px" }}>
                             {cat.icon}
                           </span>
                           {cat.label}
@@ -746,8 +746,8 @@ export default function CreateAgentPage() {
                           onClick={() => applyTemplate(key)}
                           style={{
                             fontFamily: "inherit",
-                            fontSize: "11px",
-                            padding: "6px 14px",
+                            fontSize: "13px",
+                            padding: "8px 16px",
                             borderRadius: "6px",
                             border: `1px solid ${ACCENT}30`,
                             background: `${ACCENT}08`,
@@ -814,7 +814,7 @@ export default function CreateAgentPage() {
                                   position: "absolute",
                                   top: "6px",
                                   right: "6px",
-                                  fontSize: "8px",
+                                  fontSize: "10px",
                                   fontWeight: 700,
                                   textTransform: "uppercase",
                                   letterSpacing: "0.08em",
@@ -844,7 +844,7 @@ export default function CreateAgentPage() {
                             {/* Provider */}
                             <div
                               style={{
-                                fontSize: "10px",
+                                fontSize: "12px",
                                 color: "rgba(255,255,255,0.35)",
                                 textTransform: "uppercase",
                                 letterSpacing: "0.08em",
@@ -873,7 +873,7 @@ export default function CreateAgentPage() {
                                 <SpeedDots speed={m.speed} />
                                 <span
                                   style={{
-                                    fontSize: "10px",
+                                    fontSize: "12px",
                                     color: "rgba(255,255,255,0.3)",
                                   }}
                                 >
@@ -905,7 +905,7 @@ export default function CreateAgentPage() {
                       <div style={{ flex: 1 }}>
                         <div
                           style={{
-                            fontSize: "10px",
+                            fontSize: "12px",
                             color: "rgba(255,255,255,0.35)",
                             textTransform: "uppercase",
                             letterSpacing: "0.1em",
@@ -938,7 +938,7 @@ export default function CreateAgentPage() {
                       <div style={{ flex: 1 }}>
                         <div
                           style={{
-                            fontSize: "10px",
+                            fontSize: "12px",
                             color: "rgba(255,255,255,0.35)",
                             textTransform: "uppercase",
                             letterSpacing: "0.1em",
@@ -1004,13 +1004,13 @@ export default function CreateAgentPage() {
                             : testResult
                             ? "#22CC44"
                             : "rgba(255,255,255,0.2)",
-                          boxShadow: testing ? `0 0 8px ${ACCENT}` : "none",
-                          animation: testing ? "pulse-glow 1s ease-in-out infinite" : "none",
+                          animation: testing ? "pulse 1.5s infinite" : "none",
                         }}
                       />
                       <span
+                        className="font-display"
                         style={{
-                          fontSize: "12px",
+                          fontSize: "16px",
                           fontWeight: 700,
                           color: "rgba(255,255,255,0.5)",
                           textTransform: "uppercase",
@@ -1103,7 +1103,7 @@ export default function CreateAgentPage() {
                               gap: "16px",
                               padding: "10px 14px",
                               borderBottom: "1px solid rgba(255,255,255,0.06)",
-                              fontSize: "11px",
+                              fontSize: "13px",
                             }}
                           >
                             <div>
@@ -1131,7 +1131,7 @@ export default function CreateAgentPage() {
                             style={{
                               padding: "8px 14px",
                               borderBottom: "1px solid rgba(255,255,255,0.06)",
-                              fontSize: "11px",
+                              fontSize: "13px",
                               color: "rgba(255,255,255,0.4)",
                               fontStyle: "italic",
                             }}
