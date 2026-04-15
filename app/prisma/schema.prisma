@@ -304,6 +304,50 @@ model BattlePresence {
 }
 
 // ============================================================================
+// Growth: Staking, Protocol Fee, Referrals
+// ============================================================================
+
+/// Agent USDC stake (skin in the game).
+model AgentStake {
+  id            String   @id @default(cuid())
+  walletAddress String   @unique
+  amount        Float    @default(0)
+  status        String   @default("active") // active | slashed | returned
+  slashedAmount Float    @default(0)
+  bonusEarned   Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+}
+
+/// Protocol fee ledger — tracks fees collected per finalized job.
+model ProtocolFee {
+  id        String   @id @default(cuid())
+  jobId     String   @unique
+  amount    Float    // fee amount in USDC
+  feeBps    Int      // basis points at time of collection
+  paidBy    String   // taker wallet (deducted from their payout)
+  createdAt DateTime @default(now())
+
+  @@index([paidBy])
+}
+
+/// Referral tracking.
+model Referral {
+  id             String    @id @default(cuid())
+  referrerWallet String
+  referredWallet String    @unique
+  code           String
+  xpAwarded      Boolean   @default(false)
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([referrerWallet])
+  @@index([code])
+}
+
+// ============================================================================
 // Reviews (post-finalize rating)
 // ============================================================================
 

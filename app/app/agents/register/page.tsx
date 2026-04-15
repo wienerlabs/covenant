@@ -16,11 +16,17 @@ const CAPABILITIES = [
 ] as const;
 
 type Status = "idle" | "testing" | "success" | "error";
+type StakeStatus = "idle" | "staking" | "staked" | "error";
 
 interface RegisterResult {
   id: string;
   did: string;
   name: string;
+}
+
+interface StakeInfo {
+  amount: number;
+  status: string;
 }
 
 export default function AgentRegisterPage() {
@@ -34,6 +40,12 @@ export default function AgentRegisterPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [result, setResult] = useState<RegisterResult | null>(null);
+
+  // Staking state
+  const [stakeAmount, setStakeAmount] = useState("10");
+  const [stakeStatus, setStakeStatus] = useState<StakeStatus>("idle");
+  const [stakeError, setStakeError] = useState("");
+  const [stakeInfo, setStakeInfo] = useState<StakeInfo | null>(null);
 
   const toggleCap = useCallback((capId: string) => {
     setSelectedCaps((prev) => {
@@ -90,6 +102,55 @@ export default function AgentRegisterPage() {
       setErrorMsg("Network error. Please check your connection and try again.");
     }
   }, [account, name, description, endpointUrl, selectedCaps]);
+
+  // Fetch existing stake when registration succeeds
+  const fetchStake = useCallback(async () => {
+    if (!account) return;
+    try {
+      const res = await fetch(`/api/agents/stake?wallet=${account}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "active" && data.amount > 0) {
+          setStakeInfo(data);
+          setStakeStatus("staked");
+        }
+      }
+    } catch { /* ignore */ }
+  }, [account]);
+
+  const handleStake = useCallback(async () => {
+    if (!account) return;
+    const amount = parseFloat(stakeAmount);
+    if (isNaN(amount) || amount < 10) {
+      setStakeError("Minimum stake is 10 USDC");
+      return;
+    }
+
+    setStakeStatus("staking");
+    setStakeError("");
+
+    try {
+      const res = await fetch("/api/agents/stake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: account, amount }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setStakeStatus("error");
+        setStakeError(data.error || "Staking failed");
+        return;
+      }
+
+      setStakeInfo(data);
+      setStakeStatus("staked");
+    } catch {
+      setStakeStatus("error");
+      setStakeError("Network error. Please try again.");
+    }
+  }, [account, stakeAmount]);
 
   // ── Shared styles ───────────────────────────────────────────────────────
   const inputStyle: React.CSSProperties = {
@@ -294,6 +355,138 @@ export default function AgentRegisterPage() {
                   >
                     {result.did}
                   </div>
+                  {/* Stake USDC Section */}
+                  <div
+                    style={{
+                      backgroundColor: "rgba(0,0,0,0.3)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: "12px",
+                      padding: "24px",
+                      marginBottom: "24px",
+                      textAlign: "left",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        marginBottom: "12px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "14px",
+                          fontWeight: 700,
+                          color: "#ffffff",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        Stake USDC
+                      </div>
+                      {stakeStatus === "staked" && (
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            padding: "2px 10px",
+                            borderRadius: "4px",
+                            backgroundColor: "rgba(255,254,178,0.15)",
+                            border: "1px solid #fffeb2",
+                            color: "#fffeb2",
+                          }}
+                        >
+                          Staked
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      style={{
+                        fontSize: "13px",
+                        color: "rgba(255,255,255,0.5)",
+                        margin: "0 0 16px 0",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Stake USDC to boost your agent&apos;s credibility. Minimum 10 USDC.
+                    </p>
+
+                    {stakeStatus === "staked" && stakeInfo ? (
+                      <div
+                        style={{
+                          fontSize: "14px",
+                          color: "#fffeb2",
+                          fontWeight: 600,
+                          padding: "12px 16px",
+                          backgroundColor: "rgba(255,254,178,0.08)",
+                          borderRadius: "8px",
+                          border: "1px solid rgba(255,254,178,0.2)",
+                          textAlign: "center",
+                        }}
+                      >
+                        {stakeInfo.amount} USDC staked
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                          <input
+                            type="number"
+                            min="10"
+                            step="1"
+                            value={stakeAmount}
+                            onChange={(e) => setStakeAmount(e.target.value)}
+                            placeholder="10"
+                            style={{
+                              ...inputStyle,
+                              flex: 1,
+                            }}
+                            onFocus={(e) => {
+                              e.currentTarget.style.borderColor = "rgba(255,254,178,0.4)";
+                            }}
+                            onBlur={(e) => {
+                              e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
+                            }}
+                          />
+                          <button
+                            onClick={handleStake}
+                            disabled={stakeStatus === "staking"}
+                            style={{
+                              fontFamily: "inherit",
+                              fontSize: "13px",
+                              fontWeight: 700,
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              padding: "12px 24px",
+                              cursor: stakeStatus === "staking" ? "not-allowed" : "pointer",
+                              border: "1px solid #fffeb2",
+                              borderRadius: "8px",
+                              backgroundColor: stakeStatus === "staking" ? "rgba(255,254,178,0.1)" : "#fffeb2",
+                              color: stakeStatus === "staking" ? "#fffeb2" : "#000000",
+                              transition: "all 0.2s ease",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {stakeStatus === "staking" ? "Staking..." : "Stake"}
+                          </button>
+                        </div>
+                        {stakeStatus === "error" && stakeError && (
+                          <div
+                            style={{
+                              fontSize: "12px",
+                              color: "#FF425E",
+                              marginTop: "8px",
+                            }}
+                          >
+                            {stakeError}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
                   <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
                     <Link href="/agents" style={{ textDecoration: "none" }}>
                       <button
@@ -323,6 +516,8 @@ export default function AgentRegisterPage() {
                         setEndpointUrl("");
                         setDescription("");
                         setSelectedCaps(new Set());
+                        setStakeStatus("idle");
+                        setStakeInfo(null);
                       }}
                       style={{
                         fontFamily: "inherit",

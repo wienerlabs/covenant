@@ -48,6 +48,13 @@ export default function LandingPage() {
   const [postHover, setPostHover] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
+  // Capture referral code from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref) localStorage.setItem("covenant_ref", ref);
+  }, []);
+
   // Show onboarding wizard for first-time visitors
   useEffect(() => {
     if (localStorage.getItem("covenant_onboarded") !== "true") {

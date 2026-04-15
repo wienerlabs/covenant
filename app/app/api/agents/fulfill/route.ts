@@ -165,6 +165,21 @@ export async function POST(req: NextRequest) {
       await awardXP(job.posterWallet, XP_REWARDS.job_post, "job_post");
     } catch { /* best effort */ }
 
+    // Check referral — award XP on first job completion
+    try {
+      const ref = await prisma.referral.findUnique({
+        where: { referredWallet: job.posterWallet },
+      });
+      if (ref && !ref.xpAwarded) {
+        await prisma.referral.update({
+          where: { id: ref.id },
+          data: { xpAwarded: true, completedAt: new Date() },
+        });
+        await awardXP(ref.referrerWallet, 30, "referral_bonus");
+        await awardXP(ref.referredWallet, 15, "referred_bonus");
+      }
+    } catch { /* best effort */ }
+
     return NextResponse.json({
       ok: true,
       jobId,

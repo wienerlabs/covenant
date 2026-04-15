@@ -43,3 +43,5 @@ export const USDC_LOGO_URL =
 
 export const SOL_LOGO_URL =
   "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png";
+
+export const PROTOCOL_FEE_BPS = 150; // 1.5%

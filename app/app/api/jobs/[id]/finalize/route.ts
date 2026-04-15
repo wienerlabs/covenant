@@ -4,6 +4,7 @@ import { sendMarkerTransaction } from "@/lib/solana";
 import { releaseFundsToTaker } from "@/lib/escrow";
 import { awardXP, XP_REWARDS } from "@/lib/xp";
 import { checkAndUnlock } from "@/lib/achievements";
+import { PROTOCOL_FEE_BPS } from "@/lib/constants";
 import crypto from "crypto";
 
 /**
@@ -111,6 +112,11 @@ export async function POST(
       }
     }
 
+    // 2b. Calculate protocol fee (recorded only — on-chain deduction comes at mainnet)
+    const feeAmount = (job.amount * PROTOCOL_FEE_BPS) / 10000;
+    const takerPayout = job.amount - feeAmount;
+    console.log(`[finalize] fee=${feeAmount} takerPayout=${takerPayout} job=${id}`);
+
     // 3. Update related DB records
     const updated = await prisma.$transaction(async (tx) => {
       const j = await tx.job.findUnique({ where: { id } });
@@ -139,6 +145,8 @@ export async function POST(
             taker: job.takerWallet,
             crank: caller,
             paymentTxHash,
+            feeAmount,
+            takerPayout,
           },
         },
       });
@@ -151,6 +159,15 @@ export async function POST(
           wallet: caller,
           amount: job.amount,
           status: "confirmed",
+        },
+      });
+      // Record protocol fee
+      await tx.protocolFee.create({
+        data: {
+          jobId: id,
+          amount: feeAmount,
+          feeBps: PROTOCOL_FEE_BPS,
+          paidBy: job.takerWallet as string,
         },
       });
       return j;

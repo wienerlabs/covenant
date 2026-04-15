@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useConnector } from "@solana/connector/react";
 import Link from "next/link";
 import useProfile from "@/hooks/useProfile";
@@ -33,6 +33,27 @@ export default function ProfilePage() {
   const [avatarToast, setAvatarToast] = useState<string | null>(null);
   const [avatarHover, setAvatarHover] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Referral state
+  const [referralCode, setReferralCode] = useState("");
+  const [referralCount, setReferralCount] = useState(0);
+  const [referralCopied, setReferralCopied] = useState(false);
+
+  const fetchReferral = useCallback(async () => {
+    if (!wallet) return;
+    try {
+      const res = await fetch(`/api/referral/${wallet}`);
+      if (res.ok) {
+        const data = await res.json();
+        setReferralCode(data.code || "");
+        setReferralCount(data.referralCount || 0);
+      }
+    } catch { /* ignore */ }
+  }, [wallet]);
+
+  useEffect(() => {
+    if (wallet) fetchReferral();
+  }, [wallet, fetchReferral]);
 
   function openEdit() {
     if (!profile) return;
@@ -639,6 +660,77 @@ export default function ProfilePage() {
                   </>
                 )}
               </div>
+
+              {/* Your Referral Link */}
+              {referralCode && (
+                <div style={{
+                  backgroundColor: "rgba(0,0,0,0.3)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: "12px",
+                  backdropFilter: "blur(16px)",
+                  padding: "24px 32px",
+                }}>
+                  <div className="font-display" style={{ fontSize: "20px", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginBottom: "20px", letterSpacing: "0.08em" }}>
+                    Your Referral Link
+                  </div>
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    marginBottom: "16px",
+                  }}>
+                    <div style={{
+                      flex: 1,
+                      padding: "12px 14px",
+                      fontSize: "13px",
+                      fontFamily: "monospace",
+                      color: "#fffeb2",
+                      backgroundColor: "rgba(255,254,178,0.06)",
+                      border: "1px solid rgba(255,254,178,0.2)",
+                      borderRadius: "8px",
+                      wordBreak: "break-all",
+                    }}>
+                      covenant.run/?ref={referralCode}
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`https://covenant.run/?ref=${referralCode}`);
+                        setReferralCopied(true);
+                        setTimeout(() => setReferralCopied(false), 2000);
+                      }}
+                      style={{
+                        fontFamily: "inherit",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        padding: "12px 20px",
+                        cursor: "pointer",
+                        border: "1px solid #fffeb2",
+                        borderRadius: "8px",
+                        backgroundColor: referralCopied ? "#fffeb2" : "rgba(255,254,178,0.1)",
+                        color: referralCopied ? "#000000" : "#fffeb2",
+                        transition: "all 0.2s ease",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {referralCopied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}>
+                    <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
+                      Referrals: <span style={{ color: "#fffeb2", fontWeight: 600 }}>{referralCount}</span>
+                    </span>
+                    <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>
+                      Earn 30 XP per referred user who completes a job
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Reputation */}
               <div style={{
