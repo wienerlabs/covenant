@@ -50,12 +50,15 @@ export async function POST(
         { status: 400 },
       );
     }
-    if (ARBITRATORS.length > 0 && !ARBITRATORS.includes(arbitratorWallet)) {
+    if (ARBITRATORS.length === 0) {
       return NextResponse.json(
-        {
-          error: "Wallet is not a whitelisted arbitrator",
-          whitelist: ARBITRATORS.length,
-        },
+        { error: "Arbitrator list not configured" },
+        { status: 503 },
+      );
+    }
+    if (!ARBITRATORS.includes(arbitratorWallet)) {
+      return NextResponse.json(
+        { error: "Not a whitelisted arbitrator" },
         { status: 403 },
       );
     }

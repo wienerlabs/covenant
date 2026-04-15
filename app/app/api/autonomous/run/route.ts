@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
   }
 
   const maxRounds = Math.max(1, Math.min(10, body.maxRounds || 3));
-  const agentWallet = body.agentWallet || AGENT_OMEGA.wallet;
+  const agentWallet = AGENT_OMEGA.wallet;
 
   const encoder = new TextEncoder();
   const globalStart = Date.now();

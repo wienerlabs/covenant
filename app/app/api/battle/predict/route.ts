@@ -92,6 +92,12 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "battleId, winner required" }, { status: 400 });
     }
 
+    // Verify the battle actually exists before resolving predictions
+    const battle = await prisma.arenaBattle.findUnique({ where: { id: battleId } });
+    if (!battle) {
+      return NextResponse.json({ error: "Battle not found" }, { status: 404 });
+    }
+
     const predictions = await prisma.battlePrediction.findMany({
       where: { battleId, correct: null },
     });

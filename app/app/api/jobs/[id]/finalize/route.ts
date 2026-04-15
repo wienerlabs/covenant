@@ -70,7 +70,21 @@ export async function POST(
       );
     }
 
-    // 1. Release escrow (skip for agent-fulfilled jobs — no real USDC was locked)
+    // 1. Atomically claim the finalization (prevent double-payment race)
+    const claimed = await prisma.job.updateMany({
+      where: { id, status: "Delivered" },
+      data: { status: "Finalized" },
+    });
+    if (claimed.count === 0) {
+      // Another request already finalized — return success (idempotent)
+      return NextResponse.json({
+        job: { id, status: "Finalized" },
+        paymentTxHash: "already-finalized",
+        finalizedBy: caller,
+      });
+    }
+
+    // 2. Release escrow (skip for agent-fulfilled jobs — no real USDC was locked)
     const isAgentJob = job.takerWallet.startsWith("covenant-agent-");
     let paymentTxHash: string | null = null;
     if (isAgentJob) {
@@ -81,6 +95,11 @@ export async function POST(
         paymentTxHash = result.txHash;
       } catch (err) {
         console.error("[finalize] escrow release failed:", err);
+        // Revert status so it can be retried
+        await prisma.job.updateMany({
+          where: { id, status: "Finalized" },
+          data: { status: "Delivered" },
+        });
         return NextResponse.json(
           {
             error:
@@ -92,12 +111,9 @@ export async function POST(
       }
     }
 
-    // 2. Update DB
+    // 3. Update related DB records
     const updated = await prisma.$transaction(async (tx) => {
-      const j = await tx.job.update({
-        where: { id },
-        data: { status: "Finalized" },
-      });
+      const j = await tx.job.findUnique({ where: { id } });
       await tx.reputation.upsert({
         where: { walletAddress: job.takerWallet as string },
         create: {

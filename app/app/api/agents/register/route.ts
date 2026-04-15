@@ -21,6 +21,22 @@ function isValidUrl(str: string): boolean {
   }
 }
 
+function isPrivateUrl(urlStr: string): boolean {
+  try {
+    const url = new URL(urlStr);
+    const hostname = url.hostname;
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") return true;
+    if (hostname.startsWith("10.")) return true;
+    if (hostname.startsWith("192.168.")) return true;
+    if (hostname.startsWith("169.254.")) return true;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true;
+    if (hostname.endsWith(".internal") || hostname.endsWith(".local")) return true;
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 // ── POST: Register a new agent ──────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
@@ -78,6 +94,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Maximum of 5 agents per wallet. Remove an existing agent before registering a new one." },
         { status: 429 },
+      );
+    }
+
+    // ── SSRF protection: block private/internal URLs ──────────────────────
+    if (isPrivateUrl(endpointUrl)) {
+      return NextResponse.json(
+        { error: "Private/internal URLs not allowed" },
+        { status: 400 },
       );
     }
 

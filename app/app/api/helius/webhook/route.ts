@@ -256,13 +256,5 @@ export async function POST(req: NextRequest) {
 
 /** Simple health check for Helius webhook URL validation. */
 export async function GET() {
-  const hasSecret = Boolean(HELIUS_WEBHOOK_SECRET);
-  return NextResponse.json({
-    status: "ok",
-    endpoint: "/api/helius/webhook",
-    authConfigured: hasSecret,
-    note: hasSecret
-      ? "Ready. POST transaction payloads to this endpoint."
-      : "WARNING: HELIUS_WEBHOOK_SECRET not set; endpoint is unauthenticated.",
-  });
+  return NextResponse.json({ status: "ok" });
 }

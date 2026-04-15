@@ -43,7 +43,7 @@ export const revalidate = 0;
 const CRON_SECRET = process.env.CRON_SECRET ?? "";
 
 function authorized(req: NextRequest): boolean {
-  if (!CRON_SECRET) return true;
+  if (!CRON_SECRET) return false;
   const header = req.headers.get("authorization");
   return (
     header === `Bearer ${CRON_SECRET}` ||
