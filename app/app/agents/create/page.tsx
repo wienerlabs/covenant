@@ -440,7 +440,7 @@ export default function CreateAgentPage() {
       <style>{PAGE_STYLES}</style>
 
       <div style={{ position: "relative", zIndex: 2 }}>
-        <NavBar activeTab="agents" variant="dark" />
+        <NavBar activeTab="create" variant="dark" />
 
         <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "48px 24px" }}>
           {/* ======================================================== */}
