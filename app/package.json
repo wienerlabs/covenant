@@ -18,6 +18,7 @@
     "@solana/web3.js": "^1.98.4",
     "@types/bn.js": "^5.2.0",
     "@types/nprogress": "^0.2.3",
+    "@vercel/blob": "^2.3.3",
     "@walletconnect/universal-provider": "^2.23.9",
     "bn.js": "^5.2.3",
     "bs58": "^6.0.0",

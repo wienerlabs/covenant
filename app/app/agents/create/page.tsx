@@ -277,6 +277,11 @@ export default function CreateAgentPage() {
   const [testNote, setTestNote] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
 
+  /* ---- Avatar state ---- */
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
   /* ---- Create state ---- */
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState(false);
@@ -369,6 +374,19 @@ export default function CreateAgentPage() {
     setCreating(true);
 
     try {
+      let avatarUrl: string | undefined;
+      if (avatarFile) {
+        setUploadingAvatar(true);
+        const formData = new FormData();
+        formData.append("avatar", avatarFile);
+        const uploadRes = await fetch("/api/hosted-agents/avatar", { method: "POST", body: formData });
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          avatarUrl = uploadData.url;
+        }
+        setUploadingAvatar(false);
+      }
+
       const res = await fetch("/api/hosted-agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -380,6 +398,7 @@ export default function CreateAgentPage() {
           model: selectedModel,
           minPrice: Number(minPrice),
           maxPrice: Number(maxPrice),
+          avatarUrl,
         }),
       });
 
@@ -399,7 +418,7 @@ export default function CreateAgentPage() {
     } finally {
       setCreating(false);
     }
-  }, [formValid, walletAddress, name, category, systemPrompt, selectedModel, minPrice, maxPrice]);
+  }, [formValid, walletAddress, name, category, systemPrompt, selectedModel, minPrice, maxPrice, avatarFile]);
 
   /* ---- Apply template ---- */
   function applyTemplate(key: string) {
@@ -531,6 +550,8 @@ export default function CreateAgentPage() {
                     setMaxPrice("50");
                     setTestResult("");
                     setTestPrompt("");
+                    setAvatarFile(null);
+                    setAvatarPreview(null);
                   }}
                   style={{
                     fontFamily: "inherit",
@@ -608,6 +629,51 @@ export default function CreateAgentPage() {
                 {/*  LEFT COLUMN: Form                                    */}
                 {/* ---------------------------------------------------- */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                  {/* ---- Agent Avatar ---- */}
+                  <div style={glassCard}>
+                    <label style={labelStyle}>Agent Avatar</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+                      {/* Preview circle */}
+                      <div style={{
+                        width: "80px", height: "80px", borderRadius: "12px",
+                        border: "2px dashed rgba(255,255,255,0.2)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        overflow: "hidden", flexShrink: 0,
+                        backgroundColor: "rgba(255,255,255,0.03)",
+                      }}>
+                        {avatarPreview ? (
+                          <img src={avatarPreview} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <span style={{ fontSize: "24px", color: "rgba(255,255,255,0.15)" }}>+</span>
+                        )}
+                      </div>
+                      {/* Upload button */}
+                      <div>
+                        <label style={{
+                          fontFamily: "inherit", fontSize: "13px", fontWeight: 600,
+                          padding: "10px 20px", borderRadius: "8px",
+                          border: "1px solid rgba(255,254,178,0.3)", backgroundColor: "rgba(255,254,178,0.08)",
+                          color: "#fffeb2", cursor: "pointer", display: "inline-block",
+                          textTransform: "uppercase", letterSpacing: "0.06em",
+                        }}>
+                          {avatarFile ? "Change Image" : "Upload Image"}
+                          <input type="file" accept="image/*" style={{ display: "none" }}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) {
+                                setAvatarFile(f);
+                                setAvatarPreview(URL.createObjectURL(f));
+                              }
+                            }}
+                          />
+                        </label>
+                        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", marginTop: "8px" }}>
+                          PNG, JPG or WebP. Max 2 MB.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* ---- Agent Name ---- */}
                   <div style={glassCard}>
                     <label style={labelStyle}>Agent Name</label>

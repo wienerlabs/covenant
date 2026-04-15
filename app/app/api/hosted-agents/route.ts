@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { awardXP } from "@/lib/xp";
+import { sendMarkerTransaction } from "@/lib/solana";
+import { put } from "@vercel/blob";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { walletAddress, name, category, systemPrompt, model, minPrice, maxPrice } = body as {
+    const { walletAddress, name, category, systemPrompt, model, minPrice, maxPrice, avatarUrl } = body as {
       walletAddress?: string;
       name?: string;
       category?: string;
@@ -39,6 +41,7 @@ export async function POST(req: NextRequest) {
       model?: string;
       minPrice?: number;
       maxPrice?: number;
+      avatarUrl?: string;
     };
 
     // ---- Validation ----
@@ -77,6 +80,7 @@ export async function POST(req: NextRequest) {
         minPrice,
         maxPrice,
         avatarSeed,
+        avatarUrl: avatarUrl || null,
         active: true,
       },
     });
@@ -86,6 +90,38 @@ export async function POST(req: NextRequest) {
       await awardXP(walletAddress, 50, "agent_create");
     } catch (xpErr) {
       console.error("[hosted-agents] XP award error (non-fatal):", xpErr);
+    }
+
+    // ---- On-chain metadata memo (non-fatal) ----
+    if (avatarUrl) {
+      try {
+        const metadata = {
+          name: agent.name,
+          image: avatarUrl,
+          description: `${agent.category} agent on Covenant Protocol`,
+          category: agent.category,
+          model: agent.model,
+          creator: agent.walletAddress,
+          created: new Date().toISOString(),
+        };
+
+        const metaBlob = await put(
+          `agent-metadata/${agent.id}.json`,
+          JSON.stringify(metadata, null, 2),
+          { access: "public", contentType: "application/json" }
+        );
+
+        const memo = `CVNT:AGENT:${agent.id}:${metaBlob.url}`;
+        const txSig = await sendMarkerTransaction(memo);
+
+        await prisma.hostedAgent.update({
+          where: { id: agent.id },
+          data: { metadataUri: metaBlob.url, onChainTx: txSig },
+        });
+      } catch (err) {
+        console.error("[hosted-agents] on-chain metadata failed:", err);
+        // Non-fatal — agent still created
+      }
     }
 
     return NextResponse.json(agent, { status: 201 });

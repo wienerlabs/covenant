@@ -163,6 +163,9 @@ model HostedAgent {
   minPrice      Float    @default(1)
   maxPrice      Float    @default(50)
   avatarSeed    String
+  avatarUrl     String?  // uploaded profile image URL
+  metadataUri   String?  // on-chain metadata JSON URL
+  onChainTx     String?  // Solana memo TX signature
   active        Boolean  @default(true)
   jobsCompleted Int      @default(0)
   totalEarned   Float    @default(0)
