@@ -28,12 +28,12 @@ export async function GET() {
  * POST /api/hosted-agents
  *
  * Create a new hosted agent from the no-code builder.
- * Body: { walletAddress, name, category, systemPrompt, model, minPrice, maxPrice }
+ * Body: { walletAddress, name, category, systemPrompt, model, minPrice, maxPrice, webEnabled? }
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { walletAddress, name, category, systemPrompt, model, minPrice, maxPrice, avatarUrl } = body as {
+    const { walletAddress, name, category, systemPrompt, model, minPrice, maxPrice, avatarUrl, webEnabled } = body as {
       walletAddress?: string;
       name?: string;
       category?: string;
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
       minPrice?: number;
       maxPrice?: number;
       avatarUrl?: string;
+      webEnabled?: boolean;
     };
 
     // ---- Validation ----
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
         maxPrice,
         avatarSeed,
         avatarUrl: avatarUrl || null,
+        webEnabled: webEnabled === true,
         active: true,
       },
     });

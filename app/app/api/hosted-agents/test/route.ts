@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { webSearch } from "@/lib/web-search";
+import { getSolanaContext } from "@/lib/solana-agent";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -16,15 +18,17 @@ const ANTHROPIC_MODEL_MAP: Record<string, string> = {
  * POST /api/hosted-agents/test
  *
  * Test an agent prompt in the playground.
- * Body: { systemPrompt, model, userPrompt }
+ * Body: { systemPrompt, model, userPrompt, webEnabled? }
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { systemPrompt, model, userPrompt } = body as {
+    const { systemPrompt, model, userPrompt, webEnabled, category } = body as {
       systemPrompt?: string;
       model?: string;
       userPrompt?: string;
+      webEnabled?: boolean;
+      category?: string;
     };
 
     if (!systemPrompt || typeof systemPrompt !== "string") {
@@ -38,6 +42,23 @@ export async function POST(req: NextRequest) {
     }
 
     const startTime = Date.now();
+
+    // If web access is enabled, search and prepend results to user prompt
+    let contextEnhanced = userPrompt;
+    if (webEnabled) {
+      const searchResults = await webSearch(userPrompt.slice(0, 100));
+      if (searchResults) {
+        contextEnhanced = `${searchResults}\n\n---\nUser Request: ${userPrompt}`;
+      }
+    }
+
+    // If Solana agent or query contains a Solana address, fetch on-chain context
+    if (category === "solana_agent" || /[1-9A-HJ-NP-Za-km-z]{32,44}/.test(userPrompt)) {
+      const solanaContext = await getSolanaContext(userPrompt);
+      if (solanaContext) {
+        contextEnhanced = `${solanaContext}\n\n${contextEnhanced}`;
+      }
+    }
 
     // Determine which Anthropic model to use
     const isAnthropicNative = model.startsWith("claude-");
@@ -57,7 +78,7 @@ export async function POST(req: NextRequest) {
         model: anthropicModelId,
         max_tokens: 1024,
         system: systemPrompt.trim(),
-        messages: [{ role: "user", content: userPrompt.trim() }],
+        messages: [{ role: "user", content: contextEnhanced.trim() }],
       });
 
       const textBlock = aiResponse.content.find(

@@ -109,9 +109,46 @@ interface PublishedAgentData {
   walletAddress: string;
 }
 
+interface HostedAgentData {
+  id: string;
+  name: string;
+  category: string;
+  model: string;
+  minPrice: number;
+  maxPrice: number;
+  avatarSeed: string;
+  avatarUrl?: string | null;
+  walletAddress: string;
+  onChainTx?: string | null;
+  jobsCompleted: number;
+  totalEarned: number;
+}
+
+function getCategoryColor(cat: string): string {
+  const map: Record<string, string> = {
+    text_writing: "#a78bfa",
+    code_review: "#60a5fa",
+    translation: "#34d399",
+    data_labeling: "#fbbf24",
+    bug_bounty: "#f87171",
+    design: "#f472b6",
+    writing: "#a78bfa",
+  };
+  return map[cat] || "#fffeb2";
+}
+
+function formatCategory(cat: string): string {
+  return cat
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export default function AgentsPage() {
   const [selectedAgent, setSelectedAgent] = useState<AgentCard | null>(null);
   const [publishedAgents, setPublishedAgents] = useState<PublishedAgentData[]>([]);
+  const [hostedAgents, setHostedAgents] = useState<HostedAgentData[]>([]);
+  const [selectedHosted, setSelectedHosted] = useState<HostedAgentData | null>(null);
 
   useEffect(() => {
     async function fetchPublished() {
@@ -126,6 +163,15 @@ export default function AgentsPage() {
       }
     }
     fetchPublished();
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/hosted-agents")
+      .then((r) => r.json())
+      .then((data) => {
+        setHostedAgents(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
   }, []);
 
   // Hire flow: clicking "Hire" opens a HireModal where the user
@@ -267,7 +313,7 @@ export default function AgentsPage() {
           {publishedAgents.length > 0 && (
             <div style={{ marginTop: "48px" }}>
               <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff", textTransform: "uppercase", textAlign: "center", marginBottom: "24px" }}>
-                Community Agents
+                Published Agents
               </h2>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px" }}>
                 {publishedAgents.map((agent) => {
@@ -312,10 +358,205 @@ export default function AgentsPage() {
               </div>
             </div>
           )}
+
+          {/* Community Agents (Hosted) */}
+          <div style={{ marginTop: "56px" }}>
+            <h2
+              style={{
+                fontFamily: "'Pixelify Sans', var(--font-display), sans-serif",
+                fontSize: "20px",
+                fontWeight: 700,
+                color: "#ffffff",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                textAlign: "center",
+                marginBottom: "28px",
+              }}
+            >
+              Community Agents
+            </h2>
+
+            {hostedAgents.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.45)", margin: "0 0 16px 0" }}>
+                  No community agents yet. Create yours!
+                </p>
+                <Link href="/agents/create" style={{ textDecoration: "none" }}>
+                  <button
+                    style={{
+                      fontFamily: "inherit",
+                      fontSize: "12px",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      padding: "10px 24px",
+                      cursor: "pointer",
+                      border: "1px solid #fffeb2",
+                      borderRadius: "8px",
+                      backgroundColor: "#fffeb2",
+                      color: "#000000",
+                      fontWeight: 700,
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    + Create Agent
+                  </button>
+                </Link>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px" }}>
+                {hostedAgents.map((ha) => {
+                  const catColor = getCategoryColor(ha.category);
+                  return (
+                    <div
+                      key={ha.id}
+                      style={{
+                        border: `1px solid ${catColor}30`,
+                        borderRadius: "16px",
+                        backgroundColor: "rgba(0,0,0,0.35)",
+                        backdropFilter: "blur(16px)",
+                        padding: "28px 24px",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "14px",
+                        transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = `${catColor}60`;
+                        e.currentTarget.style.boxShadow = `0 0 30px ${catColor}15`;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = `${catColor}30`;
+                        e.currentTarget.style.boxShadow = "none";
+                      }}
+                    >
+                      {/* Avatar */}
+                      <div style={{ width: "64px", height: "64px", borderRadius: "12px", overflow: "hidden", flexShrink: 0 }}>
+                        {ha.avatarUrl ? (
+                          <img
+                            src={ha.avatarUrl}
+                            alt={ha.name}
+                            style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "12px" }}
+                          />
+                        ) : (
+                          <PixelAgent seed={ha.avatarSeed} color={catColor} size={64} state="idle" />
+                        )}
+                      </div>
+
+                      {/* Name + Category */}
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "16px", fontWeight: 700, color: "#ffffff", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          {ha.name}
+                        </div>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            marginTop: "6px",
+                            fontSize: "9px",
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
+                            padding: "3px 10px",
+                            borderRadius: "99px",
+                            backgroundColor: `${catColor}20`,
+                            color: catColor,
+                          }}
+                        >
+                          {formatCategory(ha.category)}
+                        </span>
+                      </div>
+
+                      {/* Model */}
+                      <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                        {ha.model}
+                      </div>
+
+                      {/* Price range */}
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#fffeb2" }}>
+                        {ha.minPrice}-{ha.maxPrice} USDC
+                      </div>
+
+                      {/* Stats */}
+                      <div style={{ display: "flex", gap: "20px", fontSize: "11px" }}>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                            Jobs
+                          </div>
+                          <div style={{ color: "#fffeb2", fontWeight: 600 }}>{ha.jobsCompleted}</div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                            Earned
+                          </div>
+                          <div style={{ color: "#fffeb2", fontWeight: 600 }}>${ha.totalEarned.toFixed(0)}</div>
+                        </div>
+                      </div>
+
+                      {/* Creator wallet */}
+                      <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
+                        by {ha.walletAddress.slice(0, 4)}...{ha.walletAddress.slice(-4)}
+                      </div>
+
+                      {/* On-chain badge */}
+                      {ha.onChainTx && (
+                        <a
+                          href={`https://explorer.solana.com/tx/${ha.onChainTx}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            fontSize: "9px",
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                            backgroundColor: "rgba(52,211,153,0.15)",
+                            color: "#34d399",
+                            textDecoration: "none",
+                            transition: "background-color 0.2s ease",
+                          }}
+                        >
+                          On-Chain
+                        </a>
+                      )}
+
+                      {/* Hire button */}
+                      <button
+                        onClick={() => setSelectedHosted(ha)}
+                        style={{
+                          fontFamily: "inherit",
+                          fontSize: "13px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          padding: "12px 24px",
+                          width: "100%",
+                          cursor: "pointer",
+                          border: "1px solid #fffeb2",
+                          borderRadius: "8px",
+                          backgroundColor: "#fffeb2",
+                          color: "#000000",
+                          fontWeight: 700,
+                          transition: "all 0.2s ease",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = "#fffeb2cc";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = "#fffeb2";
+                        }}
+                      >
+                        Hire
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Hire Modal */}
+      {/* Hire Modal -- built-in agents */}
       {selectedAgent && (
         <HireModal
           open={true}
@@ -326,6 +567,20 @@ export default function AgentsPage() {
           suggestedPrice={selectedAgent.price}
           category={selectedAgent.type}
           onJobCreated={() => setSelectedAgent(null)}
+        />
+      )}
+
+      {/* Hire Modal -- community hosted agents */}
+      {selectedHosted && (
+        <HireModal
+          open={true}
+          onClose={() => setSelectedHosted(null)}
+          agentName={selectedHosted.name}
+          agentType={selectedHosted.category}
+          specialty={formatCategory(selectedHosted.category)}
+          suggestedPrice={selectedHosted.minPrice}
+          category={selectedHosted.category}
+          onJobCreated={() => setSelectedHosted(null)}
         />
       )}
     </div>

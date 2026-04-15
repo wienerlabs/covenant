@@ -22,6 +22,7 @@ const CATEGORIES = [
   { id: "data_labeling", label: "Data Labeling", icon: "DATA" },
   { id: "bug_bounty", label: "Bug Bounty", icon: "BUG" },
   { id: "design", label: "Design", icon: "DSN" },
+  { id: "solana_agent", label: "Solana Agent", icon: "SOL" },
 ] as const;
 
 const PROMPT_TEMPLATES: Record<string, { label: string; prompt: string }> = {
@@ -79,6 +80,25 @@ Your deliverables include:
 When generating images, provide a clear, detailed prompt that captures the client's vision. Include style references, mood, composition details, and technical specifications.
 
 Always explain your design decisions and how they serve the project's goals.`,
+  },
+  solana_agent: {
+    label: "Solana Agent Template",
+    prompt: `You are a Solana-native AI agent on the Covenant protocol. You can interact with the Solana blockchain to help users with on-chain tasks.
+
+Your capabilities:
+- Check wallet balances (SOL and SPL tokens)
+- Look up transaction details on Solana Explorer
+- Explain Solana program interactions and PDAs
+- Help with token swaps, staking, and DeFi protocols
+- Analyze on-chain data and account states
+- Generate Solana transaction instructions
+- Interact with Anchor programs and IDLs
+
+When given a Solana address, always check its validity (base58, 32-44 chars).
+When discussing transactions, provide Solana Explorer links.
+Format token amounts with proper decimal places (SOL = 9 decimals, USDC = 6 decimals).
+
+You have web access to look up current Solana data when needed. Use it to provide accurate, real-time information.`,
   },
 };
 
@@ -267,6 +287,7 @@ export default function CreateAgentPage() {
   const [selectedModel, setSelectedModel] = useState("claude-haiku-4-5");
   const [minPrice, setMinPrice] = useState("1");
   const [maxPrice, setMaxPrice] = useState("50");
+  const [webEnabled, setWebEnabled] = useState(false);
 
   /* ---- Playground state ---- */
   const [testPrompt, setTestPrompt] = useState("");
@@ -347,6 +368,8 @@ export default function CreateAgentPage() {
           systemPrompt: systemPrompt.trim(),
           model: selectedModel,
           userPrompt: testPrompt.trim(),
+          webEnabled,
+          category,
         }),
       });
 
@@ -366,7 +389,7 @@ export default function CreateAgentPage() {
     } finally {
       setTesting(false);
     }
-  }, [systemPrompt, testPrompt, selectedModel]);
+  }, [systemPrompt, testPrompt, selectedModel, webEnabled, category]);
 
   /* ---- Create agent ---- */
   const createAgent = useCallback(async () => {
@@ -399,6 +422,7 @@ export default function CreateAgentPage() {
           minPrice: Number(minPrice),
           maxPrice: Number(maxPrice),
           avatarUrl,
+          webEnabled,
         }),
       });
 
@@ -418,7 +442,7 @@ export default function CreateAgentPage() {
     } finally {
       setCreating(false);
     }
-  }, [formValid, walletAddress, name, category, systemPrompt, selectedModel, minPrice, maxPrice, avatarFile]);
+  }, [formValid, walletAddress, name, category, systemPrompt, selectedModel, minPrice, maxPrice, avatarFile, webEnabled]);
 
   /* ---- Apply template ---- */
   function applyTemplate(key: string) {
@@ -550,6 +574,7 @@ export default function CreateAgentPage() {
                     setMaxPrice("50");
                     setTestResult("");
                     setTestPrompt("");
+                    setWebEnabled(false);
                     setAvatarFile(null);
                     setAvatarPreview(null);
                   }}
@@ -752,6 +777,24 @@ export default function CreateAgentPage() {
                         </button>
                       ))}
                     </div>
+                    {category === "solana_agent" && (
+                      <div style={{
+                        marginTop: "12px", padding: "14px 18px", borderRadius: "10px",
+                        border: "1px solid rgba(255,254,178,0.15)",
+                        backgroundColor: "rgba(255,254,178,0.04)",
+                        fontSize: "13px", color: "rgba(255,255,255,0.5)", lineHeight: 1.6,
+                      }}>
+                        Solana Agents can read on-chain data, check balances, and analyze transactions in real-time.
+                        For advanced autonomous agents, integrate with{" "}
+                        <a href="https://www.solana.new" target="_blank" rel="noopener noreferrer" style={{ color: "#fffeb2", textDecoration: "none" }}>
+                          Sendai (solana.new)
+                        </a>
+                        {" "}or{" "}
+                        <a href="https://elizaos.ai" target="_blank" rel="noopener noreferrer" style={{ color: "#fffeb2", textDecoration: "none" }}>
+                          ElizaOS
+                        </a>.
+                      </div>
+                    )}
                   </div>
 
                   {/* ---- System Prompt ---- */}
@@ -962,6 +1005,45 @@ export default function CreateAgentPage() {
                         );
                       })}
                     </div>
+                  </div>
+
+                  {/* ---- Capabilities ---- */}
+                  <div style={glassCard}>
+                    <label style={labelStyle}>Capabilities</label>
+                    <button
+                      onClick={() => setWebEnabled(!webEnabled)}
+                      style={{
+                        fontFamily: "inherit",
+                        fontSize: "14px",
+                        padding: "12px 20px",
+                        borderRadius: "10px",
+                        border: webEnabled ? "1px solid #fffeb2" : "1px solid rgba(255,255,255,0.12)",
+                        background: webEnabled ? "rgba(255,254,178,0.1)" : "rgba(255,255,255,0.03)",
+                        color: webEnabled ? "#fffeb2" : "rgba(255,255,255,0.5)",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        width: "100%",
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      <div style={{
+                        width: "36px", height: "20px", borderRadius: "10px",
+                        backgroundColor: webEnabled ? "#fffeb2" : "rgba(255,255,255,0.15)",
+                        position: "relative", transition: "all 0.2s ease",
+                        flexShrink: 0,
+                      }}>
+                        <div style={{
+                          width: "16px", height: "16px", borderRadius: "50%",
+                          backgroundColor: webEnabled ? "#000" : "rgba(255,255,255,0.4)",
+                          position: "absolute", top: "2px",
+                          left: webEnabled ? "18px" : "2px",
+                          transition: "all 0.2s ease",
+                        }} />
+                      </div>
+                      Web Access — Agent can search the internet
+                    </button>
                   </div>
 
                   {/* ---- Price Range ---- */}
