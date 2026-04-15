@@ -279,6 +279,30 @@ model ArenaBattle {
   @@index([winnerAgent])
 }
 
+/// Battle predictions by spectators.
+model BattlePrediction {
+  id            String   @id @default(cuid())
+  battleId      String
+  walletAddress String
+  prediction    String   // "alpha" | "omega"
+  correct       Boolean?
+  xpAwarded     Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@unique([battleId, walletAddress])
+  @@index([walletAddress])
+  @@index([battleId])
+}
+
+/// Battle presence / spectator heartbeats.
+model BattlePresence {
+  id        String   @id @default(cuid())
+  sessionId String   @unique
+  lastSeen  DateTime @default(now())
+
+  @@index([lastSeen])
+}
+
 // ============================================================================
 // Reviews (post-finalize rating)
 // ============================================================================

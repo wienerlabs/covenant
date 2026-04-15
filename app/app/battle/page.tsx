@@ -5,9 +5,11 @@ import NavBar from "@/components/NavBar";
 import PixelAgent from "@/components/PixelAgent";
 import PixelBattle from "@/components/PixelBattle";
 import CopyButton from "@/components/CopyButton";
+import BattleReactions from "@/components/BattleReactions";
 import { fireConfetti } from "@/lib/confetti";
 import { toast } from "@/lib/toast";
 import { JOB_CATEGORIES } from "@/lib/categories";
+import { useConnector } from "@solana/connector/react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -214,6 +216,16 @@ const BATTLE_STYLES = `
     100% { transform: scale(1) translateY(-20px); opacity: 0.85; }
   }
 
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .prediction-btn:hover {
+    filter: brightness(1.2);
+    transform: scale(1.03);
+  }
+
   .battle-start-btn:hover {
     transform: scale(1.02) !important;
     filter: brightness(1.15);
@@ -342,6 +354,17 @@ export default function BattlePage() {
   const [showEloDelta, setShowEloDelta] = useState(false);
   const [spectatorXpAwarded, setSpectatorXpAwarded] = useState<number>(0);
   const [eloLoading, setEloLoading] = useState(true);
+
+  /* ---- Prediction state ---- */
+  const [battleId] = useState<string>(() => `battle-${Date.now()}`);
+  const [userPrediction, setUserPrediction] = useState<"alpha" | "omega" | null>(null);
+  const [predictionStats, setPredictionStats] = useState<{ alphaPercent: number; omegaPercent: number; total: number }>({ alphaPercent: 50, omegaPercent: 50, total: 0 });
+
+  /* ---- Spectator count ---- */
+  const [viewerCount, setViewerCount] = useState<number>(1);
+
+  /* ---- Wallet (for predictions) ---- */
+  const { account } = useConnector();
 
   /* ================================================================ */
   /*  Fetch ELO data                                                   */
@@ -673,6 +696,32 @@ export default function BattlePage() {
   }, [fetchEloData]);
 
   /* ================================================================ */
+  /*  Spectator presence heartbeat                                     */
+  /* ================================================================ */
+
+  useEffect(() => {
+    let sid = sessionStorage.getItem("battle_session");
+    if (!sid) {
+      sid = crypto.randomUUID();
+      sessionStorage.setItem("battle_session", sid);
+    }
+
+    const heartbeat = () =>
+      fetch("/api/battle/presence", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId: sid }),
+      })
+        .then((r) => r.json())
+        .then((d) => setViewerCount(d.count))
+        .catch(() => {});
+
+    heartbeat();
+    const interval = setInterval(heartbeat, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  /* ================================================================ */
   /*  SSE Event Handler                                                */
   /* ================================================================ */
 
@@ -835,6 +884,13 @@ export default function BattlePage() {
           setTimeout(() => {
             recordBattleResult(w);
           }, 500);
+
+          // Resolve predictions
+          fetch("/api/battle/predict", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ battleId, winner: w }),
+          }).catch(() => {});
         }
         setPhase("results");
         fireConfetti();
@@ -870,7 +926,7 @@ export default function BattlePage() {
         toast("Battle error occurred", "error");
         break;
     }
-  }, [recordBattleResult]);
+  }, [recordBattleResult, battleId]);
 
   /* ================================================================ */
   /*  Start Battle                                                     */
@@ -1657,6 +1713,10 @@ export default function BattlePage() {
               >
                 AGENT BATTLE
               </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center", marginTop: "8px" }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#fffeb2", animation: "pulse 1.5s infinite" }} />
+                <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)" }}>{viewerCount} watching</span>
+              </div>
               <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.4)", letterSpacing: "0.05em" }}>
                 Two AI agents race to deliver the same job. Escrow auto-releases to the winner after the challenge period.
               </p>
@@ -1829,6 +1889,149 @@ export default function BattlePage() {
               </div>
             </div>
 
+            {/* Prediction */}
+            <div
+              className="glass-card"
+              style={{
+                textAlign: "center",
+                marginBottom: "24px",
+                maxWidth: "600px",
+                margin: "0 auto 24px auto",
+                padding: "24px",
+              }}
+            >
+              <div
+                className="font-display"
+                style={{ fontSize: "18px", color: "#fffeb2", marginBottom: "16px" }}
+              >
+                WHO WILL WIN?
+              </div>
+              {!userPrediction ? (
+                <div style={{ display: "flex", gap: "12px", justifyContent: "center", marginBottom: "16px" }}>
+                  <button
+                    className="prediction-btn"
+                    onClick={async () => {
+                      setUserPrediction("alpha");
+                      try {
+                        await fetch("/api/battle/predict", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ battleId, walletAddress: account, prediction: "alpha" }),
+                        });
+                        const res = await fetch(`/api/battle/predict?battleId=${battleId}`);
+                        if (res.ok) {
+                          const d = await res.json();
+                          setPredictionStats({ alphaPercent: d.alphaPercent, omegaPercent: d.omegaPercent, total: d.total });
+                        }
+                      } catch { /* ignore */ }
+                    }}
+                    style={{
+                      flex: 1,
+                      fontFamily: "inherit",
+                      fontSize: "14px",
+                      fontWeight: 800,
+                      padding: "14px 0",
+                      borderRadius: "12px",
+                      border: `2px solid ${ALPHA_COLOR}60`,
+                      background: `rgba(255,254,178,0.1)`,
+                      color: ALPHA_COLOR,
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    AGENT ALPHA
+                  </button>
+                  <button
+                    className="prediction-btn"
+                    onClick={async () => {
+                      setUserPrediction("omega");
+                      try {
+                        await fetch("/api/battle/predict", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ battleId, walletAddress: account, prediction: "omega" }),
+                        });
+                        const res = await fetch(`/api/battle/predict?battleId=${battleId}`);
+                        if (res.ok) {
+                          const d = await res.json();
+                          setPredictionStats({ alphaPercent: d.alphaPercent, omegaPercent: d.omegaPercent, total: d.total });
+                        }
+                      } catch { /* ignore */ }
+                    }}
+                    style={{
+                      flex: 1,
+                      fontFamily: "inherit",
+                      fontSize: "14px",
+                      fontWeight: 800,
+                      padding: "14px 0",
+                      borderRadius: "12px",
+                      border: `2px solid ${OMEGA_COLOR}60`,
+                      background: `rgba(255,66,94,0.1)`,
+                      color: OMEGA_COLOR,
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    AGENT OMEGA
+                  </button>
+                </div>
+              ) : (
+                <div style={{ marginBottom: "16px" }}>
+                  <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "12px" }}>
+                    You picked{" "}
+                    <span style={{ color: userPrediction === "alpha" ? ALPHA_COLOR : OMEGA_COLOR, fontWeight: 700 }}>
+                      {userPrediction === "alpha" ? "AGENT ALPHA" : "AGENT OMEGA"}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {/* Prediction bar */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "12px", color: ALPHA_COLOR, fontWeight: 700, minWidth: "36px", textAlign: "right" }}>
+                  {predictionStats.alphaPercent}%
+                </span>
+                <div
+                  style={{
+                    flex: 1,
+                    height: "8px",
+                    borderRadius: "4px",
+                    background: "rgba(255,255,255,0.06)",
+                    overflow: "hidden",
+                    display: "flex",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${predictionStats.alphaPercent}%`,
+                      background: `linear-gradient(90deg, ${ALPHA_COLOR}, ${ALPHA_COLOR}80)`,
+                      borderRadius: "4px 0 0 4px",
+                      transition: "width 0.5s ease",
+                    }}
+                  />
+                  <div
+                    style={{
+                      width: `${predictionStats.omegaPercent}%`,
+                      background: `linear-gradient(90deg, ${OMEGA_COLOR}80, ${OMEGA_COLOR})`,
+                      borderRadius: "0 4px 4px 0",
+                      transition: "width 0.5s ease",
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: "12px", color: OMEGA_COLOR, fontWeight: 700, minWidth: "36px", textAlign: "left" }}>
+                  {predictionStats.omegaPercent}%
+                </span>
+              </div>
+              {predictionStats.total > 0 && (
+                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.25)", marginTop: "8px" }}>
+                  {predictionStats.total} prediction{predictionStats.total !== 1 ? "s" : ""}
+                </div>
+              )}
+            </div>
+
             {/* START BATTLE button */}
             <div style={{ textAlign: "center", marginBottom: "24px" }}>
               <button
@@ -1902,6 +2105,10 @@ export default function BattlePage() {
                   )}
                   {battleTitle}
                 </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center", marginTop: "8px" }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#fffeb2", animation: "pulse 1.5s infinite" }} />
+                  <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)" }}>{viewerCount} watching</span>
+                </div>
               </div>
             )}
 
@@ -1955,6 +2162,9 @@ export default function BattlePage() {
             />
           </div>
         )}
+
+        {/* Live Reactions */}
+        {phase === "fighting" && <BattleReactions />}
 
         {/* ============================================================ */}
         {/*  SECTION 2: BATTLE ARENA                                     */}
