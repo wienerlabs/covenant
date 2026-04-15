@@ -1,33 +1,14 @@
 import { ImageResponse } from "next/og";
-import { NextRequest } from "next/server";
-import fs from "fs";
-import path from "path";
 
-export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
-/**
- * OG image generator for covenant.run
- *
- * Dark background + #fffeb2 accent + PPMondwest heading font.
- * Shows on Telegram, Twitter, Discord when link is shared.
- */
-
-export async function GET(req: NextRequest) {
-  // Load PPMondwest font
+export async function GET() {
+  // Load PPMondwest font from public dir
   let fontData: ArrayBuffer | null = null;
   try {
-    // Try public dir first (works in Node runtime)
-    const fontPath = path.join(process.cwd(), "public", "fonts", "PPMondwest-Regular.otf");
-    const buffer = fs.readFileSync(fontPath);
-    fontData = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-  } catch {
-    // Fallback: fetch from URL
-    try {
-      const origin = req.nextUrl.origin;
-      const res = await fetch(`${origin}/fonts/PPMondwest-Regular.otf`);
-      if (res.ok) fontData = await res.arrayBuffer();
-    } catch { /* use system font */ }
-  }
+    const fontRes = await fetch(new URL("/fonts/PPMondwest-Regular.otf", "https://www.covenant.run"));
+    if (fontRes.ok) fontData = await fontRes.arrayBuffer();
+  } catch { /* fallback to system font */ }
 
   const fonts = fontData
     ? [{ name: "PPMondwest", data: fontData, style: "normal" as const, weight: 400 as const }]
@@ -74,7 +55,7 @@ export async function GET(req: NextRequest) {
           }}
         />
 
-        {/* Glow circle behind text */}
+        {/* Glow */}
         <div
           style={{
             position: "absolute",
@@ -86,16 +67,13 @@ export async function GET(req: NextRequest) {
           }}
         />
 
-        {/* Main content */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: "0px",
           }}
         >
-          {/* Protocol label */}
           <div
             style={{
               fontSize: 16,
@@ -109,7 +87,6 @@ export async function GET(req: NextRequest) {
             Open Settlement Protocol
           </div>
 
-          {/* COVENANT */}
           <div
             style={{
               fontSize: 120,
@@ -123,7 +100,6 @@ export async function GET(req: NextRequest) {
             COVENANT
           </div>
 
-          {/* Tagline */}
           <div
             style={{
               fontSize: 28,
@@ -137,7 +113,6 @@ export async function GET(req: NextRequest) {
             For AI Agents
           </div>
 
-          {/* Divider */}
           <div
             style={{
               width: "120px",
@@ -149,7 +124,6 @@ export async function GET(req: NextRequest) {
             }}
           />
 
-          {/* Three pillars */}
           <div
             style={{
               display: "flex",
@@ -169,7 +143,6 @@ export async function GET(req: NextRequest) {
           </div>
         </div>
 
-        {/* Bottom info */}
         <div
           style={{
             position: "absolute",
@@ -192,7 +165,6 @@ export async function GET(req: NextRequest) {
           <span style={{ color: "rgba(255,254,178,0.4)" }}>covenant.run</span>
         </div>
 
-        {/* Bottom accent */}
         <div
           style={{
             position: "absolute",
