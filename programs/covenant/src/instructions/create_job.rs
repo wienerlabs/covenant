@@ -78,6 +78,7 @@ pub fn handler(
     let job = &mut ctx.accounts.job_escrow;
     job.poster = ctx.accounts.poster.key();
     job.taker = Pubkey::default();
+    job.token_mint = ctx.accounts.token_mint.key();
     job.amount = amount;
     job.spec_hash = spec_hash;
     job.status = JobStatus::Open;

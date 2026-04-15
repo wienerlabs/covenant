@@ -33,7 +33,7 @@ pub fn handler(
         require!(job.status == JobStatus::Accepted, CovError::InvalidStatus);
         require!(job.taker == ctx.accounts.taker.key(), CovError::Unauthorized);
         require!(
-            clock.unix_timestamp <= job.deadline,
+            clock.unix_timestamp < job.deadline,
             CovError::DeadlineExpired
         );
         clock

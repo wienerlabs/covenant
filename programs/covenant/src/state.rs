@@ -53,6 +53,8 @@ pub struct JobEscrow {
     pub poster: Pubkey,
     /// Pubkey::default() until accepted.
     pub taker: Pubkey,
+    /// SPL token mint used for this escrow.
+    pub token_mint: Pubkey,
     /// Escrow amount in token atomic units.
     pub amount: u64,
     /// SHA-256 of the off-chain job spec JSON.
@@ -83,6 +85,7 @@ impl JobEscrow {
         8 +                                          // discriminator
         32 +                                         // poster
         32 +                                         // taker
+        32 +                                         // token_mint
         8 +                                          // amount
         32 +                                         // spec_hash
         1 + 1 +                                      // status (enum tag + max variant size)

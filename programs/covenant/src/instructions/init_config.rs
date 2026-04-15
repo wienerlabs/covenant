@@ -30,7 +30,7 @@ pub fn handler(
     min_bond_absolute: u64,
 ) -> Result<()> {
     require!(
-        threshold >= 1 && (threshold as usize) <= ARBITRATOR_COUNT,
+        threshold >= 2 && (threshold as usize) <= ARBITRATOR_COUNT,
         CovError::InvalidThreshold
     );
     require!(

@@ -42,8 +42,10 @@ pub enum CovError {
     ConfigAlreadyInitialized,
     #[msg("Protocol config not initialized")]
     ConfigNotInitialized,
-    #[msg("Arbitrator threshold must be between 1 and ARBITRATOR_COUNT")]
+    #[msg("Arbitrator threshold must be between 2 and ARBITRATOR_COUNT")]
     InvalidThreshold,
     #[msg("Math overflow")]
     MathOverflow,
+    #[msg("Token mint does not match the escrow's original mint")]
+    MintMismatch,
 }

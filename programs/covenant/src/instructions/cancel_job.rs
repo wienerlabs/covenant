@@ -35,6 +35,7 @@ pub struct CancelJob<'info> {
     #[account(
         mut,
         constraint = escrow_token_account.owner == job_escrow.key(),
+        constraint = escrow_token_account.mint == job_escrow.token_mint @ CovError::MintMismatch,
     )]
     pub escrow_token_account: Box<Account<'info, TokenAccount>>,
 
@@ -68,7 +69,9 @@ pub fn handler(ctx: Context<CancelJob>) -> Result<()> {
             && ctx.accounts.signer.key() == job.poster;
 
         let path_b = job.status == JobStatus::Accepted
-            && clock.unix_timestamp > job.deadline;
+            && clock.unix_timestamp > job.deadline
+            && (ctx.accounts.signer.key() == job.poster
+                || ctx.accounts.signer.key() == job.taker);
 
         if !path_a && !path_b {
             // Produce specific errors for better UX

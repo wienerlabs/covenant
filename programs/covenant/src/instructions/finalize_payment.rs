@@ -30,6 +30,7 @@ pub struct FinalizePayment<'info> {
     #[account(
         mut,
         constraint = escrow_token_account.owner == job_escrow.key(),
+        constraint = escrow_token_account.mint == job_escrow.token_mint @ CovError::MintMismatch,
     )]
     pub escrow_token_account: Box<Account<'info, TokenAccount>>,
 
