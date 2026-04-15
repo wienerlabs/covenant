@@ -99,6 +99,8 @@ export default function AgentChatPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const walletAddress = account || "";
+
   /* ---- Fetch agent details ---- */
   useEffect(() => {
     if (!id) return;
@@ -124,6 +126,29 @@ export default function AgentChatPage() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  /* ---- Load chat history from DB ---- */
+  useEffect(() => {
+    if (agent && walletAddress) {
+      fetch(`/api/hosted-agents/${id}/chat?wallet=${walletAddress}`)
+        .then((r) => r.json())
+        .then((msgs: { role: string; content: string; createdAt: string }[]) => {
+          if (Array.isArray(msgs) && msgs.length > 0) {
+            setMessages(
+              msgs.map((m) => ({
+                id: uid(),
+                role: m.role === "user" ? ("user" as const) : ("agent" as const),
+                text: m.content,
+                timestamp: new Date(m.createdAt),
+              }))
+            );
+          }
+        })
+        .catch(() => {
+          /* best effort – keep welcome message if fetch fails */
+        });
+    }
+  }, [agent, walletAddress, id]);
 
   /* ---- Auto-scroll ---- */
   useEffect(() => {

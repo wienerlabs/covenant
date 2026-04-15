@@ -7,6 +7,30 @@ import { rateLimit } from "@/lib/rateLimit";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
+/* ------------------------------------------------------------------ */
+/*  GET – return chat history for a user + agent pair                   */
+/* ------------------------------------------------------------------ */
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const wallet = req.nextUrl.searchParams.get("wallet") || "anonymous";
+
+  const messages = await prisma.chatMessage.findMany({
+    where: { agentId: id, userWallet: wallet },
+    orderBy: { createdAt: "asc" },
+    take: 50,
+  });
+
+  return NextResponse.json(messages);
+}
+
+/* ------------------------------------------------------------------ */
+/*  POST – send a message and get AI response                          */
+/* ------------------------------------------------------------------ */
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -65,6 +89,28 @@ export async function POST(
     }
   }
 
+  const userWallet = walletAddress || "anonymous";
+
+  // Load conversation history (last 20 messages)
+  const history = await prisma.chatMessage.findMany({
+    where: { agentId: id, userWallet },
+    orderBy: { createdAt: "asc" },
+    take: 20,
+  });
+
+  // Save user message before calling AI
+  await prisma.chatMessage.create({
+    data: { agentId: id, userWallet, role: "user", content: message },
+  });
+
+  // Build conversation for AI (history + current enriched message)
+  const conversationMessages: { role: "user" | "assistant"; content: string }[] =
+    history.map((m) => ({
+      role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+      content: m.content,
+    }));
+  conversationMessages.push({ role: "user", content: enrichedMessage });
+
   // Call AI
   try {
     const Anthropic = (await import("@anthropic-ai/sdk")).default;
@@ -81,12 +127,17 @@ export async function POST(
       model: modelId,
       max_tokens: 2048,
       system: agent.systemPrompt,
-      messages: [{ role: "user", content: enrichedMessage }],
+      messages: conversationMessages,
     });
 
     const textBlock = aiRes.content.find((b) => b.type === "text");
     const response =
       textBlock && "text" in textBlock ? textBlock.text : "No response generated.";
+
+    // Save agent response to chat history
+    await prisma.chatMessage.create({
+      data: { agentId: id, userWallet, role: "agent", content: response },
+    });
 
     // Record revenue
     if (walletAddress && agent.pricePerPrompt > 0) {

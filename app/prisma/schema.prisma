@@ -361,6 +361,19 @@ model ProtocolFee {
   @@index([paidBy])
 }
 
+/// Chat message history — per user per agent.
+model ChatMessage {
+  id            String   @id @default(cuid())
+  agentId       String
+  userWallet    String
+  role          String   // "user" | "agent"
+  content       String   @db.Text
+  createdAt     DateTime @default(now())
+
+  @@index([agentId, userWallet])
+  @@index([userWallet])
+}
+
 /// Per-message revenue ledger for hosted agents.
 model AgentRevenue {
   id            String   @id @default(cuid())

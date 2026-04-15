@@ -741,41 +741,65 @@ export default function CreateAgentPage() {
                   <div style={glassCard}>
                     <label style={labelStyle}>Category</label>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                      {CATEGORIES.map((cat) => (
-                        <button
-                          key={cat.id}
-                          className="category-btn"
-                          onClick={() => setCategory(cat.id)}
-                          style={{
-                            fontFamily: "inherit",
-                            fontSize: "14px",
-                            padding: "8px 16px",
-                            borderRadius: "20px",
-                            border:
-                              category === cat.id
-                                ? `1px solid ${ACCENT}`
+                      {CATEGORIES.map((cat) => {
+                        const isSolCat = cat.id === "solana_agent";
+                        const isSelected = category === cat.id;
+                        return (
+                          <button
+                            key={cat.id}
+                            className="category-btn"
+                            onClick={() => setCategory(cat.id)}
+                            style={{
+                              fontFamily: "inherit",
+                              fontSize: "14px",
+                              padding: "8px 16px",
+                              borderRadius: "20px",
+                              border: isSelected
+                                ? isSolCat
+                                  ? "1px solid rgba(153,69,255,0.5)"
+                                  : `1px solid ${ACCENT}`
                                 : "1px solid rgba(255,255,255,0.12)",
-                            background:
-                              category === cat.id
-                                ? `${ACCENT}20`
+                              background: isSelected
+                                ? isSolCat
+                                  ? "rgba(153,69,255,0.1)"
+                                  : `${ACCENT}20`
                                 : "rgba(255,255,255,0.04)",
-                            color:
-                              category === cat.id
-                                ? ACCENT
+                              color: isSelected
+                                ? isSolCat
+                                  ? "#9945FF"
+                                  : ACCENT
                                 : "rgba(255,255,255,0.6)",
-                            cursor: "pointer",
-                            fontWeight: category === cat.id ? 700 : 400,
-                            transition: "all 0.2s ease",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                          }}
-                        >
-                          <span style={{ marginRight: "6px", opacity: 0.6, fontSize: "12px" }}>
-                            {cat.icon}
-                          </span>
-                          {cat.label}
-                        </button>
-                      ))}
+                              cursor: "pointer",
+                              fontWeight: isSelected ? 700 : 400,
+                              transition: "all 0.2s ease",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.05em",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                            }}
+                          >
+                            {isSolCat ? (
+                              <>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src="https://github.com/solana.png"
+                                  alt="Solana"
+                                  style={{ width: "16px", height: "16px", borderRadius: "50%", background: "transparent" }}
+                                />
+                                {cat.label}
+                              </>
+                            ) : (
+                              <>
+                                <span style={{ opacity: 0.6, fontSize: "12px" }}>
+                                  {cat.icon}
+                                </span>
+                                {cat.label}
+                              </>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                     {category === "solana_agent" && (
                       <div style={{

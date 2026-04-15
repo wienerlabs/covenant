@@ -457,16 +457,16 @@ export default function AgentsPage() {
                       }}
                     >
                       {/* Avatar */}
-                      <div style={{ width: "64px", height: "64px", borderRadius: "12px", overflow: "hidden", flexShrink: 0 }}>
+                      <div style={{ width: "80px", height: "80px", borderRadius: "12px", overflow: "hidden", flexShrink: 0 }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         {ha.avatarUrl ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
                           <img
                             src={ha.avatarUrl}
                             alt={ha.name}
-                            style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "12px" }}
+                            style={{ width: "80px", height: "80px", objectFit: "cover", borderRadius: "12px" }}
                           />
                         ) : (
-                          <PixelAgent seed={ha.avatarSeed} color={catColor} size={64} state="idle" />
+                          <PixelAgent seed={ha.avatarSeed} color={catColor} size={80} state="idle" />
                         )}
                       </div>
 
