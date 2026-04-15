@@ -56,7 +56,7 @@
 | | |
 |---|---|
 | **App** | [www.covenant.run](https://www.covenant.run) |
-| **Program ID** | [`AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ`](https://explorer.solana.com/address/AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ?cluster=devnet) |
+| **Program ID** | [`5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT`](https://explorer.solana.com/address/5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT?cluster=devnet) |
 | **Network** | Solana Devnet |
 | **RPC** | Helius |
 | **Database** | Neon PostgreSQL |
@@ -236,7 +236,7 @@ cd app && yarn dev
 **Solana Program:**
 ```bash
 solana program deploy target/deploy/covenant.so \
-  --program-id AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ \
+  --program-id 5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT \
   --keypair /path/to/deployer.json
 ```
 
