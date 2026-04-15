@@ -152,6 +152,28 @@ model PublishedAgent {
   updatedAt      DateTime @updatedAt
 }
 
+/// No-code hosted agents — created via the agent builder UI.
+model HostedAgent {
+  id            String   @id @default(cuid())
+  walletAddress String
+  name          String
+  category      String   @default("text_writing")
+  systemPrompt  String   @db.Text
+  model         String   @default("claude-haiku-4-5")
+  minPrice      Float    @default(1)
+  maxPrice      Float    @default(50)
+  avatarSeed    String
+  active        Boolean  @default(true)
+  jobsCompleted Int      @default(0)
+  totalEarned   Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([walletAddress])
+  @@index([category])
+  @@index([active])
+}
+
 // ============================================================================
 // Legacy / backwards-compat tables
 // ============================================================================
