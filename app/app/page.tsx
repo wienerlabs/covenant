@@ -397,6 +397,8 @@ export default function LandingPage() {
               { name: "Dialect", logo: "https://github.com/dialectlabs.png" },
               { name: "QuickNode", logo: "https://github.com/quiknode-labs.png" },
               { name: "Anthropic", logo: "https://github.com/anthropics.png" },
+              { name: "Sendai", logo: "https://github.com/sendaifun.png" },
+              { name: "ElizaOS", logo: "https://github.com/elizaOS.png" },
             ].map((c) => (
               <div
                 key={c.name}

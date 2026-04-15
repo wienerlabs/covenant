@@ -120,6 +120,7 @@ interface HostedAgentData {
   avatarUrl?: string | null;
   walletAddress: string;
   onChainTx?: string | null;
+  webEnabled?: boolean;
   jobsCompleted: number;
   totalEarned: number;
 }
@@ -193,27 +194,39 @@ export default function AgentsPage() {
             <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", margin: "0 0 20px 0" }}>
               Choose a specialized agent. They accept your job, deliver structured output, and get paid through optimistic settlement.
             </p>
-            <Link href="/publish" style={{ textDecoration: "none" }}>
-              <button
-                style={{
-                  fontFamily: "inherit",
-                  fontSize: "12px",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  padding: "10px 24px",
-                  cursor: "pointer",
-                  border: "1px solid rgba(255,255,255,0.3)",
-                  borderRadius: "8px",
-                  backgroundColor: "rgba(255,255,255,0.05)",
-                  color: "#ffffff",
-                  fontWeight: 600,
-                  backdropFilter: "blur(8px)",
-                  transition: "all 0.2s ease",
-                }}
-              >
-                + Publish Your Agent
-              </button>
-            </Link>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+              <Link href="/agents/create" style={{
+                display: "inline-flex", alignItems: "center", gap: "8px",
+                padding: "12px 28px", borderRadius: "8px",
+                backgroundColor: "#fffeb2", color: "#000",
+                fontFamily: "inherit", fontSize: "14px", fontWeight: 700,
+                textTransform: "uppercase", letterSpacing: "0.06em",
+                textDecoration: "none", transition: "all 0.2s ease",
+              }}>
+                + Create Your Agent
+              </Link>
+              <Link href="/publish" style={{ textDecoration: "none" }}>
+                <button
+                  style={{
+                    fontFamily: "inherit",
+                    fontSize: "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    padding: "10px 24px",
+                    cursor: "pointer",
+                    border: "1px solid rgba(255,255,255,0.3)",
+                    borderRadius: "8px",
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    color: "#ffffff",
+                    fontWeight: 600,
+                    backdropFilter: "blur(8px)",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  + Publish Your Agent
+                </button>
+              </Link>
+            </div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px" }}>
@@ -265,13 +278,13 @@ export default function AgentsPage() {
 
                   <div style={{ display: "flex", gap: "16px", fontSize: "11px" }}>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                      <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                         Success
                       </div>
                       <div style={{ color: "#fffeb2", fontWeight: 600 }}>{agent.successRate}</div>
                     </div>
                     <div style={{ textAlign: "center" }}>
-                      <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                      <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                         Earned
                       </div>
                       <div style={{ color: "#fffeb2", fontWeight: 600 }}>{agent.earned}</div>
@@ -339,14 +352,14 @@ export default function AgentsPage() {
                         <div style={{ fontSize: "14px", fontWeight: 700, color: "#ffffff", textTransform: "uppercase" }}>
                           {agent.name}
                         </div>
-                        <span style={{ fontSize: "9px", padding: "2px 8px", borderRadius: "4px", backgroundColor: `${typeColor}20`, color: typeColor, fontWeight: 600 }}>
+                        <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "4px", backgroundColor: `${typeColor}20`, color: typeColor, fontWeight: 600 }}>
                           {agent.agentType}
                         </span>
                       </div>
                       <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", lineHeight: 1.5, margin: 0 }}>
                         {agent.description || "No description provided"}
                       </p>
-                      <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.25)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {agent.did}
                       </div>
                       <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
@@ -433,6 +446,7 @@ export default function AgentsPage() {
                       {/* Avatar */}
                       <div style={{ width: "64px", height: "64px", borderRadius: "12px", overflow: "hidden", flexShrink: 0 }}>
                         {ha.avatarUrl ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
                           <img
                             src={ha.avatarUrl}
                             alt={ha.name}
@@ -452,7 +466,7 @@ export default function AgentsPage() {
                           style={{
                             display: "inline-block",
                             marginTop: "6px",
-                            fontSize: "9px",
+                            fontSize: "12px",
                             fontWeight: 600,
                             textTransform: "uppercase",
                             letterSpacing: "0.06em",
@@ -467,7 +481,7 @@ export default function AgentsPage() {
                       </div>
 
                       {/* Model */}
-                      <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                         {ha.model}
                       </div>
 
@@ -479,13 +493,13 @@ export default function AgentsPage() {
                       {/* Stats */}
                       <div style={{ display: "flex", gap: "20px", fontSize: "11px" }}>
                         <div style={{ textAlign: "center" }}>
-                          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                             Jobs
                           </div>
                           <div style={{ color: "#fffeb2", fontWeight: 600 }}>{ha.jobsCompleted}</div>
                         </div>
                         <div style={{ textAlign: "center" }}>
-                          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                             Earned
                           </div>
                           <div style={{ color: "#fffeb2", fontWeight: 600 }}>${ha.totalEarned.toFixed(0)}</div>
@@ -493,7 +507,7 @@ export default function AgentsPage() {
                       </div>
 
                       {/* Creator wallet */}
-                      <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
+                      <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)" }}>
                         by {ha.walletAddress.slice(0, 4)}...{ha.walletAddress.slice(-4)}
                       </div>
 
@@ -504,7 +518,7 @@ export default function AgentsPage() {
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{
-                            fontSize: "9px",
+                            fontSize: "12px",
                             fontWeight: 600,
                             textTransform: "uppercase",
                             letterSpacing: "0.06em",
@@ -518,6 +532,28 @@ export default function AgentsPage() {
                         >
                           On-Chain
                         </a>
+                      )}
+
+                      {/* Web Access badge */}
+                      {ha.webEnabled && (
+                        <span style={{
+                          fontSize: "11px", fontWeight: 600, textTransform: "uppercase",
+                          letterSpacing: "0.06em", padding: "3px 10px", borderRadius: "4px",
+                          backgroundColor: "rgba(255,254,178,0.1)", color: "#fffeb2",
+                        }}>
+                          Web Access
+                        </span>
+                      )}
+
+                      {/* Solana Agent badge */}
+                      {ha.category === "solana_agent" && (
+                        <span style={{
+                          fontSize: "11px", fontWeight: 600, textTransform: "uppercase",
+                          letterSpacing: "0.06em", padding: "3px 10px", borderRadius: "4px",
+                          backgroundColor: "rgba(153,69,255,0.15)", color: "#9945FF",
+                        }}>
+                          Solana Native
+                        </span>
                       )}
 
                       {/* Hire button */}
