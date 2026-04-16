@@ -363,6 +363,12 @@ export default function BattlePage() {
   /* ---- Spectator count ---- */
   const [viewerCount, setViewerCount] = useState<number>(1);
 
+  /* ---- Custom agent battle state ---- */
+  const [useCustomAgents, setUseCustomAgents] = useState(false);
+  const [availableAgents, setAvailableAgents] = useState<any[]>([]);
+  const [selectedAlpha, setSelectedAlpha] = useState<any | null>(null);
+  const [selectedOmega, setSelectedOmega] = useState<any | null>(null);
+
   /* ---- Wallet (for predictions) ---- */
   const { account } = useConnector();
 
@@ -696,6 +702,28 @@ export default function BattlePage() {
   }, [fetchEloData]);
 
   /* ================================================================ */
+  /*  Fetch hosted agents for custom battle                            */
+  /* ================================================================ */
+
+  useEffect(() => {
+    if (useCustomAgents) {
+      fetch("/api/hosted-agents")
+        .then((r) => r.json())
+        .then((agents) => {
+          const filtered = agents.filter(
+            (a: any) => a.active && a.category === selectedCategory,
+          );
+          setAvailableAgents(filtered);
+          setSelectedAlpha(null);
+          setSelectedOmega(null);
+        })
+        .catch(() => {
+          setAvailableAgents([]);
+        });
+    }
+  }, [useCustomAgents, selectedCategory]);
+
+  /* ================================================================ */
   /*  Spectator presence heartbeat                                     */
   /* ================================================================ */
 
@@ -987,6 +1015,18 @@ export default function BattlePage() {
             category: selectedCategory,
             amount: selectedStake,
           },
+          customAlpha: useCustomAgents && selectedAlpha ? {
+            id: selectedAlpha.id,
+            name: selectedAlpha.name,
+            systemPrompt: selectedAlpha.systemPrompt,
+            model: selectedAlpha.model,
+          } : undefined,
+          customOmega: useCustomAgents && selectedOmega ? {
+            id: selectedOmega.id,
+            name: selectedOmega.name,
+            systemPrompt: selectedOmega.systemPrompt,
+            model: selectedOmega.model,
+          } : undefined,
         }),
       });
 
@@ -1501,10 +1541,14 @@ export default function BattlePage() {
     config: typeof ALPHA_CONFIG,
     eloData: AgentEloData,
     side: "left" | "right",
+    customAgent?: any | null,
   ) {
     const isAlpha = side === "left";
     const totalGames = eloData.wins + eloData.losses;
     const wr = winRate(eloData.wins, eloData.losses);
+
+    const displayName = customAgent ? customAgent.name : config.name;
+    const displayRole = customAgent ? customAgent.model : config.role;
 
     return (
       <div
@@ -1532,7 +1576,24 @@ export default function BattlePage() {
           }}
         />
 
-        <PixelAgent seed={config.avatarSeed} color={config.color} size={72} state="idle" />
+        {customAgent?.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={customAgent.avatarUrl}
+            alt=""
+            style={{
+              width: "72px",
+              height: "72px",
+              borderRadius: "12px",
+              objectFit: "cover",
+              margin: "0 auto",
+              display: "block",
+              border: `2px solid ${config.color}40`,
+            }}
+          />
+        ) : (
+          <PixelAgent seed={customAgent ? `custom-${customAgent.id}` : config.avatarSeed} color={config.color} size={72} state="idle" />
+        )}
 
         <div
           className="font-display"
@@ -1544,10 +1605,10 @@ export default function BattlePage() {
             letterSpacing: "0.05em",
           }}
         >
-          {config.name}
+          {displayName}
         </div>
         <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "12px" }}>
-          {config.role}
+          {displayRole}
         </div>
 
         {/* ELO Rating */}
@@ -1728,7 +1789,7 @@ export default function BattlePage() {
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "32px", marginBottom: "48px" }}>
               {/* Alpha Profile */}
-              {renderAgentProfile(ALPHA_CONFIG, alphaElo, "left")}
+              {renderAgentProfile(ALPHA_CONFIG, alphaElo, "left", useCustomAgents ? selectedAlpha : undefined)}
 
               {/* VS + PixelBattle Preview */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", overflow: "hidden", position: "relative", zIndex: 0, minWidth: "400px", minHeight: "250px", justifyContent: "center", margin: "0 16px" }}>
@@ -1758,7 +1819,7 @@ export default function BattlePage() {
               </div>
 
               {/* Omega Profile */}
-              {renderAgentProfile(OMEGA_CONFIG, omegaElo, "right")}
+              {renderAgentProfile(OMEGA_CONFIG, omegaElo, "right", useCustomAgents ? selectedOmega : undefined)}
             </div>
 
             {/* Challenge Input */}
@@ -1847,6 +1908,169 @@ export default function BattlePage() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Custom Agent Battle */}
+            <div style={{
+              maxWidth: "600px",
+              margin: "0 auto 24px auto",
+              padding: "20px",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "12px",
+              backgroundColor: "rgba(255,255,255,0.02)",
+            }}>
+              <button
+                onClick={() => setUseCustomAgents(!useCustomAgents)}
+                style={{
+                  fontFamily: "inherit",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  width: "100%",
+                  padding: "12px 0",
+                  background: "none",
+                  border: "none",
+                  color: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.5)",
+                  cursor: "pointer",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                {/* Toggle switch */}
+                <div style={{
+                  width: "36px",
+                  height: "20px",
+                  borderRadius: "10px",
+                  backgroundColor: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.15)",
+                  position: "relative",
+                  transition: "all 0.2s ease",
+                  flexShrink: 0,
+                }}>
+                  <div style={{
+                    width: "16px",
+                    height: "16px",
+                    borderRadius: "50%",
+                    backgroundColor: useCustomAgents ? "#000" : "rgba(255,255,255,0.4)",
+                    position: "absolute",
+                    top: "2px",
+                    left: useCustomAgents ? "18px" : "2px",
+                    transition: "all 0.2s ease",
+                  }} />
+                </div>
+                Custom Agent Battle
+              </button>
+
+              {useCustomAgents && (
+                <div style={{ marginTop: "16px" }}>
+                  {availableAgents.length === 0 ? (
+                    <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", textAlign: "center", padding: "20px" }}>
+                      No agents found for this category. Create one at /agents/create
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                      {/* Alpha selector */}
+                      <div>
+                        <div style={{ fontSize: "12px", color: "#fffeb2", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+                          Challenger
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "200px", overflowY: "auto" }}>
+                          {availableAgents.map((agent) => (
+                            <button
+                              key={agent.id}
+                              onClick={() => setSelectedAlpha(agent)}
+                              disabled={selectedOmega?.id === agent.id}
+                              style={{
+                                fontFamily: "inherit",
+                                fontSize: "13px",
+                                padding: "10px 14px",
+                                borderRadius: "8px",
+                                textAlign: "left" as const,
+                                border: selectedAlpha?.id === agent.id ? "1px solid #fffeb2" : "1px solid rgba(255,255,255,0.08)",
+                                background: selectedAlpha?.id === agent.id ? "rgba(255,254,178,0.1)" : "rgba(255,255,255,0.03)",
+                                color: selectedAlpha?.id === agent.id ? "#fffeb2" : "rgba(255,255,255,0.6)",
+                                cursor: selectedOmega?.id === agent.id ? "not-allowed" : "pointer",
+                                opacity: selectedOmega?.id === agent.id ? 0.3 : 1,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              {agent.avatarUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={agent.avatarUrl} alt="" style={{ width: "28px", height: "28px", borderRadius: "6px", objectFit: "cover" }} />
+                              ) : (
+                                <div style={{ width: "28px", height: "28px", borderRadius: "6px", backgroundColor: "rgba(255,254,178,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", color: "#fffeb2" }}>
+                                  {agent.name.charAt(0)}
+                                </div>
+                              )}
+                              <div>
+                                <div style={{ fontWeight: 600 }}>{agent.name}</div>
+                                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)" }}>{agent.model}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Omega selector */}
+                      <div>
+                        <div style={{ fontSize: "12px", color: "#FF425E", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+                          Defender
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "200px", overflowY: "auto" }}>
+                          {availableAgents.map((agent) => (
+                            <button
+                              key={agent.id}
+                              onClick={() => setSelectedOmega(agent)}
+                              disabled={selectedAlpha?.id === agent.id}
+                              style={{
+                                fontFamily: "inherit",
+                                fontSize: "13px",
+                                padding: "10px 14px",
+                                borderRadius: "8px",
+                                textAlign: "left" as const,
+                                border: selectedOmega?.id === agent.id ? "1px solid #FF425E" : "1px solid rgba(255,255,255,0.08)",
+                                background: selectedOmega?.id === agent.id ? "rgba(255,66,94,0.1)" : "rgba(255,255,255,0.03)",
+                                color: selectedOmega?.id === agent.id ? "#FF425E" : "rgba(255,255,255,0.6)",
+                                cursor: selectedAlpha?.id === agent.id ? "not-allowed" : "pointer",
+                                opacity: selectedAlpha?.id === agent.id ? 0.3 : 1,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              {agent.avatarUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={agent.avatarUrl} alt="" style={{ width: "28px", height: "28px", borderRadius: "6px", objectFit: "cover" }} />
+                              ) : (
+                                <div style={{ width: "28px", height: "28px", borderRadius: "6px", backgroundColor: "rgba(255,66,94,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", color: "#FF425E" }}>
+                                  {agent.name.charAt(0)}
+                                </div>
+                              )}
+                              <div>
+                                <div style={{ fontWeight: 600 }}>{agent.name}</div>
+                                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)" }}>{agent.model}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedAlpha && selectedOmega && (
+                    <div style={{ marginTop: "16px", textAlign: "center", fontSize: "14px", color: "#fffeb2" }}>
+                      {selectedAlpha.name} vs {selectedOmega.name}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Stakes Selector */}
