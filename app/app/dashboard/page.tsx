@@ -573,6 +573,8 @@ export default function DashboardPage() {
       maxPrice: agent.maxPrice ?? 0,
       pricePerPrompt: agent.pricePerPrompt ?? 0,
       webEnabled: agent.webEnabled ?? false,
+      avatarUrl: agent.avatarUrl || "",
+      avatarPreview: "",
     });
   }
 
@@ -580,10 +582,13 @@ export default function DashboardPage() {
     if (!wallet) return;
     setSavingAgent(true);
     try {
+      const updates: any = { ...editForm, walletAddress: wallet };
+      // avatarPreview is only for UI, don't send it
+      delete updates.avatarPreview;
       const res = await fetch(`/api/hosted-agents/${agentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: wallet, ...editForm }),
+        body: JSON.stringify(updates),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -1259,6 +1264,37 @@ export default function DashboardPage() {
                               flexDirection: "column",
                               gap: "14px",
                             }}>
+                              {/* Avatar upload */}
+                              <div style={{ marginBottom: "16px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                                  <div style={{ width: "64px", height: "64px", borderRadius: "12px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0 }}>
+                                    {editForm.avatarPreview || agent.avatarUrl ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img src={editForm.avatarPreview || agent.avatarUrl} alt="" style={{ width: "64px", height: "64px", objectFit: "cover" }} />
+                                    ) : (
+                                      <PixelAgent seed={agent.avatarSeed || agent.id} color="#fffeb2" size={64} state="idle" />
+                                    )}
+                                  </div>
+                                  <label style={{
+                                    fontFamily: "inherit", fontSize: "12px", fontWeight: 600,
+                                    padding: "8px 16px", borderRadius: "6px",
+                                    border: "1px solid rgba(255,254,178,0.3)", backgroundColor: "rgba(255,254,178,0.08)",
+                                    color: "#fffeb2", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em",
+                                  }}>
+                                    Change Avatar
+                                    <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file || file.size > 2 * 1024 * 1024) return;
+                                      const reader = new FileReader();
+                                      reader.onload = () => {
+                                        const dataUrl = reader.result as string;
+                                        setEditForm((prev: Record<string, any>) => ({ ...prev, avatarPreview: dataUrl, avatarUrl: dataUrl }));
+                                      };
+                                      reader.readAsDataURL(file);
+                                    }} />
+                                  </label>
+                                </div>
+                              </div>
                               {/* Row 1: Name + Category + Model */}
                               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
                                 <div>

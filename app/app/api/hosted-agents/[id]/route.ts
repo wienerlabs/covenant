@@ -38,6 +38,7 @@ export async function PATCH(
   if (updates.webEnabled !== undefined) allowed.webEnabled = Boolean(updates.webEnabled);
   if (updates.pricePerPrompt !== undefined) allowed.pricePerPrompt = Number(updates.pricePerPrompt);
   if (updates.active !== undefined) allowed.active = Boolean(updates.active);
+  if (updates.avatarUrl !== undefined) allowed.avatarUrl = updates.avatarUrl;
 
   const updated = await prisma.hostedAgent.update({ where: { id }, data: allowed });
   return NextResponse.json(updated);
