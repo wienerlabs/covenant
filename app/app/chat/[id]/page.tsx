@@ -411,6 +411,51 @@ export default function AgentChatPage() {
     return parts;
   }
 
+  /* ---- Token inline cards for agent messages ---- */
+  function renderMessageWithTokens(content: string): React.ReactNode {
+    const TOKEN_LOGOS: Record<string, string> = {
+      "SOL": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
+      "USDC": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png",
+      "USDT": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.svg",
+      "BONK": "https://arweave.net/hQiPZOsRZXGXBJd_82PhVdlM_hACsT_q6wqwf5cSY7I",
+      "JUP": "https://static.jup.ag/jup/icon.png",
+      "RAY": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R/logo.png",
+      "WIF": "https://bafkreibk3covs5ltyqxa272uodhculbr6kea6betiez7oz4nwnyg5pj7gm.ipfs.nftstorage.link",
+    };
+
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+
+    const tokenPattern = /\b(SOL|USDC|USDT|BONK|JUP|RAY|WIF)\b/g;
+    let match;
+
+    while ((match = tokenPattern.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(content.slice(lastIndex, match.index));
+      }
+
+      const token = match[1];
+      const logo = TOKEN_LOGOS[token];
+      parts.push(
+        <span key={match.index} style={{
+          display: "inline-flex", alignItems: "center", gap: "4px",
+          padding: "2px 8px", borderRadius: "6px",
+          backgroundColor: "rgba(255,254,178,0.08)", border: "1px solid rgba(255,254,178,0.15)",
+        }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {logo && <img src={logo} alt={token} width={16} height={16} style={{ borderRadius: "50%" }} />}
+          <span style={{ fontWeight: 600, color: "#fffeb2" }}>{token}</span>
+        </span>
+      );
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (parts.length === 0) return renderMarkdown(content);
+    if (lastIndex < content.length) parts.push(content.slice(lastIndex));
+    return <>{parts}</>;
+  }
+
   /* ---- Derived ---- */
   const isSolana = agent?.category === "solana_agent";
   const catColor = agent ? getCategoryColor(agent.category) : "#fffeb2";
@@ -1126,6 +1171,8 @@ export default function AgentChatPage() {
                               <span style={{ animation: "blink 1.4s infinite 0.4s" }}>.</span>
                             </span>
                           </span>
+                        ) : msg.role === "agent" ? (
+                          <>{renderMessageWithTokens(msg.text)}</>
                         ) : (
                           <>{renderMarkdown(msg.text)}</>
                         )}

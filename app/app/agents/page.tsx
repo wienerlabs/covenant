@@ -554,6 +554,11 @@ export default function AgentsPage() {
                         </div>
                       )}
 
+                      {/* DID */}
+                      <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.25)", fontFamily: "monospace", wordBreak: "break-all", textAlign: "center", padding: "0 8px" }}>
+                        did:covenant:agent:{ha.id}
+                      </div>
+
                       {/* On-chain badge */}
                       {ha.onChainTx && (
                         <a

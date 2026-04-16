@@ -289,6 +289,20 @@ export default function CreateAgentPage() {
   const [maxPrice, setMaxPrice] = useState("50");
   const [webEnabled, setWebEnabled] = useState(false);
 
+  /* ---- Solana agent state ---- */
+  const [solanaRpc, setSolanaRpc] = useState("");
+  const [solanaDefaultWallet, setSolanaDefaultWallet] = useState("");
+  const [solanaCapabilities, setSolanaCapabilities] = useState<Set<string>>(new Set(["balance_check", "tx_history", "token_lookup"]));
+  const [solanaResponseFormat, setSolanaResponseFormat] = useState("conversational");
+
+  function toggleSolanaCapability(id: string) {
+    setSolanaCapabilities(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
   /* ---- Playground state ---- */
   const [testPrompt, setTestPrompt] = useState("");
   const [testResult, setTestResult] = useState("");
@@ -410,6 +424,11 @@ export default function CreateAgentPage() {
         setUploadingAvatar(false);
       }
 
+      let finalPrompt = systemPrompt.trim();
+      if (category === "solana_agent") {
+        finalPrompt += `\n\n[Solana Configuration]\nRPC: ${solanaRpc || "default devnet"}\nDefault Wallet: ${solanaDefaultWallet || "none"}\nCapabilities: ${Array.from(solanaCapabilities).join(", ")}\nResponse Format: ${solanaResponseFormat}`;
+      }
+
       const res = await fetch("/api/hosted-agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -417,7 +436,7 @@ export default function CreateAgentPage() {
           walletAddress,
           name: name.trim(),
           category,
-          systemPrompt: systemPrompt.trim(),
+          systemPrompt: finalPrompt,
           model: selectedModel,
           minPrice: Number(minPrice),
           maxPrice: Number(maxPrice),
@@ -1069,6 +1088,76 @@ export default function CreateAgentPage() {
                       Web Access — Agent can search the internet
                     </button>
                   </div>
+
+                  {/* ---- Solana Agent Settings ---- */}
+                  {category === "solana_agent" && (
+                    <div style={glassCard}>
+                      <label className="font-display" style={{...labelStyle, fontSize: "16px"}}>Solana Agent Settings</label>
+
+                      {/* RPC Endpoint */}
+                      <div style={{ marginBottom: "16px" }}>
+                        <label style={{...labelStyle, fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em"}}>Custom RPC Endpoint</label>
+                        <input className="builder-input" type="text"
+                          value={solanaRpc} onChange={e => setSolanaRpc(e.target.value)}
+                          placeholder="https://api.devnet.solana.com (default)"
+                          style={inputStyle} />
+                      </div>
+
+                      {/* Default wallet to track */}
+                      <div style={{ marginBottom: "16px" }}>
+                        <label style={{...labelStyle, fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em"}}>Default Wallet Address</label>
+                        <input className="builder-input" type="text"
+                          value={solanaDefaultWallet} onChange={e => setSolanaDefaultWallet(e.target.value)}
+                          placeholder="Optional — pre-configured wallet to monitor"
+                          style={inputStyle} />
+                      </div>
+
+                      {/* Capabilities checkboxes */}
+                      <label style={{...labelStyle, fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em"}}>Solana Capabilities</label>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "16px" }}>
+                        {[
+                          { id: "balance_check", label: "Balance Check" },
+                          { id: "tx_history", label: "TX History" },
+                          { id: "token_lookup", label: "Token Lookup" },
+                          { id: "nft_lookup", label: "NFT Lookup" },
+                          { id: "defi_data", label: "DeFi Data" },
+                          { id: "program_interact", label: "Program Interaction" },
+                        ].map(cap => (
+                          <button key={cap.id} onClick={() => toggleSolanaCapability(cap.id)}
+                            style={{
+                              fontFamily: "inherit", fontSize: "12px", padding: "8px 14px",
+                              borderRadius: "8px",
+                              border: solanaCapabilities.has(cap.id) ? "1px solid #9945FF" : "1px solid rgba(255,255,255,0.1)",
+                              background: solanaCapabilities.has(cap.id) ? "rgba(153,69,255,0.1)" : "rgba(255,255,255,0.03)",
+                              color: solanaCapabilities.has(cap.id) ? "#9945FF" : "rgba(255,255,255,0.5)",
+                              cursor: "pointer", transition: "all 0.2s ease",
+                            }}
+                          >
+                            {solanaCapabilities.has(cap.id) ? "\u2713 " : ""}{cap.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Response format */}
+                      <label style={{...labelStyle, fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em"}}>Response Format</label>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        {["conversational", "structured_json", "technical"].map(fmt => (
+                          <button key={fmt} onClick={() => setSolanaResponseFormat(fmt)}
+                            style={{
+                              fontFamily: "inherit", fontSize: "12px", padding: "8px 16px",
+                              borderRadius: "8px",
+                              border: solanaResponseFormat === fmt ? "1px solid #9945FF" : "1px solid rgba(255,255,255,0.1)",
+                              background: solanaResponseFormat === fmt ? "rgba(153,69,255,0.1)" : "rgba(255,255,255,0.03)",
+                              color: solanaResponseFormat === fmt ? "#9945FF" : "rgba(255,255,255,0.5)",
+                              cursor: "pointer", textTransform: "capitalize", transition: "all 0.2s ease",
+                            }}
+                          >
+                            {fmt.replace("_", " ")}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* ---- Price Range ---- */}
                   <div style={glassCard}>
