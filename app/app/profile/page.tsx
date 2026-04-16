@@ -13,6 +13,7 @@ import WalletButton from "@/components/WalletButton";
 import { USDC_LOGO_URL } from "@/lib/constants";
 import { formatAddress } from "@/lib/format";
 import DIDBadge from "@/components/DIDBadge";
+import NavBar from "@/components/NavBar";
 
 export default function ProfilePage() {
   const { isConnected, account } = useConnector();
@@ -164,6 +165,7 @@ export default function ProfilePage() {
       {/* Background */}
       <div style={{ position: "fixed", inset: 0, zIndex: 0, backgroundImage: "image-set(url('/covenant-bg.webp') type('image/webp'), url('/covenant-bg.png') type('image/png'))", backgroundSize: "cover", backgroundPosition: "center" }} />
       <div style={{ position: "fixed", inset: 0, zIndex: 1, backgroundColor: "rgba(0,0,0,0.55)" }} />
+      <NavBar activeTab="profile" variant="dark" />
 
       {/* Content */}
       <div style={{ position: "relative", zIndex: 2 }}>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rateLimit";
 import { webSearch } from "@/lib/web-search";
 import { getSolanaContext } from "@/lib/solana-agent";
 
@@ -21,6 +22,12 @@ const ANTHROPIC_MODEL_MAP: Record<string, string> = {
  * Body: { systemPrompt, model, userPrompt, webEnabled? }
  */
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const { allowed } = rateLimit(`agent-test:${ip}`, 10, 60000); // 10 per minute
+  if (!allowed) {
+    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
+  }
+
   try {
     const body = await req.json();
     const { systemPrompt, model, userPrompt, webEnabled, category } = body as {

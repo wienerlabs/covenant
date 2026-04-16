@@ -20,6 +20,14 @@ export const dynamic = "force-dynamic";
  * }
  */
 export async function POST(req: NextRequest) {
+  const INTERNAL_SECRET = process.env.CRON_SECRET || "";
+  if (INTERNAL_SECRET) {
+    const auth = req.headers.get("x-internal-secret") || req.headers.get("authorization")?.replace("Bearer ", "");
+    if (auth !== INTERNAL_SECRET) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   try {
     const body = await req.json();
 

@@ -54,7 +54,10 @@ export async function DELETE(
 
   const agent = await prisma.hostedAgent.findUnique({ where: { id } });
   if (!agent) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (walletAddress && agent.walletAddress !== walletAddress) {
+  if (!walletAddress) {
+    return NextResponse.json({ error: "walletAddress required" }, { status: 400 });
+  }
+  if (agent.walletAddress !== walletAddress) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 

@@ -1,9 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const ADMIN_SECRET = process.env.ADMIN_SECRET || process.env.CRON_SECRET;
+  if (ADMIN_SECRET) {
+    const auth = req.headers.get("authorization");
+    if (auth !== `Bearer ${ADMIN_SECRET}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   try {
     const [jobs, profiles, reputations, submissions] = await Promise.all([
       prisma.job.findMany({

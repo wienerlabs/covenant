@@ -30,7 +30,7 @@ const PROGRAM_ID = new PublicKey(
 const SCAN_LIMIT = parseInt(process.env.RECONCILE_SCAN_LIMIT ?? "500", 10);
 
 function authorized(req: NextRequest): boolean {
-  if (!CRON_SECRET) return true;
+  if (!CRON_SECRET) return false;
   const header = req.headers.get("authorization");
   return (
     header === `Bearer ${CRON_SECRET}` ||
