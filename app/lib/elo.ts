@@ -73,6 +73,8 @@ export async function updateEloAfterBattle(
         elo: newWinnerElo,
         wins: { increment: 1 },
         peakElo: Math.max(winner.peakElo, newWinnerElo),
+        currentStreak: winner.currentStreak + 1,
+        bestStreak: Math.max(winner.bestStreak, winner.currentStreak + 1),
       },
     }),
     prisma.agentElo.update({
@@ -80,6 +82,7 @@ export async function updateEloAfterBattle(
       data: {
         elo: newLoserElo,
         losses: { increment: 1 },
+        currentStreak: 0,
       },
     }),
     prisma.arenaBattle.update({
@@ -100,6 +103,7 @@ export async function updateEloAfterBattle(
     loserEloBefore: loser.elo,
     loserEloAfter: newLoserElo,
     loserDelta: newLoserElo - loser.elo,
+    winnerStreak: winner.currentStreak + 1,
   };
 }
 
@@ -111,4 +115,37 @@ export async function getEloLeaderboard(limit = 20) {
     orderBy: { elo: "desc" },
     take: limit,
   });
+}
+
+/**
+ * Update category-specific ELO after a battle.
+ */
+export async function updateCategoryElo(
+  winnerWallet: string,
+  loserWallet: string,
+  category: string,
+) {
+  const winnerCat = await prisma.agentCategoryElo.upsert({
+    where: { agentWallet_category: { agentWallet: winnerWallet, category } },
+    create: { agentWallet: winnerWallet, category, elo: 1200 },
+    update: {},
+  });
+  const loserCat = await prisma.agentCategoryElo.upsert({
+    where: { agentWallet_category: { agentWallet: loserWallet, category } },
+    create: { agentWallet: loserWallet, category, elo: 1200 },
+    update: {},
+  });
+
+  const [newWin, newLose] = calculateElo(winnerCat.elo, loserCat.elo);
+
+  await prisma.$transaction([
+    prisma.agentCategoryElo.update({
+      where: { agentWallet_category: { agentWallet: winnerWallet, category } },
+      data: { elo: newWin, wins: { increment: 1 } },
+    }),
+    prisma.agentCategoryElo.update({
+      where: { agentWallet_category: { agentWallet: loserWallet, category } },
+      data: { elo: newLose, losses: { increment: 1 } },
+    }),
+  ]);
 }

@@ -55,6 +55,8 @@ interface AgentEloData {
   wins: number;
   losses: number;
   peakElo: number;
+  currentStreak: number;
+  bestStreak: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -103,7 +105,7 @@ const RANDOM_CHALLENGES = [
   "Explain the Halting Problem and its implications for AI safety",
 ];
 
-const DEFAULT_ELO: AgentEloData = { elo: 1200, wins: 0, losses: 0, peakElo: 1200 };
+const DEFAULT_ELO: AgentEloData = { elo: 1200, wins: 0, losses: 0, peakElo: 1200, currentStreak: 0, bestStreak: 0 };
 
 function getTimestamp(): string {
   return new Date().toLocaleTimeString("en-US", {
@@ -371,6 +373,15 @@ export default function BattlePage() {
 
   /* ---- Wallet (for predictions) ---- */
   const { account } = useConnector();
+
+  /* ---- Tournament mode ---- */
+  const [tournamentMode, setTournamentMode] = useState(false);
+  const [tournamentRound, setTournamentRound] = useState(1);
+  const [tournamentScores, setTournamentScores] = useState<{alpha: number, omega: number}>({alpha: 0, omega: 0});
+
+  /* ---- Spectator chat ---- */
+  const [spectatorChatMessages, setSpectatorChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState("");
 
   /* ================================================================ */
   /*  Fetch ELO data                                                   */
@@ -750,6 +761,31 @@ export default function BattlePage() {
   }, []);
 
   /* ================================================================ */
+  /*  Spectator chat polling                                           */
+  /* ================================================================ */
+
+  useEffect(() => {
+    if (phase === "setup") return;
+    const poll = setInterval(async () => {
+      const res = await fetch("/api/battle/chat");
+      if (res.ok) setSpectatorChatMessages(await res.json());
+    }, 3000);
+    return () => clearInterval(poll);
+  }, [phase]);
+
+  async function sendChat() {
+    if (!chatInput.trim()) return;
+    let sid = sessionStorage.getItem("battle_session");
+    if (!sid) { sid = crypto.randomUUID(); sessionStorage.setItem("battle_session", sid); }
+    await fetch("/api/battle/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: sid, wallet: account || null, message: chatInput.trim() }),
+    });
+    setChatInput("");
+  }
+
+  /* ================================================================ */
   /*  SSE Event Handler                                                */
   /* ================================================================ */
 
@@ -879,11 +915,11 @@ export default function BattlePage() {
         }
         break;
 
-      case "battle_winner":
+      case "battle_winner": {
         setJudging(false);
         setTotalTimerRunning(false);
+        const w = event.data ? String(event.data.winner) : "";
         if (event.data) {
-          const w = String(event.data.winner);
           setWinner(w);
           if (event.data.alphaScore !== undefined) setAlphaScore(Number(event.data.alphaScore));
           if (event.data.omegaScore !== undefined) setOmegaScore(Number(event.data.omegaScore));
@@ -920,10 +956,37 @@ export default function BattlePage() {
             body: JSON.stringify({ battleId, winner: w }),
           }).catch(() => {});
         }
-        setPhase("results");
-        fireConfetti();
-        toast("We have a winner!", "success");
+        // Tournament mode: track round wins and auto-continue
+        if (tournamentMode && tournamentRound < 3) {
+          const updatedScores = {
+            alpha: tournamentScores.alpha + (w === "alpha" ? 1 : 0),
+            omega: tournamentScores.omega + (w === "omega" ? 1 : 0),
+          };
+          setTournamentScores(updatedScores);
+          setTournamentRound((r) => r + 1);
+          toast(`Round ${tournamentRound}/3 complete! ${w === "alpha" ? "Alpha" : "Omega"} wins this round.`, "info");
+          // Auto-start next round after a short delay
+          setTimeout(() => {
+            setChallenge(RANDOM_CHALLENGES[Math.floor(Math.random() * RANDOM_CHALLENGES.length)]);
+            startBattle();
+          }, 3000);
+        } else if (tournamentMode && tournamentRound === 3) {
+          const finalScores = {
+            alpha: tournamentScores.alpha + (w === "alpha" ? 1 : 0),
+            omega: tournamentScores.omega + (w === "omega" ? 1 : 0),
+          };
+          setTournamentScores(finalScores);
+          setPhase("results");
+          fireConfetti();
+          const tournamentWinner = finalScores.alpha > finalScores.omega ? "Alpha" : "Omega";
+          toast(`Tournament over! ${tournamentWinner} wins ${finalScores.alpha > finalScores.omega ? finalScores.alpha : finalScores.omega}-${finalScores.alpha > finalScores.omega ? finalScores.omega : finalScores.alpha}!`, "success");
+        } else {
+          setPhase("results");
+          fireConfetti();
+          toast("We have a winner!", "success");
+        }
         break;
+      }
 
       case "battle_payment":
         if (event.data) {
@@ -954,7 +1017,8 @@ export default function BattlePage() {
         toast("Battle error occurred", "error");
         break;
     }
-  }, [recordBattleResult, battleId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordBattleResult, battleId, tournamentMode, tournamentRound, tournamentScores]);
 
   /* ================================================================ */
   /*  Start Battle                                                     */
@@ -1110,6 +1174,10 @@ export default function BattlePage() {
     setOmegaEloDelta(null);
     setShowEloDelta(false);
     setSpectatorXpAwarded(0);
+    setTournamentRound(1);
+    setTournamentScores({ alpha: 0, omega: 0 });
+    setSpectatorChatMessages([]);
+    setChatInput("");
     // Refresh ELO data
     fetchEloData();
   }
@@ -1694,6 +1762,13 @@ export default function BattlePage() {
             {totalGames} battle{totalGames !== 1 ? "s" : ""} fought
           </div>
         )}
+
+        {/* Win Streak badge */}
+        {eloData.currentStreak > 0 && (
+          <div style={{ fontSize: "12px", color: "#fffeb2", fontWeight: 600, marginTop: "4px" }}>
+            {eloData.currentStreak}W Streak
+          </div>
+        )}
       </div>
     );
   }
@@ -2111,6 +2186,25 @@ export default function BattlePage() {
                   </button>
                 ))}
               </div>
+              {/* Tournament Mode Toggle */}
+              <div style={{ marginTop: "12px", display: "flex", justifyContent: "center" }}>
+                <button
+                  onClick={() => setTournamentMode(!tournamentMode)}
+                  style={{
+                    fontFamily: "inherit",
+                    fontSize: "13px",
+                    padding: "10px 20px",
+                    borderRadius: "8px",
+                    border: tournamentMode ? "1px solid #fffeb2" : "1px solid rgba(255,255,255,0.12)",
+                    background: tournamentMode ? "rgba(255,254,178,0.1)" : "rgba(255,255,255,0.03)",
+                    color: tournamentMode ? "#fffeb2" : "rgba(255,255,255,0.5)",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  {tournamentMode ? "Tournament (3 Rounds)" : "Single Round"}
+                </button>
+              </div>
             </div>
 
             {/* Prediction */}
@@ -2311,6 +2405,11 @@ export default function BattlePage() {
                 >
                   AGENT BATTLE
                 </h2>
+                {tournamentMode && (
+                  <div style={{ fontSize: "13px", color: "#fffeb2", fontWeight: 700, marginBottom: "4px", letterSpacing: "0.1em" }}>
+                    Round {tournamentRound}/3 — Alpha {tournamentScores.alpha} : {tournamentScores.omega} Omega
+                  </div>
+                )}
                 <div style={{ fontSize: "14px", color: GOLD_COLOR, fontWeight: 600 }}>
                   {battleCategory && (
                     <span
@@ -2389,6 +2488,66 @@ export default function BattlePage() {
 
         {/* Live Reactions */}
         {phase === "fighting" && <BattleReactions />}
+
+        {/* Spectator Chat */}
+        {phase !== "setup" && (
+          <div
+            className="glass-card"
+            style={{
+              padding: "16px",
+              marginTop: "16px",
+              marginBottom: "16px",
+              maxHeight: "200px",
+            }}
+          >
+            <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+              Spectator Chat
+            </div>
+            <div style={{ maxHeight: "120px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "4px" }}>
+              {spectatorChatMessages.map((m: any) => (
+                <div key={m.id} style={{ fontSize: "12px" }}>
+                  <span style={{ color: "#fffeb2", fontWeight: 600 }}>{m.wallet ? m.wallet.slice(0, 4) + "..." : "Anon"}</span>
+                  <span style={{ color: "rgba(255,255,255,0.6)", marginLeft: "6px" }}>{m.message}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") sendChat(); }}
+                placeholder="Say something..."
+                style={{
+                  flex: 1,
+                  fontFamily: "inherit",
+                  fontSize: "12px",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.04)",
+                  color: "#fff",
+                  outline: "none",
+                }}
+              />
+              <button
+                onClick={sendChat}
+                style={{
+                  fontFamily: "inherit",
+                  fontSize: "12px",
+                  padding: "8px 16px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: "#fffeb2",
+                  color: "#000",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ============================================================ */}
         {/*  SECTION 2: BATTLE ARENA                                     */}
@@ -2933,6 +3092,57 @@ export default function BattlePage() {
                     </a>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Battle Result Card */}
+            {phase === "results" && winner && (
+              <div style={{
+                marginTop: "24px",
+                padding: "32px",
+                borderRadius: "16px",
+                backgroundColor: "rgba(0,0,0,0.5)",
+                border: "1px solid rgba(255,254,178,0.2)",
+                textAlign: "center",
+                maxWidth: "600px",
+                margin: "24px auto",
+              }}>
+                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "16px" }}>
+                  Battle Result
+                </div>
+                <div className="font-display" style={{ fontSize: "32px", color: "#fffeb2", marginBottom: "8px" }}>
+                  {winner === "alpha" ? ALPHA_CONFIG.name : OMEGA_CONFIG.name} WINS
+                </div>
+                <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.6)", marginBottom: "20px" }}>
+                  {alphaScore !== null ? alphaScore.toFixed(1) : "?"} — {omegaScore !== null ? omegaScore.toFixed(1) : "?"}
+                </div>
+                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.25)", marginBottom: "16px" }}>
+                  covenant.run/battle
+                </div>
+                <button
+                  onClick={() => {
+                    const winnerName = winner === "alpha" ? ALPHA_CONFIG.name : OMEGA_CONFIG.name;
+                    const aScore = alphaScore !== null ? alphaScore.toFixed(1) : "?";
+                    const oScore = omegaScore !== null ? omegaScore.toFixed(1) : "?";
+                    const text = `${winnerName} wins! Score: ${aScore} vs ${oScore} on @WCovenant covenant.run/battle`;
+                    window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank");
+                  }}
+                  style={{
+                    fontFamily: "inherit",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    padding: "12px 28px",
+                    borderRadius: "8px",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    background: "rgba(255,255,255,0.06)",
+                    color: "#fff",
+                    cursor: "pointer",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  Share on X
+                </button>
               </div>
             )}
 

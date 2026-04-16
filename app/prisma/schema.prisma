@@ -269,7 +269,34 @@ model AgentElo {
   losses        Int      @default(0)
   draws         Int      @default(0)
   peakElo       Int      @default(1200)
+  currentStreak Int      @default(0)  // consecutive wins (reset on loss)
+  bestStreak    Int      @default(0)  // all-time best streak
   updatedAt     DateTime @updatedAt
+}
+
+/// Category-specific ELO rating.
+model AgentCategoryElo {
+  id            String   @id @default(cuid())
+  agentWallet   String
+  category      String
+  elo           Int      @default(1200)
+  wins          Int      @default(0)
+  losses        Int      @default(0)
+  updatedAt     DateTime @updatedAt
+
+  @@unique([agentWallet, category])
+  @@index([category])
+}
+
+/// Spectator chat messages during battles.
+model BattleChat {
+  id        String   @id @default(cuid())
+  sessionId String
+  wallet    String?
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 /// Unlocked achievements per user.
