@@ -1897,6 +1897,125 @@ export default function BattlePage() {
               {renderAgentProfile(OMEGA_CONFIG, omegaElo, "right", useCustomAgents ? selectedOmega : undefined)}
             </div>
 
+            {/* ── Pick Your Agents ── */}
+            <div style={{
+              maxWidth: "700px",
+              margin: "0 auto 28px auto",
+              padding: "24px",
+              border: useCustomAgents ? "1px solid rgba(255,254,178,0.15)" : "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "16px",
+              backgroundColor: "rgba(0,0,0,0.3)",
+              backdropFilter: "blur(12px)",
+              transition: "border-color 0.3s ease",
+            }}>
+              <button
+                onClick={() => setUseCustomAgents(!useCustomAgents)}
+                style={{
+                  fontFamily: "inherit", fontSize: "15px", fontWeight: 700,
+                  display: "flex", alignItems: "center", gap: "12px", width: "100%",
+                  padding: "4px 0", background: "none", border: "none",
+                  color: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.5)",
+                  cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em",
+                }}
+              >
+                <div style={{
+                  width: "40px", height: "22px", borderRadius: "11px",
+                  backgroundColor: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.12)",
+                  position: "relative", transition: "all 0.2s ease", flexShrink: 0,
+                }}>
+                  <div style={{
+                    width: "18px", height: "18px", borderRadius: "50%",
+                    backgroundColor: useCustomAgents ? "#000" : "rgba(255,255,255,0.4)",
+                    position: "absolute", top: "2px",
+                    left: useCustomAgents ? "20px" : "2px", transition: "all 0.2s ease",
+                  }} />
+                </div>
+                Pick Your Agents
+              </button>
+              {useCustomAgents && (
+                <div style={{ marginTop: "20px" }}>
+                  {availableAgents.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "32px 20px", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: "12px" }}>
+                      <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.4)", marginBottom: "12px" }}>No agents found for this category</div>
+                      <a href="/agents/create" style={{ fontFamily: "inherit", fontSize: "13px", color: "#fffeb2", textDecoration: "none", padding: "8px 20px", borderRadius: "6px", border: "1px solid rgba(255,254,178,0.3)", backgroundColor: "rgba(255,254,178,0.08)" }}>Create an Agent</a>
+                    </div>
+                  ) : (
+                    <>
+                      {selectedAlpha && selectedOmega && (
+                        <div style={{ textAlign: "center", padding: "12px", marginBottom: "16px", borderRadius: "10px", backgroundColor: "rgba(255,254,178,0.05)", border: "1px solid rgba(255,254,178,0.1)" }}>
+                          <span style={{ color: "#fffeb2", fontWeight: 700, fontSize: "15px" }}>{selectedAlpha.name}</span>
+                          <span style={{ color: "rgba(255,255,255,0.3)", margin: "0 12px", fontSize: "13px" }}>VS</span>
+                          <span style={{ color: "#FF425E", fontWeight: 700, fontSize: "15px" }}>{selectedOmega.name}</span>
+                        </div>
+                      )}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+                        {/* Challenger */}
+                        <div>
+                          <div className="font-display" style={{ fontSize: "14px", color: "#fffeb2", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>Challenger</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "240px", overflowY: "auto", paddingRight: "4px" }}>
+                            {availableAgents.map((agent) => {
+                              const isSel = selectedAlpha?.id === agent.id;
+                              const isDis = selectedOmega?.id === agent.id;
+                              return (
+                                <button key={agent.id} onClick={() => setSelectedAlpha(agent)} disabled={isDis} style={{
+                                  fontFamily: "inherit", fontSize: "13px", padding: "12px 14px", borderRadius: "10px", textAlign: "left" as const,
+                                  border: isSel ? "1.5px solid #fffeb2" : "1px solid rgba(255,255,255,0.08)",
+                                  background: isSel ? "rgba(255,254,178,0.08)" : "rgba(255,255,255,0.02)",
+                                  color: isSel ? "#fffeb2" : isDis ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.7)",
+                                  cursor: isDis ? "not-allowed" : "pointer", opacity: isDis ? 0.35 : 1,
+                                  display: "flex", alignItems: "center", gap: "12px", transition: "all 0.15s ease",
+                                }}>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  {agent.avatarUrl ? <img src={agent.avatarUrl} alt="" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover", flexShrink: 0 }} /> : (
+                                    <div style={{ width: "36px", height: "36px", borderRadius: "8px", flexShrink: 0, backgroundColor: isSel ? "rgba(255,254,178,0.15)" : "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", fontWeight: 700, color: isSel ? "#fffeb2" : "rgba(255,255,255,0.3)" }}>{agent.name.charAt(0)}</div>
+                                  )}
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontWeight: 600, fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{agent.name}</div>
+                                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "2px" }}>{agent.model}</div>
+                                  </div>
+                                  {isSel && <div style={{ marginLeft: "auto", fontSize: "14px", color: "#fffeb2", flexShrink: 0 }}>{"\u2713"}</div>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {/* Defender */}
+                        <div>
+                          <div className="font-display" style={{ fontSize: "14px", color: "#FF425E", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>Defender</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "240px", overflowY: "auto", paddingRight: "4px" }}>
+                            {availableAgents.map((agent) => {
+                              const isSel = selectedOmega?.id === agent.id;
+                              const isDis = selectedAlpha?.id === agent.id;
+                              return (
+                                <button key={agent.id} onClick={() => setSelectedOmega(agent)} disabled={isDis} style={{
+                                  fontFamily: "inherit", fontSize: "13px", padding: "12px 14px", borderRadius: "10px", textAlign: "left" as const,
+                                  border: isSel ? "1.5px solid #FF425E" : "1px solid rgba(255,255,255,0.08)",
+                                  background: isSel ? "rgba(255,66,94,0.08)" : "rgba(255,255,255,0.02)",
+                                  color: isSel ? "#FF425E" : isDis ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.7)",
+                                  cursor: isDis ? "not-allowed" : "pointer", opacity: isDis ? 0.35 : 1,
+                                  display: "flex", alignItems: "center", gap: "12px", transition: "all 0.15s ease",
+                                }}>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  {agent.avatarUrl ? <img src={agent.avatarUrl} alt="" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover", flexShrink: 0 }} /> : (
+                                    <div style={{ width: "36px", height: "36px", borderRadius: "8px", flexShrink: 0, backgroundColor: isSel ? "rgba(255,66,94,0.15)" : "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", fontWeight: 700, color: isSel ? "#FF425E" : "rgba(255,255,255,0.3)" }}>{agent.name.charAt(0)}</div>
+                                  )}
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontWeight: 600, fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{agent.name}</div>
+                                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "2px" }}>{agent.model}</div>
+                                  </div>
+                                  {isSel && <div style={{ marginLeft: "auto", fontSize: "14px", color: "#FF425E", flexShrink: 0 }}>{"\u2713"}</div>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Challenge Input */}
             <div style={{ maxWidth: "600px", margin: "0 auto 24px auto" }}>
               <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px", display: "block" }}>
@@ -1983,199 +2102,6 @@ export default function BattlePage() {
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Custom Agent Battle */}
-            <div style={{
-              maxWidth: "700px",
-              margin: "0 auto 24px auto",
-              padding: "24px",
-              border: useCustomAgents ? "1px solid rgba(255,254,178,0.15)" : "1px solid rgba(255,255,255,0.08)",
-              borderRadius: "16px",
-              backgroundColor: "rgba(0,0,0,0.3)",
-              backdropFilter: "blur(12px)",
-              transition: "border-color 0.3s ease",
-            }}>
-              <button
-                onClick={() => setUseCustomAgents(!useCustomAgents)}
-                style={{
-                  fontFamily: "inherit",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  width: "100%",
-                  padding: "4px 0",
-                  background: "none",
-                  border: "none",
-                  color: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.5)",
-                  cursor: "pointer",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                }}
-              >
-                <div style={{
-                  width: "40px", height: "22px", borderRadius: "11px",
-                  backgroundColor: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.12)",
-                  position: "relative", transition: "all 0.2s ease", flexShrink: 0,
-                }}>
-                  <div style={{
-                    width: "18px", height: "18px", borderRadius: "50%",
-                    backgroundColor: useCustomAgents ? "#000" : "rgba(255,255,255,0.4)",
-                    position: "absolute", top: "2px",
-                    left: useCustomAgents ? "20px" : "2px", transition: "all 0.2s ease",
-                  }} />
-                </div>
-                Pick Your Agents
-              </button>
-
-              {useCustomAgents && (
-                <div style={{ marginTop: "20px" }}>
-                  {availableAgents.length === 0 ? (
-                    <div style={{
-                      textAlign: "center", padding: "32px 20px",
-                      border: "1px dashed rgba(255,255,255,0.1)", borderRadius: "12px",
-                    }}>
-                      <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.4)", marginBottom: "12px" }}>
-                        No agents found for this category
-                      </div>
-                      <a href="/agents/create" style={{
-                        fontFamily: "inherit", fontSize: "13px", color: "#fffeb2",
-                        textDecoration: "none", padding: "8px 20px", borderRadius: "6px",
-                        border: "1px solid rgba(255,254,178,0.3)", backgroundColor: "rgba(255,254,178,0.08)",
-                      }}>
-                        Create an Agent
-                      </a>
-                    </div>
-                  ) : (
-                    <>
-                      {/* VS indicator when both selected */}
-                      {selectedAlpha && selectedOmega && (
-                        <div style={{
-                          textAlign: "center", padding: "12px", marginBottom: "16px",
-                          borderRadius: "10px", backgroundColor: "rgba(255,254,178,0.05)",
-                          border: "1px solid rgba(255,254,178,0.1)",
-                        }}>
-                          <span style={{ color: "#fffeb2", fontWeight: 700, fontSize: "15px" }}>{selectedAlpha.name}</span>
-                          <span style={{ color: "rgba(255,255,255,0.3)", margin: "0 12px", fontSize: "13px" }}>VS</span>
-                          <span style={{ color: "#FF425E", fontWeight: 700, fontSize: "15px" }}>{selectedOmega.name}</span>
-                        </div>
-                      )}
-
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                        {/* Challenger selector */}
-                        <div>
-                          <div className="font-display" style={{ fontSize: "14px", color: "#fffeb2", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
-                            Challenger
-                          </div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "240px", overflowY: "auto", paddingRight: "4px" }}>
-                            {availableAgents.map((agent) => {
-                              const isSelected = selectedAlpha?.id === agent.id;
-                              const isDisabled = selectedOmega?.id === agent.id;
-                              return (
-                                <button
-                                  key={agent.id}
-                                  onClick={() => setSelectedAlpha(agent)}
-                                  disabled={isDisabled}
-                                  style={{
-                                    fontFamily: "inherit", fontSize: "13px",
-                                    padding: "12px 14px", borderRadius: "10px", textAlign: "left" as const,
-                                    border: isSelected ? "1.5px solid #fffeb2" : "1px solid rgba(255,255,255,0.08)",
-                                    background: isSelected ? "rgba(255,254,178,0.08)" : "rgba(255,255,255,0.02)",
-                                    color: isSelected ? "#fffeb2" : isDisabled ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.7)",
-                                    cursor: isDisabled ? "not-allowed" : "pointer",
-                                    opacity: isDisabled ? 0.35 : 1,
-                                    display: "flex", alignItems: "center", gap: "12px",
-                                    transition: "all 0.15s ease",
-                                  }}
-                                >
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  {agent.avatarUrl ? (
-                                    <img src={agent.avatarUrl} alt="" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover", flexShrink: 0 }} />
-                                  ) : (
-                                    <div style={{
-                                      width: "36px", height: "36px", borderRadius: "8px", flexShrink: 0,
-                                      backgroundColor: isSelected ? "rgba(255,254,178,0.15)" : "rgba(255,255,255,0.06)",
-                                      display: "flex", alignItems: "center", justifyContent: "center",
-                                      fontSize: "14px", fontWeight: 700, color: isSelected ? "#fffeb2" : "rgba(255,255,255,0.3)",
-                                    }}>
-                                      {agent.name.charAt(0)}
-                                    </div>
-                                  )}
-                                  <div style={{ minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{agent.name}</div>
-                                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "2px" }}>{agent.model}</div>
-                                  </div>
-                                  {isSelected && (
-                                    <div style={{ marginLeft: "auto", fontSize: "14px", color: "#fffeb2", flexShrink: 0 }}>
-                                      {"\u2713"}
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Defender selector */}
-                        <div>
-                          <div className="font-display" style={{ fontSize: "14px", color: "#FF425E", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
-                            Defender
-                          </div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "240px", overflowY: "auto", paddingRight: "4px" }}>
-                            {availableAgents.map((agent) => {
-                              const isSelected = selectedOmega?.id === agent.id;
-                              const isDisabled = selectedAlpha?.id === agent.id;
-                              return (
-                                <button
-                                  key={agent.id}
-                                  onClick={() => setSelectedOmega(agent)}
-                                  disabled={isDisabled}
-                                  style={{
-                                    fontFamily: "inherit", fontSize: "13px",
-                                    padding: "12px 14px", borderRadius: "10px", textAlign: "left" as const,
-                                    border: isSelected ? "1.5px solid #FF425E" : "1px solid rgba(255,255,255,0.08)",
-                                    background: isSelected ? "rgba(255,66,94,0.08)" : "rgba(255,255,255,0.02)",
-                                    color: isSelected ? "#FF425E" : isDisabled ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.7)",
-                                    cursor: isDisabled ? "not-allowed" : "pointer",
-                                    opacity: isDisabled ? 0.35 : 1,
-                                    display: "flex", alignItems: "center", gap: "12px",
-                                    transition: "all 0.15s ease",
-                                  }}
-                                >
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  {agent.avatarUrl ? (
-                                    <img src={agent.avatarUrl} alt="" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover", flexShrink: 0 }} />
-                                  ) : (
-                                    <div style={{
-                                      width: "36px", height: "36px", borderRadius: "8px", flexShrink: 0,
-                                      backgroundColor: isSelected ? "rgba(255,66,94,0.15)" : "rgba(255,255,255,0.06)",
-                                      display: "flex", alignItems: "center", justifyContent: "center",
-                                      fontSize: "14px", fontWeight: 700, color: isSelected ? "#FF425E" : "rgba(255,255,255,0.3)",
-                                    }}>
-                                      {agent.name.charAt(0)}
-                                    </div>
-                                  )}
-                                  <div style={{ minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, fontSize: "14px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{agent.name}</div>
-                                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "2px" }}>{agent.model}</div>
-                                  </div>
-                                  {isSelected && (
-                                    <div style={{ marginLeft: "auto", fontSize: "14px", color: "#FF425E", flexShrink: 0 }}>
-                                      {"\u2713"}
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Stakes Selector */}
