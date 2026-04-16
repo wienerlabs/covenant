@@ -2514,7 +2514,7 @@ export default function BattlePage() {
             <div style={{ display: "flex", gap: "0px", alignItems: "stretch" }}>
               {/* Alpha Panel */}
               {renderAgentPanel(
-                ALPHA_CONFIG,
+                useCustomAgents && selectedAlpha ? { ...ALPHA_CONFIG, name: selectedAlpha.name, avatarSeed: selectedAlpha.avatarSeed || selectedAlpha.id } : ALPHA_CONFIG,
                 alphaState,
                 alphaStatus,
                 alphaDisplayText,
@@ -2603,7 +2603,7 @@ export default function BattlePage() {
 
               {/* Omega Panel */}
               {renderAgentPanel(
-                OMEGA_CONFIG,
+                useCustomAgents && selectedOmega ? { ...OMEGA_CONFIG, name: selectedOmega.name, avatarSeed: selectedOmega.avatarSeed || selectedOmega.id } : OMEGA_CONFIG,
                 omegaState,
                 omegaStatus,
                 omegaDisplayText,
@@ -3067,7 +3067,9 @@ export default function BattlePage() {
                   Battle Result
                 </div>
                 <div className="font-display" style={{ fontSize: "32px", color: "#fffeb2", marginBottom: "8px" }}>
-                  {winner === "alpha" ? ALPHA_CONFIG.name : OMEGA_CONFIG.name} WINS
+                  {winner === "alpha"
+                    ? (useCustomAgents && selectedAlpha ? selectedAlpha.name : ALPHA_CONFIG.name)
+                    : (useCustomAgents && selectedOmega ? selectedOmega.name : OMEGA_CONFIG.name)} WINS
                 </div>
                 <div style={{ fontSize: "16px", color: "rgba(255,255,255,0.6)", marginBottom: "20px" }}>
                   {alphaScore !== null ? alphaScore.toFixed(1) : "?"} — {omegaScore !== null ? omegaScore.toFixed(1) : "?"}
@@ -3077,7 +3079,9 @@ export default function BattlePage() {
                 </div>
                 <button
                   onClick={() => {
-                    const winnerName = winner === "alpha" ? ALPHA_CONFIG.name : OMEGA_CONFIG.name;
+                    const winnerName = winner === "alpha"
+                      ? (useCustomAgents && selectedAlpha ? selectedAlpha.name : ALPHA_CONFIG.name)
+                      : (useCustomAgents && selectedOmega ? selectedOmega.name : OMEGA_CONFIG.name);
                     const aScore = alphaScore !== null ? alphaScore.toFixed(1) : "?";
                     const oScore = omegaScore !== null ? omegaScore.toFixed(1) : "?";
                     const text = `${winnerName} wins! Score: ${aScore} vs ${oScore} on @WCovenant covenant.run/battle`;
