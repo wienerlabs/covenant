@@ -101,9 +101,10 @@ export async function verifyPayment(
     // This handles the simplified devnet flow where clients send
     // a base64-encoded JSON with a txHash field directly
     try {
-      const raw = JSON.parse(
-        Buffer.from(paymentSignatureHeader, "base64").toString(),
-      );
+      const decoded = Buffer.from(paymentSignatureHeader, "base64").toString();
+      // Handle both plain and URI-encoded JSON
+      const jsonStr = decoded.includes("%") ? decodeURIComponent(decoded) : decoded;
+      const raw = JSON.parse(jsonStr);
       const txHash = raw.transaction || raw.txHash || "";
       if (txHash) {
         return { valid: true, txHash, payer: raw.payer || "" };

@@ -292,7 +292,9 @@ export default function AgentChatPage() {
           transaction: paymentTxHash,
         },
       };
-      const paymentSig = btoa(JSON.stringify(paymentPayload));
+      // Unicode-safe base64 encoding for x402 payment header
+      const jsonStr = JSON.stringify(paymentPayload);
+      const paymentSig = btoa(unescape(encodeURIComponent(jsonStr)));
 
       // Retry the chat request with payment signature
       const agentMsgId = uid();
