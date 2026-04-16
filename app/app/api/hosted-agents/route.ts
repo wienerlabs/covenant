@@ -10,10 +10,19 @@ export const dynamic = "force-dynamic";
  *
  * List all active hosted agents, ordered by most recent first.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const wallet = req.nextUrl.searchParams.get("wallet");
+    const showAll = req.nextUrl.searchParams.get("all") === "true";
+
+    // If wallet + all: return ALL agents for this wallet (including inactive) — for dashboard
+    // Otherwise: return only active agents (marketplace)
+    const where = wallet && showAll
+      ? { walletAddress: wallet }
+      : { active: true };
+
     const agents = await prisma.hostedAgent.findMany({
-      where: { active: true },
+      where,
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(agents);

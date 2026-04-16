@@ -128,12 +128,21 @@ export async function POST(
   /*  Enrich context                                                   */
   /* ---------------------------------------------------------------- */
 
+  // Enhance system prompt with capabilities info
+  let systemPrompt = agent.systemPrompt;
+  if (agent.webEnabled) {
+    systemPrompt += "\n\n[System Note: You have web search access. Real-time search results are automatically provided with user messages when relevant. Use the search data provided to give accurate, up-to-date answers.]";
+  }
+  if (agent.category === "solana_agent") {
+    systemPrompt += "\n\n[System Note: You have real-time Solana blockchain access. On-chain data (balances, transactions, account info) is automatically fetched and provided with user messages when a Solana address is detected.]";
+  }
+
   let enrichedMessage = message;
 
   if (agent.webEnabled) {
     try {
       const search = await webSearch(message.slice(0, 100));
-      if (search) enrichedMessage = `${search}\n\n---\n${message}`;
+      if (search) enrichedMessage = `${search}\n\n---\nUser message: ${message}`;
     } catch {
       // non-fatal
     }
@@ -185,7 +194,7 @@ export async function POST(
     const aiRes = await client.messages.create({
       model: modelId,
       max_tokens: 2048,
-      system: agent.systemPrompt,
+      system: systemPrompt,
       messages: conversationMessages,
     });
 

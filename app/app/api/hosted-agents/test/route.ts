@@ -43,6 +43,15 @@ export async function POST(req: NextRequest) {
 
     const startTime = Date.now();
 
+    // Enhance system prompt with capability info
+    let enhancedSystemPrompt = systemPrompt;
+    if (webEnabled) {
+      enhancedSystemPrompt += "\n\n[System Note: You have web search access. Real-time search results are automatically provided with user messages when relevant. Use the search data to give accurate, up-to-date answers.]";
+    }
+    if (category === "solana_agent") {
+      enhancedSystemPrompt += "\n\n[System Note: You have real-time Solana blockchain access. On-chain data is automatically fetched and provided with user messages when a Solana address is detected.]";
+    }
+
     // If web access is enabled, search and prepend results to user prompt
     let contextEnhanced = userPrompt;
     if (webEnabled) {
@@ -77,7 +86,7 @@ export async function POST(req: NextRequest) {
       const aiResponse = await client.messages.create({
         model: anthropicModelId,
         max_tokens: 1024,
-        system: systemPrompt.trim(),
+        system: enhancedSystemPrompt.trim(),
         messages: [{ role: "user", content: contextEnhanced.trim() }],
       });
 

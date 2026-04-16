@@ -548,14 +548,10 @@ export default function DashboardPage() {
   useEffect(() => {
     if (tab === "agents" && wallet) {
       setAgentsLoading(true);
-      fetch("/api/hosted-agents")
+      fetch(`/api/hosted-agents?wallet=${wallet}&all=true`)
         .then((r) => r.json())
         .then((all) => {
-          setMyAgents(
-            (Array.isArray(all) ? all : []).filter(
-              (a: any) => a.walletAddress === wallet
-            )
-          );
+          setMyAgents(Array.isArray(all) ? all : []);
         })
         .catch(() => setMyAgents([]))
         .finally(() => setAgentsLoading(false));
