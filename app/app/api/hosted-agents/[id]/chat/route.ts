@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { webSearch } from "@/lib/web-search";
 import { getSolanaContext } from "@/lib/solana-agent";
 import { rateLimit } from "@/lib/rateLimit";
+import {
+  buildPaymentRequired,
+  verifyPayment,
+  encodePaymentRequiredHeader,
+} from "@/lib/x402-server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -28,7 +33,7 @@ export async function GET(
 }
 
 /* ------------------------------------------------------------------ */
-/*  POST – send a message and get AI response                          */
+/*  POST – send a message and get AI response (x402 payment gated)     */
 /* ------------------------------------------------------------------ */
 
 export async function POST(
@@ -68,7 +73,61 @@ export async function POST(
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
-  // Enrich context
+  /* ---------------------------------------------------------------- */
+  /*  x402 Payment Gate                                                */
+  /* ---------------------------------------------------------------- */
+
+  const paymentSig = req.headers.get("payment-signature");
+  let paymentTxHash = "";
+
+  if (agent.pricePerPrompt > 0) {
+    const paymentRequired = buildPaymentRequired(
+      id,
+      agent.name,
+      agent.pricePerPrompt,
+      agent.walletAddress,
+    );
+
+    // No payment signature provided — return 402 with payment requirements
+    if (!paymentSig) {
+      const encodedHeader = encodePaymentRequiredHeader(paymentRequired);
+      return new Response(JSON.stringify(paymentRequired), {
+        status: 402,
+        headers: {
+          "Content-Type": "application/json",
+          "Payment-Required": encodedHeader,
+        },
+      });
+    }
+
+    // Payment signature provided — verify it
+    const { valid, txHash } = await verifyPayment(paymentSig, paymentRequired);
+
+    if (!valid) {
+      // Payment verification failed — return 402 again
+      const encodedHeader = encodePaymentRequiredHeader(paymentRequired);
+      return new Response(
+        JSON.stringify({
+          ...paymentRequired,
+          error: "Payment verification failed. Please try again.",
+        }),
+        {
+          status: 402,
+          headers: {
+            "Content-Type": "application/json",
+            "Payment-Required": encodedHeader,
+          },
+        },
+      );
+    }
+
+    paymentTxHash = txHash;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Enrich context                                                   */
+  /* ---------------------------------------------------------------- */
+
   let enrichedMessage = message;
 
   if (agent.webEnabled) {
@@ -139,7 +198,7 @@ export async function POST(
       data: { agentId: id, userWallet, role: "agent", content: response },
     });
 
-    // Record revenue
+    // Record revenue (with real tx hash from x402 payment)
     if (walletAddress && agent.pricePerPrompt > 0) {
       try {
         await prisma.$transaction([
@@ -165,6 +224,7 @@ export async function POST(
       wordCount: response.split(/\s+/).length,
       agentId: id,
       priceCharged: agent.pricePerPrompt,
+      paymentTx: paymentTxHash || undefined,
     });
   } catch (err) {
     console.error("[hosted-agents/chat] AI call error:", err);

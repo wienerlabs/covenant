@@ -95,6 +95,17 @@ export default function AgentChatPage() {
   const [sending, setSending] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // x402 payment state
+  const [paymentRequired, setPaymentRequired] = useState<{
+    x402Version: number;
+    error?: string;
+    accepts: { amount: string; payTo: string; asset: string; network: string }[];
+    resource: { url: string; description: string };
+  } | null>(null);
+  const [pendingMessage, setPendingMessage] = useState("");
+  const [pendingAgentMsgId, setPendingAgentMsgId] = useState("");
+  const [paying, setPaying] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -187,7 +198,7 @@ export default function AgentChatPage() {
     }, speed);
   }, []);
 
-  /* ---- Send message ---- */
+  /* ---- Send message (with x402 payment handling) ---- */
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || sending || !agent) return;
@@ -222,6 +233,24 @@ export default function AgentChatPage() {
         }),
       });
 
+      // x402: Handle 402 Payment Required
+      if (res.status === 402) {
+        const payReq = await res.json();
+        setPendingMessage(trimmed);
+        setPendingAgentMsgId(agentMsgId);
+        setPaymentRequired(payReq);
+        // Remove the typing placeholder — payment UI will appear instead
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === agentMsgId
+              ? { ...m, text: "", typing: false }
+              : m
+          ).filter((m) => !(m.id === agentMsgId && m.text === ""))
+        );
+        setSending(false);
+        return;
+      }
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: "Request failed" }));
         throw new Error(errData.error || "Request failed");
@@ -242,6 +271,92 @@ export default function AgentChatPage() {
       setSending(false);
     }
   }, [input, sending, agent, account, typewriterAppend]);
+
+  /* ---- x402 Payment handler ---- */
+  const handlePayment = useCallback(async () => {
+    if (!agent || !pendingMessage || paying) return;
+    setPaying(true);
+
+    try {
+      // Build a payment signature for devnet.
+      // In production with real x402 client SDK, this would construct
+      // a proper USDC SPL transfer transaction and encode it as a
+      // PaymentPayload. For devnet, we encode a simplified marker.
+      const paymentTxHash = `x402:${Date.now()}:${walletAddress || "anonymous"}`;
+
+      const paymentPayload = {
+        x402Version: 2,
+        resource: paymentRequired?.resource,
+        accepted: paymentRequired?.accepts?.[0] || {},
+        payload: {
+          transaction: paymentTxHash,
+        },
+      };
+      const paymentSig = btoa(JSON.stringify(paymentPayload));
+
+      // Retry the chat request with payment signature
+      const agentMsgId = uid();
+      const agentPlaceholder: ChatMessage = {
+        id: agentMsgId,
+        role: "agent",
+        text: "",
+        timestamp: new Date(),
+        typing: true,
+      };
+      setMessages((prev) => [...prev, agentPlaceholder]);
+
+      const res = await fetch(`/api/hosted-agents/${agent.id}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Payment-Signature": paymentSig,
+        },
+        body: JSON.stringify({
+          message: pendingMessage,
+          walletAddress: account || undefined,
+        }),
+      });
+
+      if (res.status === 402) {
+        // Payment still not verified — show error
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === agentMsgId
+              ? { ...m, text: "Payment verification failed. Please try again.", typing: false }
+              : m
+          )
+        );
+      } else if (res.ok) {
+        const data = await res.json();
+        typewriterAppend(agentMsgId, data.response);
+      } else {
+        const errData = await res.json().catch(() => ({ error: "Request failed" }));
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === agentMsgId
+              ? { ...m, text: `Error: ${errData.error || "Request failed"}`, typing: false }
+              : m
+          )
+        );
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : "Payment failed";
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          role: "agent",
+          text: `Error: ${errMsg}`,
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setPaying(false);
+      setPaymentRequired(null);
+      setPendingMessage("");
+      setPendingAgentMsgId("");
+    }
+  }, [agent, pendingMessage, paying, walletAddress, paymentRequired, account, typewriterAppend]);
 
   /* ---- Handle Enter key ---- */
   const handleKeyDown = useCallback(
@@ -1031,6 +1146,74 @@ export default function AgentChatPage() {
                     </div>
                   );
                 })}
+
+                {/* x402 Payment Required UI */}
+                {paymentRequired && (
+                  <div
+                    style={{
+                      padding: "20px",
+                      borderRadius: "12px",
+                      border: "1px solid rgba(255,254,178,0.2)",
+                      backgroundColor: "rgba(255,254,178,0.05)",
+                      backdropFilter: "blur(12px)",
+                      textAlign: "center",
+                      margin: "16px 0",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "14px",
+                        color: "#fffeb2",
+                        fontWeight: 600,
+                        marginBottom: "8px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      Payment Required
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "13px",
+                        color: "rgba(255,255,255,0.6)",
+                        marginBottom: "16px",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      This agent charges {agent.pricePerPrompt} USDC per message
+                    </div>
+                    <button
+                      onClick={handlePayment}
+                      disabled={paying}
+                      style={{
+                        fontFamily: "inherit",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        padding: "12px 32px",
+                        borderRadius: "8px",
+                        border: "none",
+                        backgroundColor: paying ? "rgba(255,254,178,0.3)" : "#fffeb2",
+                        color: paying ? "rgba(0,0,0,0.4)" : "#000",
+                        cursor: paying ? "not-allowed" : "pointer",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      {paying ? "Processing..." : `Pay ${agent.pricePerPrompt} USDC & Send`}
+                    </button>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "rgba(255,255,255,0.3)",
+                        marginTop: "12px",
+                      }}
+                    >
+                      x402 HTTP Payment Protocol
+                    </div>
+                  </div>
+                )}
+
                 <div ref={messagesEndRef} />
               </div>
 
