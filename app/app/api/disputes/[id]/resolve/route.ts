@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { releaseFundsToTaker } from "@/lib/escrow";
+import {
+  fetchJobEscrow,
+  verifyTxInvokedCovenant,
+} from "@/lib/program-server";
+import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
 
 /**
@@ -143,32 +147,68 @@ export async function POST(
       });
     }
 
-    // Threshold reached: apply resolution and distribute funds
-    let paymentTxHash: string | null = null;
+    // ---- On-chain settlement ----
+    //
+    // The previous version called `releaseFundsToTaker` with the
+    // server's deployer keypair when threshold was reached. That
+    // pattern was the root cause of audit C-01 (anyone who knew two
+    // arbitrator addresses could drain the shared pool via this path).
+    //
+    // Now: the arbitrator MUST have already invoked the on-chain
+    // `resolve_dispute` instruction with their own signature. We accept
+    // the resulting tx hash, verify it landed and invoked our program,
+    // and then read the on-chain JobEscrow to confirm the dispute is
+    // actually Resolved before mirroring to DB.
+    //
+    // The server NEVER signs a fund-moving transaction here.
+    if (!txHash) {
+      return NextResponse.json(
+        {
+          error:
+            "txHash (on-chain resolve_dispute tx signature) is required when threshold is reached. " +
+            "The arbitrator must invoke resolve_dispute from their wallet before calling this endpoint.",
+        },
+        { status: 400 },
+      );
+    }
+
     const payoutToTaker =
       kind === "FavorTaker"
         ? dispute.job.amount
         : kind === "Split"
           ? (takerAmount as number)
           : 0;
+    let paymentTxHash: string | null = null;
 
-    if (payoutToTaker > 0 && dispute.job.takerWallet) {
-      try {
-        const result = await releaseFundsToTaker(
-          dispute.job.takerWallet,
-          payoutToTaker,
-        );
-        paymentTxHash = result.txHash;
-      } catch (err) {
-        console.error("[resolve] escrow release failed:", err);
-        return NextResponse.json(
-          {
-            error: "Escrow release failed; dispute not finalized",
-            detail: err instanceof Error ? err.message : String(err),
-          },
-          { status: 500 },
-        );
+    try {
+      await verifyTxInvokedCovenant(txHash);
+
+      // If we have the JobEscrow PDA, confirm the on-chain status
+      // actually moved to Resolved (catches partial-state DB drift).
+      if (dispute.job.pda) {
+        const onchain = await fetchJobEscrow(new PublicKey(dispute.job.pda));
+        if (!onchain) {
+          throw new Error(
+            `JobEscrow PDA ${dispute.job.pda.slice(0, 8)}… not found on chain.`,
+          );
+        }
+        if (onchain.status !== "Resolved") {
+          throw new Error(
+            `On-chain JobEscrow status is '${onchain.status}'; expected 'Resolved'. ` +
+            `Either the supplied tx is not the threshold-reaching one, or it failed on chain.`,
+          );
+        }
       }
+      paymentTxHash = txHash;
+    } catch (err) {
+      console.error("[resolve] on-chain verification failed:", err);
+      return NextResponse.json(
+        {
+          error: "Resolve tx verification failed: " +
+            (err instanceof Error ? err.message : String(err)),
+        },
+        { status: 400 },
+      );
     }
 
     const resolved = await prisma.$transaction(async (tx) => {

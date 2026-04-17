@@ -14,6 +14,7 @@ datasource db {
 model Job {
   id               String      @id @default(cuid())
   pda              String?     @unique // on-chain JobEscrow PDA (base58)
+  escrowAta        String?     // SPL escrow token account (base58); not a PDA in v1
   posterWallet     String
   takerWallet      String?
   amount           Float

@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
-import { releaseFundsToTaker } from "@/lib/escrow";
 import { awardXP, XP_REWARDS } from "@/lib/xp";
 import { checkAndUnlock } from "@/lib/achievements";
 import { PROTOCOL_FEE_BPS } from "@/lib/constants";
+import {
+  botFinalizePayment,
+  fetchJobEscrow,
+  verifyTxInvokedCovenant,
+  keypairFromEnv,
+} from "@/lib/program-server";
+import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
 
 /**
@@ -71,45 +77,104 @@ export async function POST(
       );
     }
 
-    // 1. Atomically claim the finalization (prevent double-payment race)
-    const claimed = await prisma.job.updateMany({
-      where: { id, status: "Delivered" },
-      data: { status: "Finalized" },
-    });
-    if (claimed.count === 0) {
-      // Another request already finalized — return success (idempotent)
-      return NextResponse.json({
-        job: { id, status: "Finalized" },
-        paymentTxHash: "already-finalized",
-        finalizedBy: caller,
-      });
-    }
+    // ---- On-chain finalize ----
+    //
+    // Two acceptable inputs:
+    //   (A) Caller already invoked the on-chain `finalize_payment`
+    //       crank from their browser (or a server) and passes
+    //       `txSignature` in the body. We verify and mirror.
+    //   (B) Caller asks the server to crank for them. We use the
+    //       configured CRANK_KEYPAIR (or DEPLOYER_KEYPAIR fallback)
+    //       and call `finalize_payment` on chain. The crank's only
+    //       privilege is paying SOL fees — it cannot redirect funds
+    //       (the program enforces taker payment to the registered taker).
+    //
+    // Either way, no shared deployer wallet ever holds user USDC.
 
-    // 2. Release escrow (skip for agent-fulfilled jobs — no real USDC was locked)
     const isAgentJob = job.takerWallet.startsWith("covenant-agent-");
+    const callerTxSig = (body as { txSignature?: string }).txSignature;
+
     let paymentTxHash: string | null = null;
+
     if (isAgentJob) {
+      // Synthetic agent jobs (battle/arena demos that did not lock real
+      // USDC) just record completion — no on-chain settlement to do.
       paymentTxHash = "agent:finalized:" + crypto.randomBytes(12).toString("hex");
-    } else {
+    } else if (callerTxSig) {
+      // Path A: client-cranked. Verify the tx and mirror.
       try {
-        const result = await releaseFundsToTaker(job.takerWallet, job.amount);
-        paymentTxHash = result.txHash;
+        await verifyTxInvokedCovenant(callerTxSig);
+        if (job.pda) {
+          const onchain = await fetchJobEscrow(new PublicKey(job.pda));
+          if (onchain && onchain.status !== "Finalized") {
+            throw new Error(
+              `On-chain JobEscrow status is ${onchain.status}; expected Finalized after the crank tx.`,
+            );
+          }
+        }
+        paymentTxHash = callerTxSig;
       } catch (err) {
-        console.error("[finalize] escrow release failed:", err);
-        // Revert status so it can be retried
-        await prisma.job.updateMany({
-          where: { id, status: "Finalized" },
-          data: { status: "Delivered" },
+        console.error("[finalize] client-cranked verify failed:", err);
+        return NextResponse.json(
+          {
+            error: "Finalize tx verification failed: " +
+              (err instanceof Error ? err.message : String(err)),
+          },
+          { status: 400 },
+        );
+      }
+    } else {
+      // Path B: server-cranked. Use CRANK_KEYPAIR if configured, else
+      // fall back to DEPLOYER_KEYPAIR. Crank only pays fees — it cannot
+      // redirect funds because the on-chain program enforces the taker.
+      const crankEnv = process.env.CRANK_KEYPAIR ? "CRANK_KEYPAIR" : "DEPLOYER_KEYPAIR";
+      try {
+        if (!job.pda || !job.escrowAta) {
+          throw new Error(
+            "Job is missing on-chain PDA / escrowAta; cannot run server crank. " +
+            "Caller should pass txSignature after invoking finalize_payment client-side.",
+          );
+        }
+        const crankKp = keypairFromEnv(crankEnv);
+        // Need spec_hash bytes for PDA derivation — re-derive from DB.
+        const specHashBuf = Buffer.from(job.specHash, "hex");
+        const sig = await botFinalizePayment({
+          crankKeypair: crankKp,
+          poster: new PublicKey(job.posterWallet),
+          taker: new PublicKey(job.takerWallet),
+          specHash: specHashBuf,
+          escrowTokenAccount: new PublicKey(job.escrowAta),
         });
+        paymentTxHash = sig;
+      } catch (err) {
+        console.error("[finalize] server crank failed:", err);
         return NextResponse.json(
           {
             error:
-              "Escrow release failed; funds remain locked. Manual intervention required.",
+              "Server-side crank failed; funds remain locked. " +
+              "Caller can retry by invoking finalize_payment from a wallet and " +
+              "passing txSignature in this request body.",
             detail: err instanceof Error ? err.message : String(err),
           },
           { status: 500 },
         );
       }
+    }
+
+    // Atomically mark the DB row Finalized once the on-chain settlement
+    // is confirmed. If another concurrent request beat us to it, we
+    // still return success (idempotent) since the chain is the truth.
+    const claimed = await prisma.job.updateMany({
+      where: { id, status: "Delivered" },
+      data: { status: "Finalized" },
+    });
+    if (claimed.count === 0) {
+      return NextResponse.json({
+        job: { id, status: "Finalized" },
+        paymentTxHash,
+        finalizedBy: caller,
+        note: "already-finalized",
+      });
     }
 
     // 2b. Calculate protocol fee (recorded only — on-chain deduction comes at mainnet)

@@ -9,6 +9,52 @@
 
 ---
 
+## Status update — on-chain settlement refactor (post-audit)
+
+The two structural findings (**C-01 custodial drain** ve **H-02 web app
+bypasses Anchor**) were **resolved** by a v1.1 refactor that wires
+every fund-moving lifecycle step directly into the on-chain Anchor
+program. Highlights:
+
+- `lib/program-server.ts` (yeni): server-side bot helpers
+  (`botCreateJob` / `botAcceptJob` / `botSubmitWork` / `botFinalizePayment`)
+  + `fetchJobEscrow`, `verifyTxInvokedCovenant`. Server only ever signs
+  with a bot's own keypair, never with the deployer key on behalf of
+  another user.
+- `lib/anchor-browser.ts`: extended with `acceptJobOnChain`,
+  `raiseDisputeOnChain`, `resolveDisputeOnChain`, `cancelJobOnChain`
+  (createJob/submitWork/finalizePayment already existed).
+- `lib/escrow.ts` + `lib/client-escrow.ts`: the four custodial helpers
+  (`lockFundsInEscrow`, `releaseFundsToTaker`, `refundToPoster`,
+  `buildEscrowLockTransaction`) are now throwing stubs with a
+  migration message. Only `mintTestUSDC` (test mint authority — a
+  legitimate authority key, not a custody key) and `getTokenBalance`
+  remain functional.
+- `/api/jobs` POST, `/api/jobs/[id]/finalize`, `/api/jobs/[id]/dispute`,
+  `/api/jobs/[id]/cancel`, `/api/jobs/[id]/submit`,
+  `/api/disputes/[id]/resolve`, `/api/cron/finalize` — all rewritten
+  to verify on-chain tx signatures and mirror the on-chain `JobEscrow`
+  state into the DB. None of them call the deployer keypair to move
+  user USDC.
+- `/api/escrow/build` and `/api/escrow/confirm` — return **410 Gone**
+  with a migration note pointing at `/api/jobs` and the on-chain
+  client.
+- Demo routes (battle/run, arena/run, arena/fulfill, autonomous/run,
+  agents/hire) keep their narrative event streams but no longer move
+  USDC. Real settlement should run through the standard /api/jobs
+  pipeline — `botCreateJob` is the bot-side equivalent for head-less
+  agents.
+- README updated with the "Fully On-Chain Settlement" section + a
+  copy-paste example of the human-user create-job flow.
+
+Together with the previously merged audit fixes (#24 C-03, #25 H-01,
+#26 H-03, #27 C-04, #28 M-01, #30 H-05, plus C-02's wallet-auth
+foundation in #26), this leaves only architectural follow-ups in
+**H-04** (distributed rate limiter) and **H-06** (Anchor 0.31 / Solana
+1.20 SDK bump) as open audit items. Everything else has been closed.
+
+---
+
 ## Yönetici Özeti
 
 | Severity | Sayı |

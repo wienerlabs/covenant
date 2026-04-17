@@ -2,7 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { AGENT_OMEGA } from "@/lib/agents";
 import { executeCircuit } from "@/lib/work-metrics";
 import { sendMarkerTransaction } from "@/lib/solana";
-import { releaseFundsToTaker } from "@/lib/escrow";
+// arena/fulfill is a head-less DEMO route. Real settlement runs on
+// chain via the standard create_job → submit_work → finalize_payment
+// pipeline. The previous custodial `releaseFundsToTaker` call was
+// removed in the on-chain refactor (audit C-01). Demo runs no longer
+// move USDC.
 import { getCategoryById } from "@/lib/categories";
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
@@ -327,38 +331,16 @@ Write a thorough, professional response that fully addresses the job requirement
         });
 
         // ===== STEP 7: RELEASE USDC =====
-        try {
-          send(
-            "escrow_release",
-            `Releasing ${amount} USDC to Agent Omega...`,
-            null
-          );
-          const releaseResult = await releaseFundsToTaker(
-            AGENT_OMEGA.wallet,
-            amount
-          );
-          send("escrow_released", "Payment released to taker", {
-            txHash: releaseResult.txHash,
+        // No custodial release: arena demo records completion only.
+        // Real on-chain settlement uses the standard /api/jobs pipeline.
+        send(
+          "escrow_released",
+          `Demo complete (${amount} USDC notional, no real transfer)`,
+          {
             amount,
-            fromAta: releaseResult.fromAta,
-            toAta: releaseResult.toAta,
-          });
-          await prisma.transaction.create({
-            data: {
-              txHash: releaseResult.txHash,
-              type: "escrow_release",
-              jobId: job.id,
-              wallet: AGENT_OMEGA.wallet,
-              amount,
-              status: "confirmed",
-            },
-          });
-        } catch (err) {
-          console.error("[fulfill] Failed to release escrow:", err);
-          send("escrow_release", "Escrow release attempted (fallback)", {
-            error: String(err).slice(0, 200),
-          });
-        }
+            note: "demo-mode: no on-chain release; use /api/jobs pipeline for real settlement",
+          },
+        );
 
         // ===== STEP 8: SEND MARKER TXS =====
         try {

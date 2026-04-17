@@ -1,60 +1,43 @@
-import { Connection, PublicKey, Transaction } from "@solana/web3.js";
-import {
-  TOKEN_PROGRAM_ID,
-  createTransferInstruction,
-  getAssociatedTokenAddress,
-  getAccount,
-  createAssociatedTokenAccountInstruction,
-} from "@solana/spl-token";
+/**
+ * @file client-escrow.ts — DEPRECATED custodial escrow tx builder
+ *
+ * Builds an SPL transfer transaction from the user's wallet to the
+ * shared deployer-controlled escrow wallet. This was the
+ * implementation of the "single shared pool" pattern flagged as
+ * audit C-01 / H-02.
+ *
+ * The on-chain settlement refactor replaces this entirely. Job
+ * creation now goes through the real on-chain `create_job` Anchor
+ * instruction (see lib/anchor-browser.ts → createJobOnChain), which
+ * locks USDC into a per-job PDA escrow owned by the program — no
+ * shared deployer wallet involved.
+ *
+ * `buildEscrowLockTransaction` is kept as a throwing stub so any
+ * stale UI import fails loudly with a clear migration message
+ * instead of silently rebuilding the custodial flow.
+ *
+ * `checkUSDCBalance` remains functional because it is read-only and
+ * does not move funds.
+ */
+
+import { Connection, PublicKey } from "@solana/web3.js";
+import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
 import {
   DEVNET_ENDPOINT as DEVNET_RPC,
   USDC_MINT as TEST_USDC_MINT,
-  ESCROW_WALLET,
   USDC_DECIMALS,
 } from "./constants";
 
-/**
- * Build a SPL token transfer transaction for the user to sign.
- * Returns the serialized transaction (base64) ready for wallet signing.
- */
-export async function buildEscrowLockTransaction(
-  posterWallet: string,
-  amount: number,
-): Promise<{ transaction: string; escrowAta: string; posterAta: string }> {
-  const connection = new Connection(DEVNET_RPC, "confirmed");
-  const posterPubkey = new PublicKey(posterWallet);
-
-  const posterAta = await getAssociatedTokenAddress(TEST_USDC_MINT, posterPubkey);
-  const escrowAta = await getAssociatedTokenAddress(TEST_USDC_MINT, ESCROW_WALLET);
-
-  const tx = new Transaction();
-
-  // Check if escrow ATA exists, create if not
-  try {
-    await getAccount(connection, escrowAta);
-  } catch {
-    tx.add(createAssociatedTokenAccountInstruction(posterPubkey, escrowAta, ESCROW_WALLET, TEST_USDC_MINT));
-  }
-
-  // Add transfer instruction
-  const tokenAmount = BigInt(Math.round(amount * Math.pow(10, USDC_DECIMALS)));
-  tx.add(createTransferInstruction(posterAta, escrowAta, posterPubkey, tokenAmount, [], TOKEN_PROGRAM_ID));
-
-  // Set recent blockhash and fee payer
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-  tx.recentBlockhash = blockhash;
-  tx.lastValidBlockHeight = lastValidBlockHeight;
-  tx.feePayer = posterPubkey;
-
-  // Serialize (unsigned -- user will sign via wallet)
-  const serialized = tx.serialize({ requireAllSignatures: false }).toString("base64");
-
-  return { transaction: serialized, escrowAta: escrowAta.toBase58(), posterAta: posterAta.toBase58() };
+/** @deprecated Use `createJobOnChain` from lib/anchor-browser.ts. */
+export async function buildEscrowLockTransaction(): Promise<never> {
+  throw new Error(
+    "buildEscrowLockTransaction was removed in the on-chain settlement refactor " +
+    "(audit C-01 / H-02). Use createJobOnChain from lib/anchor-browser.ts to invoke " +
+    "the on-chain create_job instruction directly. See README → 'Creating a job'.",
+  );
 }
 
-/**
- * Check if user has enough USDC balance
- */
+/** Read-only USDC balance lookup. */
 export async function checkUSDCBalance(wallet: string): Promise<number> {
   const connection = new Connection(DEVNET_RPC, "confirmed");
   const pubkey = new PublicKey(wallet);
