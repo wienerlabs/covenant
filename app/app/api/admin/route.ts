@@ -5,11 +5,14 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const ADMIN_SECRET = process.env.ADMIN_SECRET || process.env.CRON_SECRET;
-  if (ADMIN_SECRET) {
-    const auth = req.headers.get("authorization");
-    if (auth !== `Bearer ${ADMIN_SECRET}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  if (!ADMIN_SECRET) {
+    console.error(
+      "[admin] ADMIN_SECRET/CRON_SECRET unset; admin endpoint will refuse all requests"
+    );
+  }
+  const auth = req.headers.get("authorization");
+  if (!ADMIN_SECRET || auth !== `Bearer ${ADMIN_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
