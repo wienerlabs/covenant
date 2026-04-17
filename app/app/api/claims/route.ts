@@ -79,6 +79,15 @@ export async function GET(req: NextRequest) {
       prisma.claimListing.count({ where }),
     ]);
 
+    // Pull reputation for every seller in one query (N+1 avoidance).
+    const sellerWallets = Array.from(new Set(claims.map((c) => c.sellerWallet)));
+    const reputations = sellerWallets.length
+      ? await prisma.reputation.findMany({
+          where: { walletAddress: { in: sellerWallets } },
+        })
+      : [];
+    const repByWallet = new Map(reputations.map((r) => [r.walletAddress, r]));
+
     const now = Date.now();
     const enriched = claims.map((c) => {
       const discountPct =
@@ -96,11 +105,37 @@ export async function GET(req: NextRequest) {
       const aprRaw =
         c.price > 0 ? (c.faceValue / c.price - 1) / yearsRemaining : 0;
       const aprPct = Math.min(9999, Math.max(0, aprRaw * 100));
+
+      // Seller reputation → risk grade. A+ for squeaky-clean + lots of
+      // work, down through C for thin history, D for disputes. This is
+      // a dumb but demo-friendly heuristic; real underwriting would
+      // weight by time-since-first-job, recency, etc.
+      const rep = repByWallet.get(c.sellerWallet);
+      const jobsCompleted = rep?.jobsCompleted ?? 0;
+      const jobsFailed = rep?.jobsFailed ?? 0;
+      const jobsDisputed = rep?.jobsDisputed ?? 0;
+      const totalEarned = rep?.totalEarned ?? 0;
+      const total = jobsCompleted + jobsFailed;
+      let riskGrade: "A+" | "A" | "B" | "C" | "D" = "C";
+      if (jobsDisputed > 2 || jobsFailed > 5) riskGrade = "D";
+      else if (total === 0) riskGrade = "C";
+      else if (jobsCompleted >= 20 && jobsDisputed === 0 && jobsFailed <= 1)
+        riskGrade = "A+";
+      else if (jobsCompleted >= 5 && jobsFailed <= 2) riskGrade = "A";
+      else if (jobsCompleted >= 1) riskGrade = "B";
+
       return {
         ...c,
         discountPct,
         aprPct,
         secondsToChallengeEnd,
+        reputation: {
+          jobsCompleted,
+          jobsFailed,
+          jobsDisputed,
+          totalEarned,
+          riskGrade,
+        },
       };
     });
 
