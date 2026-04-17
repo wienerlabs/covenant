@@ -222,17 +222,16 @@ export async function botListClaim(params: {
   const [jobPda] = deriveJobPda(poster, specHash);
   const [claimPda] = deriveClaimPda(jobPda);
 
-  const sig = (await (program.methods as { listClaim: (...a: unknown[]) => unknown })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sig = (await (program.methods as any)
     .listClaim(priceAtomic)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .accounts({
       seller: takerBotKeypair.publicKey,
       jobEscrow: jobPda,
       poster,
       claimListing: claimPda,
       systemProgram: SystemProgram.programId,
-    } as Record<string, PublicKey>)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    })
     .rpc()) as string;
 
   return { sig, claimPda };
@@ -263,9 +262,9 @@ export async function botBuyClaim(params: {
   );
   const sellerAta = await getAssociatedTokenAddress(USDC_MINT, sellerPubkey);
 
-  return (await (program.methods as { buyClaim: () => unknown })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (await (program.methods as any)
     .buyClaim()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .accounts({
       buyer: buyerBotKeypair.publicKey,
       jobEscrow: jobPda,
@@ -274,8 +273,7 @@ export async function botBuyClaim(params: {
       buyerTokenAccount: buyerAta,
       sellerTokenAccount: sellerAta,
       tokenProgram: TOKEN_PROGRAM_ID,
-    } as Record<string, PublicKey>)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    })
     .rpc()) as string;
 }
 
@@ -337,9 +335,9 @@ export async function finalizeWithClaim(params: {
     beneficiaryWallet,
   );
 
-  const sig = (await (program.methods as { finalizePayment: () => unknown })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sig = (await (program.methods as any)
     .finalizePayment()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .accounts({
       crank: crankKeypair.publicKey,
       jobEscrow: jobPda,
@@ -351,8 +349,7 @@ export async function finalizeWithClaim(params: {
       claimListing: claimPda,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
-    } as Record<string, PublicKey>)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    })
     .rpc()) as string;
 
   return { sig, routedToBuyer, buyer: buyerStr };
