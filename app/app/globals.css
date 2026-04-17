@@ -23,19 +23,30 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Display face: PPMondwest (self-hosted bitmap). Only on headings and
-   anything that explicitly opts in via `.font-display`. Kept separate
-   from body so long paragraphs stay legible while titles carry the
-   brand personality. */
+/* Display face: PPMondwest (self-hosted bitmap). Applied to:
+     - Semantic headings (<h1>-<h6>)
+     - Anything explicitly opting in via .font-display
+     - Heading-ish inline-styled elements that React apps tend to write
+       as bold+uppercase <div>/<span>. Catching these via attribute
+       selectors lets us pull the og brand font through the whole
+       interface without having to retrofit className="font-display"
+       on every card, badge, and section title.
+   Ordered last so their specificity is on par with other class rules;
+   !important ensures Next.js's next/font className on <html> (which
+   sets the body face via inheritance) does not win against these. */
 h1,
 h2,
 h3,
 h4,
 h5,
 h6,
-.font-display {
+.font-display,
+[style*="text-transform: uppercase"][style*="font-weight: 600"],
+[style*="text-transform: uppercase"][style*="font-weight: 700"],
+[style*="text-transform: uppercase"][style*="font-weight: 800"],
+[style*="text-transform: uppercase"][style*="font-weight: 900"] {
   font-family: var(--font-display), var(--font-pixelify), "Courier New",
-    monospace;
+    monospace !important;
   /* PPMondwest is a bitmap grid — disabling ligatures and smoothing the
      browser wants to apply to vector fonts keeps the pixel edges crisp. */
   font-feature-settings: "liga" 0;
