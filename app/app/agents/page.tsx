@@ -497,11 +497,11 @@ export default function AgentsPage() {
                       {isSolana && (
                         <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "center" }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src="https://github.com/solana.png" alt="Solana" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
+                          <img src="/logos/solana.png" alt="Solana" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src="https://github.com/sendaifun.png" alt="Sendai" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
+                          <img src="/logos/sendai.png" alt="Sendai" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src="https://github.com/elizaOS.png" alt="ElizaOS" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
+                          <img src="/logos/elizaos.png" alt="ElizaOS" style={{ width: "20px", height: "20px", borderRadius: "50%" }} />
                         </div>
                       )}
 

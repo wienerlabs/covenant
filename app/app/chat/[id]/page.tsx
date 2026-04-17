@@ -758,7 +758,7 @@ export default function AgentChatPage() {
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src="https://github.com/solana.png"
+                    src="/logos/solana.png"
                     alt="Solana"
                     style={{
                       width: "24px",
@@ -768,7 +768,7 @@ export default function AgentChatPage() {
                   />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src="https://github.com/sendaifun.png"
+                    src="/logos/sendai.png"
                     alt="Sendai"
                     style={{
                       width: "24px",
@@ -778,7 +778,7 @@ export default function AgentChatPage() {
                   />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src="https://github.com/elizaOS.png"
+                    src="/logos/elizaos.png"
                     alt="ElizaOS"
                     style={{
                       width: "24px",
@@ -1467,11 +1467,11 @@ export default function AgentChatPage() {
               {isSolana && (
                 <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="https://github.com/solana.png" alt="Solana" style={{ width: "24px", height: "24px", borderRadius: "50%" }} />
+                  <img src="/logos/solana.png" alt="Solana" style={{ width: "24px", height: "24px", borderRadius: "50%" }} />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="https://github.com/sendaifun.png" alt="Sendai" style={{ width: "24px", height: "24px", borderRadius: "50%" }} />
+                  <img src="/logos/sendai.png" alt="Sendai" style={{ width: "24px", height: "24px", borderRadius: "50%" }} />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="https://github.com/elizaOS.png" alt="ElizaOS" style={{ width: "24px", height: "24px", borderRadius: "50%" }} />
+                  <img src="/logos/elizaos.png" alt="ElizaOS" style={{ width: "24px", height: "24px", borderRadius: "50%" }} />
                 </div>
               )}
 
