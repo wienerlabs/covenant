@@ -22,6 +22,7 @@ export {
   deriveJobPda,
   deriveReputationPda,
   deriveBondPda,
+  deriveClaimPda,
 } from "./pda";
 export { parseLogLine, parseLogs } from "./events";
 export type { CovenantEvent } from "./events";
@@ -47,4 +48,6 @@ export type {
   DisputeInfo,
   DisputeResolutionKind,
   DeliveryCommitment,
+  ClaimListingAccount,
+  ClaimStatus,
 } from "./types";

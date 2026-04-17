@@ -4,12 +4,8 @@ import { sendMarkerTransaction } from "@/lib/solana";
 import { awardXP, XP_REWARDS } from "@/lib/xp";
 import { checkAndUnlock } from "@/lib/achievements";
 import { PROTOCOL_FEE_BPS } from "@/lib/constants";
-import {
-  botFinalizePayment,
-  fetchJobEscrow,
-  verifyTxInvokedCovenant,
-  keypairFromEnv,
-} from "@/lib/program-server";
+import { fetchJobEscrow, verifyTxInvokedCovenant } from "@/lib/program-server";
+import { finalizeWithClaim, keypairFromEnv } from "@/lib/credit-server";
 import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
 
@@ -18,7 +14,8 @@ import crypto from "crypto";
  *
  * Permissionless. Anyone can call this after the challenge period has
  * expired and no dispute is active. The server re-checks on-chain /
- * database state, releases escrow to the taker, and moves the job to
+ * database state, releases escrow to the taker (or to the claim buyer
+ * if a Covenant Credit listing has been Bought), and moves the job to
  * Finalized.
  *
  * In a production deployment this endpoint is called by a cron worker
@@ -33,8 +30,10 @@ export async function POST(
     const { id } = await params;
     const body = (await request.json().catch(() => ({}))) as {
       callerWallet?: string;
+      txSignature?: string;
     };
     const caller = body.callerWallet ?? "anonymous";
+    const callerTxSig = body.txSignature;
 
     const job = await prisma.job.findUnique({
       where: { id },
@@ -79,29 +78,30 @@ export async function POST(
 
     // ---- On-chain finalize ----
     //
-    // Two acceptable inputs:
-    //   (A) Caller already invoked the on-chain `finalize_payment`
-    //       crank from their browser (or a server) and passes
-    //       `txSignature` in the body. We verify and mirror.
-    //   (B) Caller asks the server to crank for them. We use the
-    //       configured CRANK_KEYPAIR (or DEPLOYER_KEYPAIR fallback)
-    //       and call `finalize_payment` on chain. The crank's only
-    //       privilege is paying SOL fees — it cannot redirect funds
-    //       (the program enforces taker payment to the registered taker).
+    // Three paths:
+    //   A. Synthetic agent job: no funds to move, just a marker.
+    //   B. Caller already invoked the on-chain `finalize_payment` crank
+    //      from their browser and passes `txSignature` in the body.
+    //      Verify tx + check on-chain JobEscrow.status == Finalized.
+    //   C. Server-cranked via lib/credit-server.finalizeWithClaim —
+    //      claim-aware: routes proceeds to the buyer if a ClaimListing
+    //      is Bought, otherwise to the taker. Crank pays only SOL fees;
+    //      the program enforces the beneficiary.
     //
-    // Either way, no shared deployer wallet ever holds user USDC.
-
+    // The server NEVER signs a custodial release tx here. The previous
+    // `releaseFundsToTaker` custodial path was removed in the on-chain
+    // settlement refactor (audit C-01).
     const isAgentJob = job.takerWallet.startsWith("covenant-agent-");
-    const callerTxSig = (body as { txSignature?: string }).txSignature;
-
     let paymentTxHash: string | null = null;
+    let routedToBuyer = false;
+    let settlementBuyer: string | null = null;
 
     if (isAgentJob) {
-      // Synthetic agent jobs (battle/arena demos that did not lock real
-      // USDC) just record completion — no on-chain settlement to do.
+      // Path A — synthetic agent job, record-only marker.
       paymentTxHash = "agent:finalized:" + crypto.randomBytes(12).toString("hex");
     } else if (callerTxSig) {
-      // Path A: client-cranked. Verify the tx and mirror.
+      // Path B — client-cranked. Verify the tx landed + invoked our
+      // program + the JobEscrow status is now Finalized.
       try {
         await verifyTxInvokedCovenant(callerTxSig);
         if (job.pda) {
@@ -124,28 +124,30 @@ export async function POST(
         );
       }
     } else {
-      // Path B: server-cranked. Use CRANK_KEYPAIR if configured, else
-      // fall back to DEPLOYER_KEYPAIR. Crank only pays fees — it cannot
-      // redirect funds because the on-chain program enforces the taker.
-      const crankEnv = process.env.CRANK_KEYPAIR ? "CRANK_KEYPAIR" : "DEPLOYER_KEYPAIR";
+      // Path C — server-cranked, claim-aware.
+      if (!job.pda || !job.escrowAta) {
+        return NextResponse.json(
+          {
+            error:
+              "Job is missing on-chain PDA / escrowAta; cannot run server crank. " +
+              "Invoke finalize_payment from a wallet and POST back with txSignature instead.",
+          },
+          { status: 400 },
+        );
+      }
       try {
-        if (!job.pda || !job.escrowAta) {
-          throw new Error(
-            "Job is missing on-chain PDA / escrowAta; cannot run server crank. " +
-            "Caller should pass txSignature after invoking finalize_payment client-side.",
-          );
-        }
+        const crankEnv = process.env.CRANK_KEYPAIR ? "CRANK_KEYPAIR" : "DEPLOYER_KEYPAIR";
         const crankKp = keypairFromEnv(crankEnv);
-        // Need spec_hash bytes for PDA derivation — re-derive from DB.
-        const specHashBuf = Buffer.from(job.specHash, "hex");
-        const sig = await botFinalizePayment({
+        const result = await finalizeWithClaim({
           crankKeypair: crankKp,
           poster: new PublicKey(job.posterWallet),
           taker: new PublicKey(job.takerWallet),
-          specHash: specHashBuf,
+          specHash: Buffer.from(job.specHash, "hex"),
           escrowTokenAccount: new PublicKey(job.escrowAta),
         });
-        paymentTxHash = sig;
+        paymentTxHash = result.sig;
+        routedToBuyer = result.routedToBuyer;
+        settlementBuyer = result.buyer;
       } catch (err) {
         console.error("[finalize] server crank failed:", err);
         return NextResponse.json(
@@ -177,12 +179,34 @@ export async function POST(
       });
     }
 
-    // 2b. Calculate protocol fee (recorded only — on-chain deduction comes at mainnet)
+    // Mirror Covenant Credit settlement if the payout was routed.
+    if (routedToBuyer && paymentTxHash && settlementBuyer) {
+      try {
+        const claim = await prisma.claimListing.findUnique({
+          where: { jobId: id },
+        });
+        if (claim && claim.status === "Bought") {
+          await prisma.claimListing.update({
+            where: { id: claim.id },
+            data: {
+              status: "Settled",
+              settledAt: new Date(),
+              settleTxHash: paymentTxHash,
+            },
+          });
+        }
+      } catch (err) {
+        console.error("[finalize] claim settlement mirror failed:", err);
+        // non-blocking
+      }
+    }
+
+    // Calculate protocol fee (recorded only — on-chain deduction comes at mainnet).
     const feeAmount = (job.amount * PROTOCOL_FEE_BPS) / 10000;
     const takerPayout = job.amount - feeAmount;
     console.log(`[finalize] fee=${feeAmount} takerPayout=${takerPayout} job=${id}`);
 
-    // 3. Update related DB records
+    // Update related DB records.
     const updated = await prisma.$transaction(async (tx) => {
       const j = await tx.job.findUnique({ where: { id } });
       await tx.reputation.upsert({
@@ -212,6 +236,8 @@ export async function POST(
             paymentTxHash,
             feeAmount,
             takerPayout,
+            routedToBuyer,
+            buyer: settlementBuyer,
           },
         },
       });
@@ -221,12 +247,12 @@ export async function POST(
             paymentTxHash ?? "local:finalized:" + crypto.randomBytes(12).toString("hex"),
           type: "finalize_payment",
           jobId: id,
-          wallet: caller,
+          wallet: (routedToBuyer && settlementBuyer) || caller,
           amount: job.amount,
           status: "confirmed",
         },
       });
-      // Record protocol fee
+      // Record protocol fee.
       await tx.protocolFee.create({
         data: {
           jobId: id,
@@ -238,7 +264,7 @@ export async function POST(
       return j;
     });
 
-    // Award XP + check achievements (best effort)
+    // Award XP + check achievements (best effort).
     try {
       await awardXP(job.posterWallet, XP_REWARDS.job_finalize, "job_finalize");
       if (!isAgentJob) {
@@ -248,7 +274,7 @@ export async function POST(
       if (!isAgentJob) await checkAndUnlock(job.takerWallet);
     } catch { /* best effort */ }
 
-    // Best-effort Solana marker
+    // Best-effort Solana marker.
     try {
       const markerTx = await sendMarkerTransaction("finalize_payment:" + id);
       console.log("[finalize] marker tx:", markerTx);
@@ -260,6 +286,8 @@ export async function POST(
       job: updated,
       paymentTxHash,
       finalizedBy: caller,
+      routedToBuyer,
+      settlementBuyer,
     });
   } catch (error) {
     console.error("POST /api/jobs/[id]/finalize error:", error);

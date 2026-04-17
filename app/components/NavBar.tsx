@@ -58,7 +58,7 @@ function prefetchBackground(href: string): void {
   img.src = href;
 }
 
-type Tab = "home" | "agents" | "create" | "poster" | "taker" | "dashboard" | "battle" | "arena" | "autonomous" | "leaderboard" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol" | "developers" | "integrate" | "profile";
+type Tab = "home" | "agents" | "create" | "poster" | "taker" | "dashboard" | "battle" | "arena" | "autonomous" | "leaderboard" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol" | "developers" | "integrate" | "profile" | "credit";
 
 interface NavBarProps {
   activeTab: Tab;
@@ -74,6 +74,7 @@ const PRIMARY_TABS: { id: Tab; label: string; href: string }[] = [
   { id: "dashboard", label: "Dashboard", href: "/dashboard" },
   { id: "battle", label: "Battle", href: "/battle" },
   { id: "arena", label: "Arena", href: "/arena" },
+  { id: "credit", label: "Credit", href: "/credit" },
 ];
 
 const MORE_TABS: { id: Tab; label: string; href: string }[] = [

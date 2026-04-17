@@ -1,31 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import {
-  botFinalizePayment,
-  keypairFromEnv,
-} from "@/lib/program-server";
+import { finalizeWithClaim, keypairFromEnv } from "@/lib/credit-server";
 import { PublicKey } from "@solana/web3.js";
 
 // Always dynamic — this route talks to Prisma on every request.
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// On-chain crank for the permissionless `finalize_payment` instruction.
-// The crank only pays SOL fees; it cannot redirect funds because the
-// program enforces taker payment to the registered taker. We prefer a
-// dedicated CRANK_KEYPAIR if set, falling back to DEPLOYER_KEYPAIR.
+// On-chain crank for the permissionless `finalize_payment` instruction,
+// wired through `finalizeWithClaim` so sold Covenant Credit claims route
+// proceeds to the buyer. The crank only pays SOL fees; the program
+// enforces taker payment to the registered beneficiary, so the crank
+// cannot redirect funds. Prefer a dedicated CRANK_KEYPAIR if set,
+// falling back to DEPLOYER_KEYPAIR.
 
 /**
  * GET /api/cron/finalize
  *
  * Vercel cron target. Runs every ~5 minutes. Finds all jobs in
  * `Delivered` state whose challenge period has expired and which have
- * no active dispute, then finalizes them by releasing escrow to the
- * taker and moving the job to `Finalized`.
+ * no active dispute, then finalizes them by releasing escrow on chain
+ * and moving the job to `Finalized`. If a ClaimListing is Bought, the
+ * escrow is paid to the buyer and the listing is marked Settled.
  *
  * This guarantees protocol progress even if neither party wakes up to
- * push the Finalize button. Idempotent — re-running the cron is a no-op
- * once a job is Finalized.
+ * push the Finalize button. Idempotent — re-running is a no-op once a
+ * job is Finalized.
  *
  * Schedule in vercel.json:
  *   { "crons": [{ "path": "/api/cron/finalize", "schedule": "* /5 * * * *" }] }
@@ -65,6 +65,9 @@ export async function GET(req: NextRequest) {
     error?: string;
   }> = [];
 
+  // Load crank keypair once. We hard-fail (503) if neither env var is
+  // configured — better to surface the misconfiguration than to silently
+  // skip every finalize.
   const crankEnv = process.env.CRANK_KEYPAIR ? "CRANK_KEYPAIR" : "DEPLOYER_KEYPAIR";
   let crankKp;
   try {
@@ -91,13 +94,14 @@ export async function GET(req: NextRequest) {
       continue;
     }
     try {
-      const txHash = await botFinalizePayment({
+      const { sig, routedToBuyer, buyer } = await finalizeWithClaim({
         crankKeypair: crankKp,
         poster: new PublicKey(job.posterWallet),
         taker: new PublicKey(job.takerWallet),
         specHash: Buffer.from(job.specHash, "hex"),
         escrowTokenAccount: new PublicKey(job.escrowAta),
       });
+
       await prisma.$transaction(async (tx) => {
         await tx.job.update({
           where: { id: job.id },
@@ -120,28 +124,48 @@ export async function GET(req: NextRequest) {
           data: {
             jobId: job.id,
             type: "finalized",
-            txSignature: txHash,
+            txSignature: sig,
             wallet: "cron:finalize",
             amount: job.amount,
             data: {
               taker: job.takerWallet,
-              paymentTxHash: txHash,
+              paymentTxHash: sig,
               crank: "cron",
+              routedToBuyer,
+              buyer,
             },
           },
         });
         await tx.transaction.create({
           data: {
-            txHash,
+            txHash: sig,
             type: "finalize_payment",
             jobId: job.id,
-            wallet: job.takerWallet as string,
+            wallet: (routedToBuyer && buyer) || (job.takerWallet as string),
             amount: job.amount,
             status: "confirmed",
           },
         });
+
+        // Mirror Covenant Credit settlement if the claim was routed.
+        if (routedToBuyer && buyer) {
+          const claim = await tx.claimListing.findUnique({
+            where: { jobId: job.id },
+          });
+          if (claim && claim.status === "Bought") {
+            await tx.claimListing.update({
+              where: { id: claim.id },
+              data: {
+                status: "Settled",
+                settledAt: new Date(),
+                settleTxHash: sig,
+              },
+            });
+          }
+        }
       });
-      results.push({ jobId: job.id, ok: true, paymentTxHash: txHash });
+
+      results.push({ jobId: job.id, ok: true, paymentTxHash: sig });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[cron/finalize] failed for ${job.id}:`, msg);

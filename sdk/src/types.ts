@@ -89,3 +89,29 @@ export interface DeliveryCommitment {
   /** Resolvable URI where the content lives. */
   deliveryUri: string;
 }
+
+// ---- Covenant Credit types ----
+
+/** Status of a ClaimListing on chain. */
+export type ClaimStatus = "Listed" | "Bought" | "Cancelled" | "Settled";
+
+/**
+ * On-chain ClaimListing account. Represents a taker's pending payment
+ * claim offered for sale to lenders.
+ */
+export interface ClaimListingAccount {
+  job: PublicKey;
+  seller: PublicKey;
+  /** `PublicKey.default` before purchase. */
+  buyer: PublicKey;
+  /** Price the buyer pays the seller (atomic token units, u64). */
+  price: BN;
+  /** Full escrow amount the buyer receives on finalize (atomic units). */
+  faceValue: BN;
+  /** Unix seconds when listed. */
+  listedAt: BN;
+  /** Unix seconds when bought. 0 until bought. */
+  boughtAt: BN;
+  status: ClaimStatus;
+  bump: number;
+}

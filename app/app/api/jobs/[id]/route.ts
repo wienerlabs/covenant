@@ -14,6 +14,7 @@ export async function GET(
         submissions: true,
         delivery: true,
         dispute: true,
+        claim: true,
         interests: {
           where: { status: "working" },
           select: { takerWallet: true, acceptedAt: true },

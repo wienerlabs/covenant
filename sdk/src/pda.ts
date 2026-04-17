@@ -41,3 +41,14 @@ export function deriveBondPda(
     programId,
   );
 }
+
+/** Derive the ClaimListing PDA for a job (Covenant Credit). */
+export function deriveClaimPda(
+  job: PublicKey,
+  programId: PublicKey = COVENANT_PROGRAM_ID,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [PDA_SEEDS.claim, job.toBuffer()],
+    programId,
+  );
+}

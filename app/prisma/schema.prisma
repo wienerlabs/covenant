@@ -14,7 +14,7 @@ datasource db {
 model Job {
   id               String      @id @default(cuid())
   pda              String?     @unique // on-chain JobEscrow PDA (base58)
-  escrowAta        String?     // SPL escrow token account (base58); not a PDA in v1
+  escrowAta        String?     // SPL escrow token account (base58); random keypair in v1, not a PDA
   posterWallet     String
   takerWallet      String?
   amount           Float
@@ -39,6 +39,7 @@ model Job {
 
   delivery         Delivery?
   dispute          Dispute?
+  claim            ClaimListing?
   submissions      Submission[]
   events           JobEvent[]
   interests        JobInterest[]
@@ -47,6 +48,45 @@ model Job {
   @@index([takerWallet])
   @@index([status])
   @@index([challengeEndAt])
+}
+
+// ============================================================================
+// Covenant Credit — BNPL / factoring for pending claims
+// ============================================================================
+//
+// Mirrors the on-chain `ClaimListing` account introduced in PR #36. Every
+// row MUST correspond to a real PDA at seeds=[b"claim", job_escrow.key()]
+// on the Covenant program. This table is a denormalized view for fast
+// marketplace queries — chain is always the source of truth.
+
+model ClaimListing {
+  id              String    @id @default(cuid())
+  pda             String    @unique         // on-chain ClaimListing PDA (base58)
+  jobId           String    @unique         // 1:1 with our Job row
+  jobPda          String                    // on-chain JobEscrow PDA (base58)
+  sellerWallet   String                     // original taker / seller
+  buyerWallet    String?                    // lender after purchase
+  price          Float                      // USDC human units the buyer pays
+  faceValue      Float                      // USDC human units the buyer receives on finalize
+  priceAtomic    String                     // atomic u64 as string (avoid JS precision loss)
+  faceValueAtomic String
+  status         String    @default("Listed") // Listed | Bought | Cancelled | Settled
+  listedAt       DateTime  @default(now())
+  boughtAt       DateTime?
+  settledAt      DateTime?
+  listTxHash     String?                    // list_claim tx signature
+  buyTxHash      String?                    // buy_claim tx signature
+  cancelTxHash   String?                    // cancel_claim tx signature
+  settleTxHash   String?                    // finalize/resolve tx that paid the buyer
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  job            Job       @relation(fields: [jobId], references: [id])
+
+  @@index([sellerWallet])
+  @@index([buyerWallet])
+  @@index([status])
+  @@index([listedAt])
 }
 
 // Delivery commitment submitted by the taker via submit_work.
