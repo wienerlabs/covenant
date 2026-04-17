@@ -287,6 +287,17 @@
           }
         },
         {
+          "name": "claim_listing",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [99, 108, 97, 105, 109] },
+              { "kind": "account", "path": "job_escrow" }
+            ]
+          }
+        },
+        {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
@@ -449,6 +460,17 @@
           }
         },
         {
+          "name": "claim_listing",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [99, 108, 97, 105, 109] },
+              { "kind": "account", "path": "job_escrow" }
+            ]
+          }
+        },
+        {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
@@ -521,6 +543,95 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "list_claim",
+      "discriminator": [170, 28, 51, 91, 64, 103, 21, 4],
+      "accounts": [
+        { "name": "seller", "writable": true, "signer": true },
+        {
+          "name": "job_escrow",
+          "writable": false,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [106, 111, 98] },
+              { "kind": "account", "path": "poster" },
+              { "kind": "account", "path": "job_escrow.spec_hash", "account": "JobEscrow" }
+            ]
+          }
+        },
+        { "name": "poster", "writable": false, "signer": false },
+        {
+          "name": "claim_listing",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [99, 108, 97, 105, 109] },
+              { "kind": "account", "path": "job_escrow" }
+            ]
+          }
+        },
+        { "name": "system_program", "address": "11111111111111111111111111111111" }
+      ],
+      "args": [
+        { "name": "price", "type": "u64" }
+      ]
+    },
+    {
+      "name": "buy_claim",
+      "discriminator": [168, 110, 230, 142, 141, 246, 67, 232],
+      "accounts": [
+        { "name": "buyer", "writable": true, "signer": true },
+        {
+          "name": "job_escrow",
+          "writable": false,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [106, 111, 98] },
+              { "kind": "account", "path": "poster" },
+              { "kind": "account", "path": "job_escrow.spec_hash", "account": "JobEscrow" }
+            ]
+          }
+        },
+        { "name": "poster", "writable": false, "signer": false },
+        {
+          "name": "claim_listing",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [99, 108, 97, 105, 109] },
+              { "kind": "account", "path": "job_escrow" }
+            ]
+          }
+        },
+        { "name": "buyer_token_account", "writable": true, "signer": false },
+        { "name": "seller_token_account", "writable": true, "signer": false },
+        { "name": "token_program", "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }
+      ],
+      "args": []
+    },
+    {
+      "name": "cancel_claim",
+      "discriminator": [179, 1, 212, 49, 81, 144, 221, 140],
+      "accounts": [
+        { "name": "seller", "writable": true, "signer": true },
+        {
+          "name": "claim_listing",
+          "writable": true,
+          "signer": false,
+          "pda": {
+            "seeds": [
+              { "kind": "const", "value": [99, 108, 97, 105, 109] },
+              { "kind": "account", "path": "claim_listing.job", "account": "ClaimListing" }
+            ]
+          }
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -535,6 +646,10 @@
     {
       "name": "AgentReputation",
       "discriminator": [245, 56, 239, 246, 36, 231, 227, 67]
+    },
+    {
+      "name": "ClaimListing",
+      "discriminator": [199, 81, 5, 18, 89, 68, 6, 170]
     }
   ],
   "types": [
@@ -639,6 +754,35 @@
           }
         ]
       }
+    },
+    {
+      "name": "ClaimStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          { "name": "Listed" },
+          { "name": "Bought" },
+          { "name": "Cancelled" },
+          { "name": "Settled" }
+        ]
+      }
+    },
+    {
+      "name": "ClaimListing",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "job", "type": "pubkey" },
+          { "name": "seller", "type": "pubkey" },
+          { "name": "buyer", "type": "pubkey" },
+          { "name": "price", "type": "u64" },
+          { "name": "face_value", "type": "u64" },
+          { "name": "listed_at", "type": "i64" },
+          { "name": "bought_at", "type": "i64" },
+          { "name": "status", "type": { "defined": { "name": "ClaimStatus" } } },
+          { "name": "bump", "type": "u8" }
+        ]
+      }
     }
   ],
   "errors": [
@@ -663,6 +807,14 @@
     { "code": 6018, "name": "ConfigAlreadyInitialized", "msg": "Protocol config already initialized" },
     { "code": 6019, "name": "ConfigNotInitialized", "msg": "Protocol config not initialized" },
     { "code": 6020, "name": "InvalidThreshold", "msg": "Arbitrator threshold must be between 1 and ARBITRATOR_COUNT" },
-    { "code": 6021, "name": "MathOverflow", "msg": "Math overflow" }
+    { "code": 6021, "name": "MathOverflow", "msg": "Math overflow" },
+    { "code": 6022, "name": "MintMismatch", "msg": "Token mint does not match the escrow's original mint" },
+    { "code": 6023, "name": "InvalidClaimPrice", "msg": "Claim listing price must be greater than zero and less than the escrow face value" },
+    { "code": 6024, "name": "ClaimListingAlreadyExists", "msg": "Claim listing already exists for this job" },
+    { "code": 6025, "name": "InvalidClaimStatus", "msg": "Claim listing is not in the required status for this operation" },
+    { "code": 6026, "name": "ClaimListingMismatch", "msg": "Claim listing references a different JobEscrow" },
+    { "code": 6027, "name": "ClaimListingRequired", "msg": "A bought claim listing exists; payment must route to the buyer (pass the ClaimListing account)" },
+    { "code": 6028, "name": "NotClaimSeller", "msg": "Only the original seller may cancel this listing" },
+    { "code": 6029, "name": "BuyerIsSeller", "msg": "Buyer may not be the same wallet as the seller" }
   ]
 }

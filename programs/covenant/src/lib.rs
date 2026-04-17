@@ -104,4 +104,18 @@ pub mod covenant {
     pub fn cancel_job(ctx: Context<CancelJob>) -> Result<()> {
         cancel_job::handler(ctx)
     }
+
+    // ---- Covenant Credit (BNPL for pending claims) ----
+
+    pub fn list_claim(ctx: Context<ListClaim>, price: u64) -> Result<()> {
+        list_claim::handler(ctx, price)
+    }
+
+    pub fn buy_claim(ctx: Context<BuyClaim>) -> Result<()> {
+        buy_claim::handler(ctx)
+    }
+
+    pub fn cancel_claim(ctx: Context<CancelClaim>) -> Result<()> {
+        cancel_claim::handler(ctx)
+    }
 }
