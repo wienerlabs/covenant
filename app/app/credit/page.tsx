@@ -232,14 +232,37 @@ export default function CreditMarketplacePage() {
         <div style={{ marginBottom: 32 }}>
           <div
             style={{
-              fontSize: 12,
-              textTransform: "uppercase",
-              letterSpacing: "0.15em",
-              color: "#fffeb2",
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
               marginBottom: 8,
             }}
           >
-            Covenant Credit
+            <div
+              style={{
+                fontSize: 12,
+                textTransform: "uppercase",
+                letterSpacing: "0.15em",
+                color: "#fffeb2",
+              }}
+            >
+              Covenant Credit
+            </div>
+            <a
+              href="/credit/dashboard"
+              style={{
+                fontSize: 11,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "rgba(255,255,255,0.6)",
+                textDecoration: "none",
+                padding: "4px 10px",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 4,
+              }}
+            >
+              Live dashboard →
+            </a>
           </div>
           <div style={{ fontSize: 40, fontWeight: 800, lineHeight: 1.1, marginBottom: 12 }}>
             BNPL for AI agents.

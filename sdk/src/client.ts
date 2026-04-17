@@ -16,7 +16,13 @@ import {
   DEFAULT_BOND_BPS,
   DEFAULT_MIN_BOND_ABSOLUTE,
 } from "./constants";
-import { deriveConfigPda, deriveJobPda, deriveReputationPda, deriveBondPda } from "./pda";
+import {
+  deriveConfigPda,
+  deriveJobPda,
+  deriveReputationPda,
+  deriveBondPda,
+  deriveClaimPda,
+} from "./pda";
 import { hashSpec } from "./spec";
 import { validateDeliveryUri } from "./delivery";
 import type {
@@ -27,6 +33,8 @@ import type {
   ProtocolConfigAccount,
   DisputeInfo,
   DisputeResolutionKind,
+  ClaimListingAccount,
+  ClaimStatus,
 } from "./types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -86,6 +94,14 @@ function decodeDispute(raw: RawAccount): DisputeInfo {
 function decodeDeliveryUri(bytes: Uint8Array | number[], len: number): string {
   const buf = Uint8Array.from(bytes).slice(0, len);
   return Buffer.from(buf).toString("utf8");
+}
+
+function parseClaimStatus(raw: RawAccount): ClaimStatus {
+  if ("listed" in raw) return "Listed";
+  if ("bought" in raw) return "Bought";
+  if ("cancelled" in raw) return "Cancelled";
+  if ("settled" in raw) return "Settled";
+  throw new Error(`Unknown claim status: ${JSON.stringify(raw)}`);
 }
 
 /**
@@ -418,6 +434,120 @@ export class CovenantClient {
       .rpc();
 
     return { txSig };
+  }
+
+  // ---- Covenant Credit ----
+
+  /**
+   * Derive the ClaimListing PDA for a job.
+   * seeds = [b"claim", job_escrow]
+   */
+  claimPda(jobPda: PublicKey): PublicKey {
+    return deriveClaimPda(jobPda, this.program.programId)[0];
+  }
+
+  /**
+   * List a pending payment claim at a discounted price. Only the taker
+   * of a Delivered, non-disputed job may list. Exactly one listing per
+   * job (PDA collision otherwise).
+   */
+  async listClaim(params: {
+    seller: Keypair;
+    jobPda: PublicKey;
+    price: BN;
+  }): Promise<{ txSig: TransactionSignature; claimPda: PublicKey }> {
+    const job = await this.fetchJob(params.jobPda);
+    const claimPda = this.claimPda(params.jobPda);
+
+    const txSig = await (this.program.methods as any)
+      .listClaim(params.price)
+      .accounts({
+        seller: params.seller.publicKey,
+        jobEscrow: params.jobPda,
+        poster: job.poster,
+        claimListing: claimPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([params.seller])
+      .rpc();
+
+    return { txSig, claimPda };
+  }
+
+  /**
+   * Buy a listed claim. The buyer pays `listing.price` USDC to the
+   * seller atomically and becomes the beneficiary of subsequent
+   * `finalize_payment` or `resolve_dispute` FavorTaker/Split proceeds.
+   */
+  async buyClaim(params: {
+    buyer: Keypair;
+    jobPda: PublicKey;
+    buyerTokenAccount: PublicKey;
+    sellerTokenAccount: PublicKey;
+  }): Promise<{ txSig: TransactionSignature }> {
+    const job = await this.fetchJob(params.jobPda);
+    const claimPda = this.claimPda(params.jobPda);
+
+    const txSig = await (this.program.methods as any)
+      .buyClaim()
+      .accounts({
+        buyer: params.buyer.publicKey,
+        jobEscrow: params.jobPda,
+        poster: job.poster,
+        claimListing: claimPda,
+        buyerTokenAccount: params.buyerTokenAccount,
+        sellerTokenAccount: params.sellerTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([params.buyer])
+      .rpc();
+
+    return { txSig };
+  }
+
+  /**
+   * Cancel an unsold claim listing. Refunds rent to the seller.
+   */
+  async cancelClaim(params: {
+    seller: Keypair;
+    jobPda: PublicKey;
+  }): Promise<{ txSig: TransactionSignature }> {
+    const claimPda = this.claimPda(params.jobPda);
+    const txSig = await (this.program.methods as any)
+      .cancelClaim()
+      .accounts({
+        seller: params.seller.publicKey,
+        claimListing: claimPda,
+      })
+      .signers([params.seller])
+      .rpc();
+    return { txSig };
+  }
+
+  /**
+   * Fetch + decode a ClaimListing account. Returns null if the PDA is
+   * uninitialized (no listing, or already cancelled + closed).
+   */
+  async fetchClaim(jobPda: PublicKey): Promise<ClaimListingAccount | null> {
+    const claimPda = this.claimPda(jobPda);
+    try {
+      const raw = (await (this.program.account as any)["claimListing"].fetch(
+        claimPda,
+      )) as RawAccount;
+      return {
+        job: raw.job,
+        seller: raw.seller,
+        buyer: raw.buyer,
+        price: new BN(raw.price),
+        faceValue: new BN(raw.faceValue),
+        listedAt: new BN(raw.listedAt),
+        boughtAt: new BN(raw.boughtAt),
+        status: parseClaimStatus(raw.status as RawAccount),
+        bump: Number(raw.bump),
+      };
+    } catch {
+      return null;
+    }
   }
 
   // ---- Account fetchers ----

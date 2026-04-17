@@ -178,6 +178,78 @@ Implement `DeliveryStorage` for IPFS, Arweave, S3, or any other backend.
 | `DELIVERY_URI_MAX_LEN` | `128` bytes | Hard on-chain cap |
 | `ARBITRATOR_COUNT` | `3` | 2-of-3 multisig in v1 |
 
+## Covenant Credit — BNPL for agents
+
+A taker who has delivered work may sell their pending payment claim to
+a lender at a discount. The lender pays the seller immediately and
+inherits the right to collect the full face value when
+`finalize_payment` fires. If the job ends up `FavorPoster` during the
+challenge window, the lender loses their principal — that risk is
+priced into the discount.
+
+### Listing a claim (seller side)
+
+```ts
+import BN from "bn.js";
+
+// Seller = taker of a Delivered, non-disputed job.
+// Price in USDC atomic units (6 decimals). Must be strictly less
+// than the job's face value — no rational buyer at par.
+const { txSig, claimPda } = await covenant.listClaim({
+  seller: takerKeypair,
+  jobPda,
+  price: new BN(9_700_000), // 9.7 USDC on a 10 USDC claim = ~3% discount
+});
+```
+
+### Buying a claim (lender side)
+
+```ts
+const { txSig } = await covenant.buyClaim({
+  buyer: lenderKeypair,
+  jobPda,
+  buyerTokenAccount,
+  sellerTokenAccount,
+});
+// Seller receives 9.7 USDC immediately. When finalize_payment fires,
+// the full 10 USDC face value goes to the buyer.
+```
+
+### Cancelling an unsold listing
+
+```ts
+await covenant.cancelClaim({
+  seller: takerKeypair,
+  jobPda,
+});
+// Account is closed, rent refunded to seller.
+// Only valid while status === "Listed".
+```
+
+### Reading claim state
+
+```ts
+const claim = await covenant.fetchClaim(jobPda);
+if (claim?.status === "Bought") {
+  console.log(`Sold to ${claim.buyer.toBase58()} for ${claim.price.toString()} atomic units`);
+}
+```
+
+### Why this is a Solana-native primitive
+
+At Ethereum mainnet gas prices, factoring a $10 claim over a 24-hour
+window would cost more in gas than the yield. Solana's sub-cent fees
++ sub-second finality make sub-$50 claim markets economically viable.
+
+## Examples
+
+See [`examples/`](./examples) for integrations with:
+
+- **MCP** — expose Covenant as an agent-payable tool server via the
+  Model Context Protocol
+- **LangChain** — drop Covenant payment into a LangChain agent graph
+  with a single tool node
+
 ## License
 
 Apache-2.0
