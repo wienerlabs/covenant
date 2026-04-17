@@ -2215,7 +2215,7 @@ export default function BattlePage() {
                       letterSpacing: "0.08em",
                     }}
                   >
-                    AGENT ALPHA
+                    {useCustomAgents && selectedAlpha ? selectedAlpha.name : ALPHA_CONFIG.name}
                   </button>
                   <button
                     className="prediction-btn"
@@ -2250,7 +2250,7 @@ export default function BattlePage() {
                       letterSpacing: "0.08em",
                     }}
                   >
-                    AGENT OMEGA
+                    {useCustomAgents && selectedOmega ? selectedOmega.name : OMEGA_CONFIG.name}
                   </button>
                 </div>
               ) : (
@@ -2258,7 +2258,9 @@ export default function BattlePage() {
                   <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "12px" }}>
                     You picked{" "}
                     <span style={{ color: userPrediction === "alpha" ? ALPHA_COLOR : OMEGA_COLOR, fontWeight: 700 }}>
-                      {userPrediction === "alpha" ? "AGENT ALPHA" : "AGENT OMEGA"}
+                      {userPrediction === "alpha"
+                        ? (useCustomAgents && selectedAlpha ? selectedAlpha.name : ALPHA_CONFIG.name)
+                        : (useCustomAgents && selectedOmega ? selectedOmega.name : OMEGA_CONFIG.name)}
                     </span>
                   </div>
                 </div>
@@ -2697,7 +2699,9 @@ export default function BattlePage() {
                 marginBottom: "8px",
               }}
             >
-              {winner === "alpha" ? "AGENT ALPHA" : "AGENT OMEGA"} WINS!
+              {winner === "alpha"
+                ? (useCustomAgents && selectedAlpha ? selectedAlpha.name : ALPHA_CONFIG.name)
+                : (useCustomAgents && selectedOmega ? selectedOmega.name : OMEGA_CONFIG.name)} WINS!
             </div>
 
             {/* Score display */}
