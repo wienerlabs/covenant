@@ -327,3 +327,151 @@ export async function finalizePaymentOnChain(params: {
   );
   return sig;
 }
+
+// ---- Covenant Credit helpers ----
+
+export function deriveClaimPda(jobPda: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("claim"), jobPda.toBuffer()],
+    PROGRAM_ID,
+  );
+}
+
+/**
+ * Build + sign the on-chain `list_claim` instruction.
+ *
+ * Taker (seller) must have a Delivered job with no active dispute.
+ * Price must be strictly less than the job's face value — there's no
+ * rational buyer at par.
+ */
+export async function listClaimOnChain(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  program: Program<any>;
+  seller: PublicKey;
+  poster: PublicKey;
+  specHash: Uint8Array;
+  price: BN;
+}): Promise<{ sig: string; claimPda: PublicKey }> {
+  const { program, seller, poster, specHash, price } = params;
+  const [jobPda] = deriveJobPda(poster, specHash);
+  const [claimPda] = deriveClaimPda(jobPda);
+
+  const tx = await (program.methods as any)
+    .listClaim(price)
+    .accounts({
+      seller,
+      jobEscrow: jobPda,
+      poster,
+      claimListing: claimPda,
+      systemProgram: SystemProgram.programId,
+    })
+    .transaction();
+
+  const connection = program.provider.connection;
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  tx.feePayer = seller;
+
+  const signedTx = await ((program.provider as any).wallet as any).signTransaction(tx);
+  const sig = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+  });
+  await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+  return { sig, claimPda };
+}
+
+/**
+ * Build + sign the on-chain `buy_claim` instruction.
+ *
+ * Buyer pays `claim_listing.price` USDC to the seller atomically and
+ * inherits the right to collect `face_value` when finalize/resolve
+ * fires. Rejects if buyer == seller.
+ */
+export async function buyClaimOnChain(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  program: Program<any>;
+  buyer: PublicKey;
+  poster: PublicKey;
+  specHash: Uint8Array;
+  buyerTokenAccount: PublicKey;
+  sellerTokenAccount: PublicKey;
+}): Promise<{ sig: string; claimPda: PublicKey }> {
+  const { program, buyer, poster, specHash, buyerTokenAccount, sellerTokenAccount } = params;
+  const [jobPda] = deriveJobPda(poster, specHash);
+  const [claimPda] = deriveClaimPda(jobPda);
+
+  const tx = await (program.methods as any)
+    .buyClaim()
+    .accounts({
+      buyer,
+      jobEscrow: jobPda,
+      poster,
+      claimListing: claimPda,
+      buyerTokenAccount,
+      sellerTokenAccount,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .transaction();
+
+  const connection = program.provider.connection;
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  tx.feePayer = buyer;
+
+  const signedTx = await ((program.provider as any).wallet as any).signTransaction(tx);
+  const sig = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+  });
+  await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+  return { sig, claimPda };
+}
+
+/**
+ * Build + sign the on-chain `cancel_claim` instruction.
+ *
+ * Only the original seller may cancel, and only while the listing is
+ * still in `Listed` state. Account is closed and rent refunded.
+ */
+export async function cancelClaimOnChain(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  program: Program<any>;
+  seller: PublicKey;
+  claimPda: PublicKey;
+}): Promise<string> {
+  const { program, seller, claimPda } = params;
+
+  const tx = await (program.methods as any)
+    .cancelClaim()
+    .accounts({
+      seller,
+      claimListing: claimPda,
+    })
+    .transaction();
+
+  const connection = program.provider.connection;
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  tx.feePayer = seller;
+
+  const signedTx = await ((program.provider as any).wallet as any).signTransaction(tx);
+  const sig = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+  });
+  await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+  return sig;
+}
