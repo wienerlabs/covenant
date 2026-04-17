@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { releaseFundsToTaker } from "@/lib/escrow";
+import {
+  finalizeWithClaim,
+  keypairFromEnv,
+} from "@/lib/credit-server";
+import { PublicKey } from "@solana/web3.js";
 
 // Always dynamic — this route talks to Prisma on every request.
 export const dynamic = "force-dynamic";
@@ -74,13 +79,43 @@ export async function GET(req: NextRequest) {
     error?: string;
   }> = [];
 
+  // Load crank keypair once; fall back to DEPLOYER_KEYPAIR if not set.
+  const crankEnv = process.env.CRANK_KEYPAIR ? "CRANK_KEYPAIR" : "DEPLOYER_KEYPAIR";
+  let crankKp;
+  try {
+    crankKp = keypairFromEnv(crankEnv);
+  } catch {
+    crankKp = null;
+  }
+
   for (const job of candidates) {
     if (!job.takerWallet) {
       results.push({ jobId: job.id, ok: false, error: "no taker wallet" });
       continue;
     }
     try {
-      const { txHash } = await releaseFundsToTaker(job.takerWallet, job.amount);
+      // On-chain path (claim-aware) if the job has both pda + escrowAta.
+      let txHash: string;
+      let routedToBuyer = false;
+      let settlementBuyer: string | null = null;
+
+      if (job.pda && job.escrowAta && crankKp) {
+        const result = await finalizeWithClaim({
+          crankKeypair: crankKp,
+          poster: new PublicKey(job.posterWallet),
+          taker: new PublicKey(job.takerWallet),
+          specHash: Buffer.from(job.specHash, "hex"),
+          escrowTokenAccount: new PublicKey(job.escrowAta),
+        });
+        txHash = result.sig;
+        routedToBuyer = result.routedToBuyer;
+        settlementBuyer = result.buyer;
+      } else {
+        // Legacy custodial path for pre-on-chain jobs.
+        const r = await releaseFundsToTaker(job.takerWallet, job.amount);
+        txHash = r.txHash;
+      }
+
       await prisma.$transaction(async (tx) => {
         await tx.job.update({
           where: { id: job.id },
@@ -110,6 +145,8 @@ export async function GET(req: NextRequest) {
               taker: job.takerWallet,
               paymentTxHash: txHash,
               crank: "cron",
+              routedToBuyer,
+              buyer: settlementBuyer,
             },
           },
         });
@@ -118,11 +155,28 @@ export async function GET(req: NextRequest) {
             txHash,
             type: "finalize_payment",
             jobId: job.id,
-            wallet: job.takerWallet as string,
+            wallet: (routedToBuyer && settlementBuyer) || (job.takerWallet as string),
             amount: job.amount,
             status: "confirmed",
           },
         });
+
+        // Mirror Covenant Credit settlement.
+        if (routedToBuyer && settlementBuyer) {
+          const claim = await tx.claimListing.findUnique({
+            where: { jobId: job.id },
+          });
+          if (claim && claim.status === "Bought") {
+            await tx.claimListing.update({
+              where: { id: claim.id },
+              data: {
+                status: "Settled",
+                settledAt: new Date(),
+                settleTxHash: txHash,
+              },
+            });
+          }
+        }
       });
       results.push({ jobId: job.id, ok: true, paymentTxHash: txHash });
     } catch (err) {

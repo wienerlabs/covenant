@@ -278,3 +278,109 @@ export async function botBuyClaim(params: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .rpc()) as string;
 }
+
+// ---- Claim-aware finalize crank ----
+
+/**
+ * Derive the expected `reputation` PDA for a taker.
+ */
+export function deriveReputationPda(wallet: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("reputation"), wallet.toBuffer()],
+    PROGRAM_ID,
+  );
+}
+
+/**
+ * Permissionless finalize crank that correctly routes payment when a
+ * claim has been sold.
+ *
+ * Logic:
+ *   1. Derive the ClaimListing PDA for this job
+ *   2. Fetch it; if status=Bought, the beneficiary ATA is the buyer's
+ *      USDC ATA. Otherwise it's the taker's ATA.
+ *   3. Invoke on-chain finalize_payment with:
+ *      - crank = our CRANK_KEYPAIR / DEPLOYER_KEYPAIR signer
+ *      - taker_token_account = beneficiary ATA from step 2
+ *      - claim_listing = the PDA (always passed; uninitialized if no
+ *        listing, Anchor still validates the address)
+ *
+ * Returns the tx signature. Throws on any on-chain error.
+ */
+export async function finalizeWithClaim(params: {
+  crankKeypair: Keypair;
+  poster: PublicKey;
+  taker: PublicKey;
+  specHash: Buffer;
+  escrowTokenAccount: PublicKey;
+}): Promise<{ sig: string; routedToBuyer: boolean; buyer: string | null }> {
+  const { crankKeypair, poster, taker, specHash, escrowTokenAccount } = params;
+
+  const program = getBotProgram(crankKeypair);
+  const [jobPda] = deriveJobPda(poster, specHash);
+  const [claimPda] = deriveClaimPda(jobPda);
+  const [reputationPda] = deriveReputationPda(taker);
+
+  // Discover who the beneficiary should be.
+  const listing = await fetchClaimListing(claimPda);
+  let beneficiaryWallet: PublicKey = taker;
+  let routedToBuyer = false;
+  let buyerStr: string | null = null;
+  if (listing && listing.status === "Bought" && listing.buyer) {
+    beneficiaryWallet = new PublicKey(listing.buyer);
+    routedToBuyer = true;
+    buyerStr = listing.buyer;
+  }
+
+  const beneficiaryAta = await getAssociatedTokenAddress(
+    USDC_MINT,
+    beneficiaryWallet,
+  );
+
+  const sig = (await (program.methods as { finalizePayment: () => unknown })
+    .finalizePayment()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .accounts({
+      crank: crankKeypair.publicKey,
+      jobEscrow: jobPda,
+      poster,
+      escrowTokenAccount,
+      takerTokenAccount: beneficiaryAta,
+      taker,
+      takerReputation: reputationPda,
+      claimListing: claimPda,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    } as Record<string, PublicKey>)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .rpc()) as string;
+
+  return { sig, routedToBuyer, buyer: buyerStr };
+}
+
+/**
+ * Derive the escrow ATA owner ≡ the JobEscrow PDA. Since the on-chain
+ * escrow_token_account was created in `create_job` as a random keypair
+ * owned by the JobEscrow PDA, a caller that lost the escrowAta can
+ * reconstruct it by asking the SPL Token program for the single token
+ * account matching `(owner=jobPda, mint=tokenMint)`.
+ *
+ * This is expensive (RPC call) but works as a recovery path when the
+ * DB row is missing escrowAta (pre-schema-bump jobs).
+ */
+export async function findEscrowTokenAccount(params: {
+  jobPda: PublicKey;
+}): Promise<PublicKey | null> {
+  const conn = getConnection();
+  const { jobPda } = params;
+  const accounts = await conn.getTokenAccountsByOwner(jobPda, {
+    mint: USDC_MINT,
+  });
+  if (accounts.value.length === 0) return null;
+  // There's exactly one in the happy path. If multiple exist (shouldn't
+  // per create_job semantics), take the first non-empty one.
+  const nonEmpty = accounts.value.find(
+    (a) => BigInt(a.account.data.length) > 0n,
+  );
+  return nonEmpty?.pubkey ?? accounts.value[0].pubkey;
+}

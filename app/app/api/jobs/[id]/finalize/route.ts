@@ -5,6 +5,11 @@ import { releaseFundsToTaker } from "@/lib/escrow";
 import { awardXP, XP_REWARDS } from "@/lib/xp";
 import { checkAndUnlock } from "@/lib/achievements";
 import { PROTOCOL_FEE_BPS } from "@/lib/constants";
+import {
+  finalizeWithClaim,
+  keypairFromEnv,
+} from "@/lib/credit-server";
+import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
 
 /**
@@ -85,18 +90,61 @@ export async function POST(
       });
     }
 
-    // 2. Release escrow (skip for agent-fulfilled jobs — no real USDC was locked)
+    // 2. Release escrow. Two paths:
+    //   A. On-chain: job has `pda` + `escrowAta` → use the permissionless
+    //      `finalize_payment` crank via lib/credit-server.finalizeWithClaim.
+    //      If a ClaimListing exists in Bought state, proceeds route to
+    //      the buyer; otherwise to the taker. Reputation always credits
+    //      the original taker.
+    //   B. Legacy custodial: job was created before on-chain escrow
+    //      landed — fall back to releaseFundsToTaker. The custodial
+    //      pool still holds those funds.
+    //   C. Synthetic agent job: no funds to move, just marker.
     const isAgentJob = job.takerWallet.startsWith("covenant-agent-");
     let paymentTxHash: string | null = null;
+    let routedToBuyer = false;
+    let settlementBuyer: string | null = null;
+
     if (isAgentJob) {
       paymentTxHash = "agent:finalized:" + crypto.randomBytes(12).toString("hex");
+    } else if (job.pda && job.escrowAta) {
+      // Path A — on-chain, claim-aware.
+      try {
+        const crankEnv = process.env.CRANK_KEYPAIR ? "CRANK_KEYPAIR" : "DEPLOYER_KEYPAIR";
+        const crankKp = keypairFromEnv(crankEnv);
+        const result = await finalizeWithClaim({
+          crankKeypair: crankKp,
+          poster: new PublicKey(job.posterWallet),
+          taker: new PublicKey(job.takerWallet),
+          specHash: Buffer.from(job.specHash, "hex"),
+          escrowTokenAccount: new PublicKey(job.escrowAta),
+        });
+        paymentTxHash = result.sig;
+        routedToBuyer = result.routedToBuyer;
+        settlementBuyer = result.buyer;
+      } catch (err) {
+        console.error("[finalize] on-chain finalizeWithClaim failed:", err);
+        await prisma.job.updateMany({
+          where: { id, status: "Finalized" },
+          data: { status: "Delivered" },
+        });
+        return NextResponse.json(
+          {
+            error:
+              "On-chain finalize failed; funds remain locked in the PDA escrow. " +
+              "Another crank (frontend or manual) can retry.",
+            detail: err instanceof Error ? err.message : String(err),
+          },
+          { status: 500 },
+        );
+      }
     } else {
+      // Path B — legacy custodial fallback.
       try {
         const result = await releaseFundsToTaker(job.takerWallet, job.amount);
         paymentTxHash = result.txHash;
       } catch (err) {
-        console.error("[finalize] escrow release failed:", err);
-        // Revert status so it can be retried
+        console.error("[finalize] custodial release failed:", err);
         await prisma.job.updateMany({
           where: { id, status: "Finalized" },
           data: { status: "Delivered" },
@@ -109,6 +157,30 @@ export async function POST(
           },
           { status: 500 },
         );
+      }
+    }
+
+    // 2b. If a Covenant Credit claim was routed to a buyer, mirror the
+    //     settlement into the DB so the marketplace reflects terminal
+    //     state.
+    if (routedToBuyer && paymentTxHash && settlementBuyer) {
+      try {
+        const claim = await prisma.claimListing.findUnique({
+          where: { jobId: id },
+        });
+        if (claim && claim.status === "Bought") {
+          await prisma.claimListing.update({
+            where: { id: claim.id },
+            data: {
+              status: "Settled",
+              settledAt: new Date(),
+              settleTxHash: paymentTxHash,
+            },
+          });
+        }
+      } catch (err) {
+        console.error("[finalize] claim settlement mirror failed:", err);
+        // non-blocking
       }
     }
 
