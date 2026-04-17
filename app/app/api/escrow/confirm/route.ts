@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Connection, Keypair } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { lockFundsInEscrow } from "@/lib/escrow";
 import { sendMarkerTransaction } from "@/lib/solana";
+import {
+  USDC_MINT,
+  USDC_DECIMALS,
+  ESCROW_WALLET,
+} from "@/lib/constants";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
@@ -110,39 +116,140 @@ export async function POST(request: NextRequest) {
         typeof clientEscrowTxHash === "string" &&
         clientEscrowTxHash.length > 0
       ) {
-        // Path 1 — verify client-signed tx on chain
+        // Path 1 — verify client-signed tx on chain.
+        //
+        // C-04 / #17: previously this only checked that the signature
+        // existed and didn't revert. That let an attacker submit ANY
+        // confirmed devnet tx and get a Job row created. We now parse
+        // the tx and require that it contains an SPL Transfer /
+        // TransferChecked instruction that:
+        //   - moves USDC (canonical mint)
+        //   - source ATA is owned by posterWallet
+        //   - destination ATA is owned by ESCROW_WALLET
+        //   - amount matches the claimed `amount` (atomic units)
         try {
           const rpc =
             process.env.HELIUS_RPC_URL ||
             process.env.NEXT_PUBLIC_RPC_URL ||
             "https://api.devnet.solana.com";
           const connection = new Connection(rpc, "confirmed");
-          const tx = await connection.getTransaction(clientEscrowTxHash, {
-            maxSupportedTransactionVersion: 0,
-            commitment: "confirmed",
-          });
+          const tx = await connection.getParsedTransaction(
+            clientEscrowTxHash,
+            {
+              maxSupportedTransactionVersion: 0,
+              commitment: "confirmed",
+            },
+          );
           if (!tx) {
-            throw new Error(
-              `Escrow tx ${clientEscrowTxHash.slice(0, 8)}... not found on chain`,
-            );
+            throw new Error("tx not found on chain");
           }
           if (tx.meta?.err) {
+            throw new Error("tx reverted on chain");
+          }
+
+          // Expected source/destination ATAs for this claim.
+          const posterPubkey = new PublicKey(posterWallet);
+          const [expectedSourceAta, expectedDestAta] = await Promise.all([
+            getAssociatedTokenAddress(USDC_MINT, posterPubkey),
+            getAssociatedTokenAddress(USDC_MINT, ESCROW_WALLET),
+          ]);
+          const expectedSource = expectedSourceAta.toBase58();
+          const expectedDest = expectedDestAta.toBase58();
+          const expectedMint = USDC_MINT.toBase58();
+          const expectedAtomic = BigInt(
+            Math.round(amount * 10 ** USDC_DECIMALS),
+          );
+
+          // Walk all parsed instructions (top-level + inner) looking
+          // for a matching SPL token transfer.
+          type ParsedIx = {
+            program?: string;
+            programId?: { toBase58?: () => string };
+            parsed?: {
+              type?: string;
+              info?: Record<string, unknown>;
+            };
+          };
+          const topIxs = (tx.transaction.message.instructions ||
+            []) as ParsedIx[];
+          const innerIxs = (tx.meta?.innerInstructions || []).flatMap(
+            (g) => (g.instructions || []) as ParsedIx[],
+          );
+          const allIxs: ParsedIx[] = [...topIxs, ...innerIxs];
+
+          let matched = false;
+          for (const ix of allIxs) {
+            if (ix.program !== "spl-token") continue;
+            const parsed = ix.parsed;
+            if (!parsed || !parsed.info) continue;
+            const type = parsed.type;
+            if (type !== "transfer" && type !== "transferChecked") continue;
+
+            const info = parsed.info as {
+              source?: string;
+              destination?: string;
+              mint?: string;
+              amount?: string;
+              tokenAmount?: { amount?: string; decimals?: number };
+            };
+
+            const source = info.source;
+            const destination = info.destination;
+            if (source !== expectedSource) continue;
+            if (destination !== expectedDest) continue;
+
+            // For transferChecked we can verify mint directly. For the
+            // legacy transfer variant the parsed payload does not
+            // include the mint; we rely on the destination ATA match
+            // above (the ESCROW_WALLET USDC ATA is mint-specific, so
+            // if destination matches, mint matches).
+            if (type === "transferChecked") {
+              if (info.mint !== expectedMint) {
+                throw new Error("wrong mint");
+              }
+            }
+
+            const rawAmount =
+              type === "transferChecked"
+                ? info.tokenAmount?.amount
+                : info.amount;
+            if (!rawAmount) continue;
+            let observed: bigint;
+            try {
+              observed = BigInt(rawAmount);
+            } catch {
+              continue;
+            }
+            if (observed !== expectedAtomic) {
+              throw new Error("amount mismatch");
+            }
+
+            matched = true;
+            break;
+          }
+
+          if (!matched) {
             throw new Error(
-              `Escrow tx reverted: ${JSON.stringify(tx.meta.err)}`,
+              "no matching SPL USDC transfer from poster ATA to escrow ATA",
             );
           }
+
           escrowTxHash = clientEscrowTxHash;
           console.log(
             "[escrow/confirm] verified client-signed lock:",
             clientEscrowTxHash,
           );
         } catch (err) {
-          console.error("[escrow/confirm] client tx verification failed:", err);
+          const msg = err instanceof Error ? err.message : "unknown error";
+          console.error(
+            "[escrow/confirm] client tx verification failed:",
+            msg,
+          );
           return NextResponse.json(
             {
               error:
                 "Escrow transaction could not be verified on chain. No funds were locked. " +
-                (err instanceof Error ? err.message : String(err)),
+                msg,
             },
             { status: 400 },
           );
@@ -201,6 +308,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the job
+    // TODO(#17): add unique(txHash) constraint on Job table for replay
+    // defense in DB layer. Application-level check above prevents fake
+    // confirmations but does not prevent two Jobs sharing one tx hash.
     const job = await prisma.job.create({
       data: {
         posterWallet,
