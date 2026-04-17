@@ -19,11 +19,14 @@ export const USDC_MINT = new PublicKey(
 );
 
 /**
- * Escrow wallet that holds locked USDC during a job's lifecycle.
+ * @deprecated Shared escrow wallet — no longer in use after the
+ * on-chain settlement refactor (audit C-01 / H-02). Funds now live
+ * in per-job PDA escrows owned by the Covenant Anchor program.
  *
- * For v1 this is the deployer wallet itself — practical, matches the
- * existing server-side release logic in lib/escrow.ts. A follow-up
- * moves escrow into a per-job PDA owned by the Anchor program.
+ * Kept exported only so any forgotten reference still compiles. New
+ * code should never import this — derive the per-job PDA via
+ * `deriveJobPda(poster, specHash)` from `lib/program-server.ts` (or
+ * `lib/anchor-browser.ts` on the client) instead.
  */
 export const ESCROW_WALLET = new PublicKey(
   "Gy5cU3bNH1DKsff6rp91H1BmtEfwspziR52WfmMVfbPZ"

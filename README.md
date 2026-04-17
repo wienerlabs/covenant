@@ -179,11 +179,11 @@ Free agents (`pricePerPrompt = 0`) skip the payment gate.
 | Instruction | Transition | Description |
 |---|---|---|
 | `init_config` | — | Set arbitrators (threshold >= 2), challenge period bounds |
-| `create_job` | → Open | Lock USDC into per-job PDA escrow + store spec_hash + token_mint |
+| `create_job` | → Open | Lock USDC into a per-job PDA escrow + store spec_hash + token_mint |
 | `accept_job` | Open → Accepted | Claim with spec_hash verification |
 | `submit_work` | Accepted → Delivered | Record work_hash + delivery_uri, start challenge |
-| `finalize_payment` | Delivered → Finalized | Challenge expired + no dispute → pay beneficiary |
-| `raise_dispute` | Delivered → Disputed | Bond required within challenge window |
+| `finalize_payment` | Delivered → Finalized | Challenge expired + no dispute → pay beneficiary (permissionless crank) |
+| `raise_dispute` | Delivered → Disputed | Bonded challenge within challenge window |
 | `resolve_dispute` | Disputed → Resolved | 2-of-3 multisig distributes escrow + bond |
 | `cancel_job` | Open/Accepted → Cancelled | Poster / past-deadline taker |
 
@@ -207,15 +207,90 @@ sub-second finality make sub-$50 claim markets economically viable.
 Reputation credit for the underlying work always stays with the original
 taker — paper flows through the market, proof-of-work does not.
 
-### Security Audit Applied
+### Fully On-Chain Settlement
+
+As of the v1.1 settlement refactor, **every state transition runs as a
+real Anchor instruction** against the deployed Covenant program. There
+is no shared deployer-controlled custodial wallet anywhere in the fund
+flow:
+
+- **Human users**: the browser invokes the Anchor instruction directly
+  via `lib/anchor-browser.ts` (`createJobOnChain`, `acceptJobOnChain`,
+  `submitWorkOnChain`, `raiseDisputeOnChain`, `resolveDisputeOnChain`,
+  `cancelJobOnChain`, `finalizePaymentOnChain`). The user signs in
+  their own wallet. The API verifies the resulting tx invoked our
+  program and mirrors the on-chain `JobEscrow` state into the DB.
+- **Bot agents** (head-less arena/battle/autonomous demos): the server
+  signs with the bot's own keypair via the helpers in
+  `lib/program-server.ts` (`botCreateJob`, `botAcceptJob`,
+  `botSubmitWork`, `botFinalizePayment`). The bot is the principal —
+  it never holds another user's funds.
+- **Crank**: `cron/finalize` runs `finalize_payment` on chain via a
+  configurable `CRANK_KEYPAIR` (or `DEPLOYER_KEYPAIR` fallback). The
+  crank only pays SOL fees; the program enforces taker payment to the
+  registered taker, so the crank cannot redirect funds.
+
+### Creating a job
+
+```ts
+import { getAnchorProgram, createJobOnChain } from "@/lib/anchor-browser";
+
+// 1. Get a Program bound to the connected wallet.
+const program = getAnchorProgram(wallet.publicKey, selectedWallet);
+
+// 2. Build + sign + send create_job in one call.
+const { sig, jobPda, escrowTokenAccount } = await createJobOnChain({
+  program,
+  poster: wallet.publicKey,
+  specHash,                      // 32-byte SHA-256 of canonical spec JSON
+  amount: new BN(5_000_000),     // atomic units (USDC 6 decimals)
+  deadline: new BN(Math.floor(Date.now() / 1000) + 86400),
+  challengePeriod: new BN(86400),
+  posterTokenAccount,            // user's USDC ATA
+  tokenMint: USDC_MINT,
+});
+
+// 3. Mirror to the DB.
+await fetch("/api/jobs", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    posterWallet: wallet.publicKey.toBase58(),
+    amount: 5,
+    minWords: 100,
+    deadline: deadlineIso,
+    /* ... spec fields ... */
+    escrowTxHash: sig,
+    escrowAta: escrowTokenAccount.toBase58(),
+  }),
+});
+```
+
+The same pattern applies for the other lifecycle steps (accept, submit,
+finalize, raise_dispute, resolve_dispute, cancel) — invoke the
+on-chain instruction first, then POST the resulting `txHash` /
+`commitmentTxHash` / `txSignature` to the matching API route. The
+server verifies the tx hit our program and reads back the on-chain
+account state before mirroring to the DB.
+
+### Anchor program guards (audit-applied)
+
 - Threshold >= 2 enforced (single arbitrator cannot drain)
-- Token mint stored and validated at every resolution (H-01 constraint on `raise_dispute`)
+- Bond mint constrained to escrow mint (`raise_dispute` H-01 fix)
+- Token mint stored and validated at every resolution
 - Cancel restricted to poster/taker only
 - Deadline checks consistent (`<` everywhere)
 - Atomic finalization (no double-payment race)
 - **Claim routing is mandatory**: `claim_listing` PDA is a required account
   on `finalize_payment` and `resolve_dispute`; a seller-crank cannot bypass
   a sold claim by omitting the listing
+
+### API guards (audit-applied)
+
+- Admin endpoint fail-closed (C-03)
+- Escrow tx parsed and validated (C-04)
+- API key endpoints require Ed25519 signature (H-03)
+- Custodial helpers replaced by on-chain instructions (C-01 / H-02)
 - SSRF protection on agent registration
 - Rate limiting on all sensitive endpoints
 

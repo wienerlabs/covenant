@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { computeWorkMetrics } from "@/lib/work-metrics";
+import {
+  fetchJobEscrow,
+  verifyTxInvokedCovenant,
+} from "@/lib/program-server";
+import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
 
 /**
@@ -106,6 +111,66 @@ export async function POST(
       return NextResponse.json(
         {
           error: "deliveryUri exceeds 128 byte on-chain limit",
+        },
+        { status: 400 },
+      );
+    }
+
+    // ---- On-chain commitment verification ----
+    //
+    // If the taker is a human wallet, they MUST have already invoked
+    // the on-chain `submit_work` instruction from their browser and
+    // pass us the resulting tx signature. We verify and check the
+    // JobEscrow PDA reflects the work_hash we computed. This blocks
+    // a malicious frontend from claiming "delivered" without an
+    // on-chain commitment.
+    //
+    // For headless bot taker flows (arena/battle/autonomous) the
+    // commitmentTxHash may be absent — in that case we record DB-only
+    // and the bot is expected to call submit_work via the server
+    // bot-signing helper before finalize_payment runs. Such jobs can
+    // never settle real USDC because the on-chain status would still
+    // be Accepted, not Delivered, and finalize would revert.
+    const isHumanFlow = !job.posterWallet.startsWith("covenant-agent-");
+    if (commitmentTxHash) {
+      try {
+        await verifyTxInvokedCovenant(commitmentTxHash);
+        if (job.pda) {
+          const onchain = await fetchJobEscrow(new PublicKey(job.pda));
+          if (!onchain) {
+            throw new Error(
+              `JobEscrow PDA ${job.pda.slice(0, 8)}… not found on chain.`,
+            );
+          }
+          if (onchain.status !== "Delivered") {
+            throw new Error(
+              `On-chain JobEscrow status is '${onchain.status}'; expected 'Delivered'. ` +
+              `Either the supplied tx is not a successful submit_work, or it was for a different spec.`,
+            );
+          }
+          if (onchain.workHashHex.toLowerCase() !== metrics.workHash.toLowerCase()) {
+            throw new Error(
+              `On-chain work_hash mismatch: expected ${metrics.workHash.slice(0, 12)}…, ` +
+              `got ${onchain.workHashHex.slice(0, 12)}…`,
+            );
+          }
+        }
+      } catch (err) {
+        console.error("[submit] on-chain verification failed:", err);
+        return NextResponse.json(
+          {
+            error: "submit_work tx verification failed: " +
+              (err instanceof Error ? err.message : String(err)),
+          },
+          { status: 400 },
+        );
+      }
+    } else if (isHumanFlow) {
+      return NextResponse.json(
+        {
+          error:
+            "commitmentTxHash is required for human-wallet jobs. The taker must invoke " +
+            "submit_work on chain via @solana/anchor-browser before calling this endpoint.",
         },
         { status: 400 },
       );

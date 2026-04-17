@@ -278,6 +278,221 @@ export async function submitWorkOnChain(params: {
 }
 
 /**
+ * Build and sign an `accept_job` instruction. Taker registers as the
+ * worker for the job.
+ */
+export async function acceptJobOnChain(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  program: Program<any>;
+  taker: PublicKey;
+  poster: PublicKey;
+  specHash: Uint8Array;
+}): Promise<string> {
+  const { program, taker, poster, specHash } = params;
+  const [jobPda] = deriveJobPda(poster, specHash);
+
+  const tx = await (program.methods as any)
+    .acceptJob(Array.from(specHash))
+    .accounts({ taker, jobEscrow: jobPda, poster })
+    .transaction();
+
+  const connection = program.provider.connection;
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  tx.feePayer = taker;
+
+  const signedTx = await ((program.provider as any).wallet as any).signTransaction(tx);
+  const sig = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+  });
+  await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+  return sig;
+}
+
+/**
+ * Build and sign a `raise_dispute` instruction. Poster bonds USDC
+ * to challenge the delivery within the challenge window.
+ */
+export async function raiseDisputeOnChain(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  program: Program<any>;
+  poster: PublicKey;
+  specHash: Uint8Array;
+  reasonHash: Uint8Array;
+  bond: BN;
+  posterTokenAccount: PublicKey;
+  tokenMint: PublicKey;
+}): Promise<{ sig: string; bondPda: PublicKey }> {
+  const { program, poster, specHash, reasonHash, bond, posterTokenAccount, tokenMint } = params;
+
+  const [jobPda] = deriveJobPda(poster, specHash);
+  const [configPda] = deriveConfigPda();
+  const [bondPda] = deriveBondPda(jobPda);
+
+  const tx = await (program.methods as any)
+    .raiseDispute(Array.from(reasonHash), bond)
+    .accounts({
+      poster,
+      config: configPda,
+      jobEscrow: jobPda,
+      bondTokenAccount: bondPda,
+      posterTokenAccount,
+      tokenMint,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      rent: SYSVAR_RENT_PUBKEY,
+    })
+    .transaction();
+
+  const connection = program.provider.connection;
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  tx.feePayer = poster;
+
+  const signedTx = await ((program.provider as any).wallet as any).signTransaction(tx);
+  const sig = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+  });
+  await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+  return { sig, bondPda };
+}
+
+/**
+ * Build and sign a `resolve_dispute` instruction. Called by an
+ * arbitrator wallet whose pubkey is in the protocol config arbitrators
+ * array. Reaching threshold (default 2-of-3) settles funds on-chain.
+ *
+ * resolution: { favorTaker: {} } | { favorPoster: {} } | { split: { takerAmount: BN } }
+ */
+export async function resolveDisputeOnChain(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  program: Program<any>;
+  arbitrator: PublicKey;
+  poster: PublicKey;
+  taker: PublicKey;
+  specHash: Uint8Array;
+  escrowTokenAccount: PublicKey;
+  posterTokenAccount: PublicKey;
+  takerTokenAccount: PublicKey;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  resolution: any;
+}): Promise<string> {
+  const {
+    program,
+    arbitrator,
+    poster,
+    taker,
+    specHash,
+    escrowTokenAccount,
+    posterTokenAccount,
+    takerTokenAccount,
+    resolution,
+  } = params;
+
+  const [jobPda] = deriveJobPda(poster, specHash);
+  const [configPda] = deriveConfigPda();
+  const [bondPda] = deriveBondPda(jobPda);
+  const [reputationPda] = deriveReputationPda(taker);
+
+  const tx = await (program.methods as any)
+    .resolveDispute(resolution)
+    .accounts({
+      arbitrator,
+      config: configPda,
+      jobEscrow: jobPda,
+      poster,
+      escrowTokenAccount,
+      bondTokenAccount: bondPda,
+      posterTokenAccount,
+      takerTokenAccount,
+      taker,
+      takerReputation: reputationPda,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .transaction();
+
+  const connection = program.provider.connection;
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  tx.feePayer = arbitrator;
+
+  const signedTx = await ((program.provider as any).wallet as any).signTransaction(tx);
+  const sig = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+  });
+  await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+  return sig;
+}
+
+/**
+ * Build and sign a `cancel_job` instruction. Two valid paths:
+ *   A. Open job, signer == poster
+ *   B. Accepted job past deadline, signer == poster OR taker
+ */
+export async function cancelJobOnChain(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  program: Program<any>;
+  signer: PublicKey;
+  poster: PublicKey;
+  taker: PublicKey;
+  specHash: Uint8Array;
+  escrowTokenAccount: PublicKey;
+  posterTokenAccount: PublicKey;
+}): Promise<string> {
+  const { program, signer, poster, taker, specHash, escrowTokenAccount, posterTokenAccount } = params;
+
+  const [jobPda] = deriveJobPda(poster, specHash);
+  const [reputationPda] = deriveReputationPda(taker);
+
+  const tx = await (program.methods as any)
+    .cancelJob()
+    .accounts({
+      signer,
+      jobEscrow: jobPda,
+      poster,
+      escrowTokenAccount,
+      posterTokenAccount,
+      takerReputation: reputationPda,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .transaction();
+
+  const connection = program.provider.connection;
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.lastValidBlockHeight = lastValidBlockHeight;
+  tx.feePayer = signer;
+
+  const signedTx = await ((program.provider as any).wallet as any).signTransaction(tx);
+  const sig = await connection.sendRawTransaction(signedTx.serialize(), {
+    skipPreflight: false,
+  });
+  await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+  return sig;
+}
+
+/**
  * Build and sign a `finalize_payment` instruction.
  * Permissionless — any wallet can call this.
  */

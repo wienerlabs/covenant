@@ -1,28 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { releaseFundsToTaker } from "@/lib/escrow";
+import {
+  botFinalizePayment,
+  keypairFromEnv,
+} from "@/lib/program-server";
+import { PublicKey } from "@solana/web3.js";
 
 // Always dynamic — this route talks to Prisma on every request.
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// NOTE: This cron still uses the server-side releaseFundsToTaker() as
-// the fund-movement mechanism. In a fully on-chain deployment, this
-// would be replaced with a server crank that calls finalize_payment
-// via Anchor using a dedicated crank keypair. The current approach
-// works because:
-//   1. The on-chain finalize_payment is permissionless — any wallet
-//      can call it after challenge_end
-//   2. The server has DEPLOYER_KEYPAIR which can act as the crank
-//   3. Jobs created via the real Anchor create_job instruction have
-//      their escrow in PDA-owned token accounts
-//
-// For jobs created via the legacy SPL-transfer path (arena/battle),
-// releaseFundsToTaker still works because those funds sit in the
-// deployer's ATA. Both paths converge here.
-//
-// TODO: Replace with real Anchor finalize_payment instruction call
-// using a dedicated crank keypair for full on-chain finalize.
+// On-chain crank for the permissionless `finalize_payment` instruction.
+// The crank only pays SOL fees; it cannot redirect funds because the
+// program enforces taker payment to the registered taker. We prefer a
+// dedicated CRANK_KEYPAIR if set, falling back to DEPLOYER_KEYPAIR.
 
 /**
  * GET /api/cron/finalize
@@ -74,13 +65,39 @@ export async function GET(req: NextRequest) {
     error?: string;
   }> = [];
 
+  const crankEnv = process.env.CRANK_KEYPAIR ? "CRANK_KEYPAIR" : "DEPLOYER_KEYPAIR";
+  let crankKp;
+  try {
+    crankKp = keypairFromEnv(crankEnv);
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Crank keypair (${crankEnv}) not configured: ${(err as Error).message}` },
+      { status: 503 },
+    );
+  }
+
   for (const job of candidates) {
     if (!job.takerWallet) {
       results.push({ jobId: job.id, ok: false, error: "no taker wallet" });
       continue;
     }
+    if (!job.pda || !job.escrowAta) {
+      // Pre-refactor jobs without on-chain backing — flag and skip.
+      results.push({
+        jobId: job.id,
+        ok: false,
+        error: "missing on-chain pda/escrowAta (legacy custodial job)",
+      });
+      continue;
+    }
     try {
-      const { txHash } = await releaseFundsToTaker(job.takerWallet, job.amount);
+      const txHash = await botFinalizePayment({
+        crankKeypair: crankKp,
+        poster: new PublicKey(job.posterWallet),
+        taker: new PublicKey(job.takerWallet),
+        specHash: Buffer.from(job.specHash, "hex"),
+        escrowTokenAccount: new PublicKey(job.escrowAta),
+      });
       await prisma.$transaction(async (tx) => {
         await tx.job.update({
           where: { id: job.id },

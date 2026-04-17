@@ -1,52 +1,28 @@
-import { NextRequest, NextResponse } from "next/server";
-import { buildEscrowLockTransaction, checkUSDCBalance } from "@/lib/client-escrow";
+import { NextResponse } from "next/server";
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { posterWallet, amount } = body;
+/**
+ * @deprecated POST /api/escrow/build
+ *
+ * Built an SPL transfer tx that moved user USDC into a single shared
+ * deployer-controlled wallet. Removed in the on-chain settlement
+ * refactor (audit C-01 / H-02).
+ *
+ * Replacement: invoke the on-chain `create_job` instruction directly
+ * from the user's wallet via `createJobOnChain` in
+ * `lib/anchor-browser.ts`. The instruction creates a per-job PDA
+ * escrow owned by the program — no shared deployer wallet involved.
+ */
 
-    if (!posterWallet || typeof posterWallet !== "string") {
-      return NextResponse.json(
-        { error: "posterWallet is required" },
-        { status: 400 }
-      );
-    }
+const MIGRATION_NOTE = {
+  error: "Endpoint deprecated",
+  detail:
+    "POST /api/escrow/build was removed in the on-chain settlement refactor. " +
+    "Build the on-chain create_job instruction directly in the browser via " +
+    "createJobOnChain (see lib/anchor-browser.ts) and POST the resulting tx " +
+    "signature to /api/jobs as `escrowTxHash`.",
+  see: "/api/jobs",
+};
 
-    if (!amount || typeof amount !== "number" || amount <= 0) {
-      return NextResponse.json(
-        { error: "amount must be a positive number" },
-        { status: 400 }
-      );
-    }
-
-    // Check balance first
-    const balance = await checkUSDCBalance(posterWallet);
-    if (balance < amount) {
-      return NextResponse.json(
-        {
-          error: `Insufficient USDC balance. You have ${balance.toFixed(2)} USDC but need ${amount} USDC.`,
-          balance,
-          required: amount,
-        },
-        { status: 400 }
-      );
-    }
-
-    const result = await buildEscrowLockTransaction(posterWallet, amount);
-
-    return NextResponse.json({
-      transaction: result.transaction,
-      escrowAta: result.escrowAta,
-      posterAta: result.posterAta,
-      amount,
-      balance,
-    });
-  } catch (error) {
-    console.error("POST /api/escrow/build error:", error);
-    return NextResponse.json(
-      { error: "Failed to build escrow transaction: " + (error instanceof Error ? error.message : "Unknown error") },
-      { status: 500 }
-    );
-  }
+export async function POST() {
+  return NextResponse.json(MIGRATION_NOTE, { status: 410 });
 }

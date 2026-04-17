@@ -1,7 +1,41 @@
-import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
+/**
+ * @file escrow.ts — DEPRECATED custodial escrow helpers
+ *
+ * The previous version of this module shipped four custodial helpers
+ * (`lockFundsInEscrow`, `releaseFundsToTaker`, `refundToPoster`, plus
+ * `mintTestUSDC` for the faucet). They were the implementation of the
+ * "single shared deployer wallet pool" pattern flagged as audit C-01
+ * and H-02 — a mismatch with the README's promise of trust-minimized
+ * optimistic settlement on Solana.
+ *
+ * As of the on-chain settlement refactor:
+ *
+ *   - Job creation, accept, submit, finalize, raise_dispute,
+ *     resolve_dispute, and cancel_job all run as real on-chain
+ *     instructions against the Covenant Anchor program.
+ *
+ *   - For HUMAN users, the browser invokes those instructions via
+ *     `lib/anchor-browser.ts` and the API routes simply verify the
+ *     resulting tx + mirror the on-chain JobEscrow state into the DB.
+ *
+ *   - For HEADLESS BOT agents (arena / battle / autonomous demos),
+ *     `lib/program-server.ts` exposes `botCreateJob`, `botAcceptJob`,
+ *     `botSubmitWork`, `botFinalizePayment`. These are signed with
+ *     the BOT'S OWN keypair — the bot acts on its own behalf with
+ *     its own funds. The server never signs to move user USDC.
+ *
+ * The three custodial functions below are kept ONLY as throwing stubs
+ * so that any forgotten import shows a clear failure message at runtime
+ * pointing the operator at the on-chain replacement, instead of
+ * silently sending real money through the deployer wallet.
+ *
+ * `mintTestUSDC` and `getTokenBalance` remain functional: minting test
+ * USDC is the legitimate use of the test-mint authority key, and
+ * reading balances doesn't require any signer.
+ */
+
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import {
-  TOKEN_PROGRAM_ID,
-  createTransferInstruction,
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
   getAccount,
@@ -21,142 +55,69 @@ function keypairFromEnv(envVar: string): Keypair {
   return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(raw)));
 }
 
-// Convert human-readable amount to token amount (with decimals)
 function toTokenAmount(amount: number): bigint {
   return BigInt(Math.round(amount * Math.pow(10, USDC_DECIMALS)));
 }
 
-// Get or create ATA for a wallet
 async function ensureATA(connection: Connection, payer: Keypair, owner: PublicKey): Promise<PublicKey> {
   const ata = await getAssociatedTokenAddress(TEST_USDC_MINT, owner);
   try {
     await getAccount(connection, ata);
     return ata;
   } catch {
-    // ATA doesn't exist, create it
+    const { Transaction } = await import("@solana/web3.js");
     const tx = new Transaction().add(
-      createAssociatedTokenAccountInstruction(payer.publicKey, ata, owner, TEST_USDC_MINT)
+      createAssociatedTokenAccountInstruction(payer.publicKey, ata, owner, TEST_USDC_MINT),
     );
     await connection.sendTransaction(tx, [payer]);
-    // Wait a bit for confirmation
     await new Promise((r) => setTimeout(r, 1000));
     return ata;
   }
 }
 
-// Lock funds: transfer from poster to escrow (deployer holds escrow)
-export async function lockFundsInEscrow(
-  posterKeypairEnv: string,
-  amount: number
-): Promise<{ txHash: string; fromAta: string; toAta: string; amount: number }> {
-  const connection = getConnection();
-  const poster = keypairFromEnv(posterKeypairEnv);
-  const deployer = keypairFromEnv("DEPLOYER_KEYPAIR");
+const REMOVED_MSG = (fn: string, replacement: string) =>
+  `${fn} was removed in the on-chain settlement refactor (audit C-01/H-02). ` +
+  `Use ${replacement} instead. See lib/program-server.ts and lib/anchor-browser.ts.`;
 
-  const posterAta = await ensureATA(connection, deployer, poster.publicKey);
-  const escrowAta = await ensureATA(connection, deployer, deployer.publicKey);
-
-  const tokenAmount = toTokenAmount(amount);
-
-  const tx = new Transaction().add(
-    createTransferInstruction(
-      posterAta,
-      escrowAta,
-      poster.publicKey,
-      tokenAmount,
-      [],
-      TOKEN_PROGRAM_ID
-    )
+/** @deprecated Use the on-chain `create_job` instruction instead. */
+export async function lockFundsInEscrow(): Promise<never> {
+  throw new Error(
+    REMOVED_MSG(
+      "lockFundsInEscrow",
+      "botCreateJob (server) or createJobOnChain (browser)",
+    ),
   );
-
-  const sig = await connection.sendTransaction(tx, [poster], { skipPreflight: false });
-  await connection.confirmTransaction(sig, "confirmed");
-
-  return {
-    txHash: sig,
-    fromAta: posterAta.toBase58(),
-    toAta: escrowAta.toBase58(),
-    amount,
-  };
 }
 
-// Release funds: transfer from escrow (deployer) to taker
-export async function releaseFundsToTaker(
-  takerWalletAddress: string,
-  amount: number
-): Promise<{ txHash: string; fromAta: string; toAta: string; amount: number }> {
-  const connection = getConnection();
-  const deployer = keypairFromEnv("DEPLOYER_KEYPAIR");
-  const takerPubkey = new PublicKey(takerWalletAddress);
-
-  const escrowAta = await ensureATA(connection, deployer, deployer.publicKey);
-  const takerAta = await ensureATA(connection, deployer, takerPubkey);
-
-  const tokenAmount = toTokenAmount(amount);
-
-  const tx = new Transaction().add(
-    createTransferInstruction(
-      escrowAta,
-      takerAta,
-      deployer.publicKey,
-      tokenAmount,
-      [],
-      TOKEN_PROGRAM_ID
-    )
+/** @deprecated Use the on-chain `finalize_payment` instruction instead. */
+export async function releaseFundsToTaker(): Promise<never> {
+  throw new Error(
+    REMOVED_MSG(
+      "releaseFundsToTaker",
+      "botFinalizePayment (server crank) or finalizePaymentOnChain (browser)",
+    ),
   );
-
-  const sig = await connection.sendTransaction(tx, [deployer], { skipPreflight: false });
-  await connection.confirmTransaction(sig, "confirmed");
-
-  return {
-    txHash: sig,
-    fromAta: escrowAta.toBase58(),
-    toAta: takerAta.toBase58(),
-    amount,
-  };
 }
 
-// Refund: transfer from escrow back to poster
-export async function refundToPoster(
-  posterKeypairEnv: string,
-  amount: number
-): Promise<{ txHash: string }> {
-  const connection = getConnection();
-  const deployer = keypairFromEnv("DEPLOYER_KEYPAIR");
-  const poster = keypairFromEnv(posterKeypairEnv);
-
-  const escrowAta = await ensureATA(connection, deployer, deployer.publicKey);
-  const posterAta = await ensureATA(connection, deployer, poster.publicKey);
-
-  const tokenAmount = toTokenAmount(amount);
-
-  const tx = new Transaction().add(
-    createTransferInstruction(
-      escrowAta,
-      posterAta,
-      deployer.publicKey,
-      tokenAmount,
-      [],
-      TOKEN_PROGRAM_ID
-    )
+/** @deprecated Use the on-chain `cancel_job` instruction instead. */
+export async function refundToPoster(): Promise<never> {
+  throw new Error(
+    REMOVED_MSG("refundToPoster", "cancelJobOnChain (browser) — the program refunds atomically"),
   );
-
-  const sig = await connection.sendTransaction(tx, [deployer]);
-  await connection.confirmTransaction(sig, "confirmed");
-
-  return { txHash: sig };
 }
 
-// Mint test USDC to a wallet (for airdrop/faucet)
+/**
+ * Faucet helper. The server holds the test-USDC mint authority — this
+ * is a legitimate authority key, not a custody key. Production builds
+ * point USDC_MINT at the canonical USDC mint and disable this helper.
+ */
 export async function mintTestUSDC(
   toWalletAddress: string,
-  amount: number
+  amount: number,
 ): Promise<{ txHash: string; ata: string }> {
   const connection = getConnection();
   const deployer = keypairFromEnv("DEPLOYER_KEYPAIR");
   const toPubkey = new PublicKey(toWalletAddress);
-
-  // Import mint function
   const { mintTo } = await import("@solana/spl-token");
 
   const ata = await ensureATA(connection, deployer, toPubkey);
@@ -167,18 +128,17 @@ export async function mintTestUSDC(
     deployer,
     TEST_USDC_MINT,
     ata,
-    deployer, // mint authority
-    tokenAmount
+    deployer,
+    tokenAmount,
   );
 
   return { txHash: sig, ata: ata.toBase58() };
 }
 
-// Get token balance for a wallet
+/** Read-only USDC balance lookup. */
 export async function getTokenBalance(walletAddress: string): Promise<number> {
   const connection = getConnection();
   const wallet = new PublicKey(walletAddress);
-
   try {
     const ata = await getAssociatedTokenAddress(TEST_USDC_MINT, wallet);
     const account = await getAccount(connection, ata);

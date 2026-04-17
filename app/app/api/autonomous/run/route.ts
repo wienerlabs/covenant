@@ -3,7 +3,11 @@ import { sendMarkerTransaction } from "@/lib/solana";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
 import { rateLimit } from "@/lib/rateLimit";
-import { releaseFundsToTaker } from "@/lib/escrow";
+// autonomous/run is a head-less DEMO route. Real settlement uses the
+// on-chain create_job → submit_work → finalize_payment pipeline (see
+// lib/program-server.ts botCreateJob / botFinalizePayment). Custodial
+// `releaseFundsToTaker` was removed in the on-chain refactor (audit
+// C-01). Demo runs no longer move USDC.
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
 import { executeCircuit } from "@/lib/work-metrics";
@@ -276,14 +280,10 @@ Complete this job. Write at least ${job.minWords} words. Be thorough and profess
             console.error("[autonomous] submit tx failed:", err);
           }
 
-          // Try escrow release
-          let escrowTxHash: string | null = null;
-          try {
-            const releaseResult = await releaseFundsToTaker(agentWallet, jobAmount);
-            escrowTxHash = releaseResult.txHash;
-          } catch (err) {
-            console.error("[autonomous] escrow release failed:", err);
-          }
+          // No custodial release: demo flow records earnings but does
+          // not move USDC. Bot agents that want real settlement should
+          // post via the on-chain pipeline instead.
+          const escrowTxHash: string | null = null;
 
           totalEarned += jobAmount;
           totalJobsDone++;

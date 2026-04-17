@@ -1,175 +1,137 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
-import { refundToPoster } from "@/lib/escrow";
-import { Keypair } from "@solana/web3.js";
+import {
+  fetchJobEscrow,
+  verifyTxInvokedCovenant,
+} from "@/lib/program-server";
+import { PublicKey } from "@solana/web3.js";
 
+/**
+ * POST /api/jobs/[id]/cancel
+ *
+ * Cancellation now goes fully through the on-chain `cancel_job`
+ * instruction. The caller must have already invoked it from their
+ * wallet and passes the resulting tx signature in `txHash`.
+ *
+ * Body: { signerWallet, txHash }
+ *
+ * The on-chain program enforces who is allowed to cancel and when:
+ *   - Open  : only poster
+ *   - Accepted, past deadline: poster OR taker
+ * We mirror its decision instead of duplicating it server-side, so
+ * permissions cannot drift between layers.
+ */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { signerWallet } = body;
+    const { signerWallet, txHash } = body as {
+      signerWallet?: string;
+      txHash?: string;
+    };
 
     if (!signerWallet || typeof signerWallet !== "string") {
       return NextResponse.json(
         { error: "signerWallet is required" },
-        { status: 400 }
+        { status: 400 },
+      );
+    }
+    if (!txHash) {
+      return NextResponse.json(
+        {
+          error:
+            "txHash (on-chain cancel_job tx signature) is required. " +
+            "Invoke cancel_job from your wallet via @solana/anchor-browser before calling this endpoint.",
+        },
+        { status: 400 },
       );
     }
 
     const job = await prisma.job.findUnique({ where: { id } });
-
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
+    if (job.status === "Cancelled") {
+      // Idempotent — already cancelled, just return current row.
+      return NextResponse.json({ ...job, note: "already-cancelled" });
+    }
 
-    // Case 1: Open job can be cancelled by poster
-    if (job.status === "Open" && signerWallet === job.posterWallet) {
-      const updatedJob = await prisma.job.update({
+    // Verify the on-chain tx and confirm the JobEscrow PDA is now in
+    // the Cancelled state. The program does the access-control work.
+    try {
+      await verifyTxInvokedCovenant(txHash);
+      if (job.pda) {
+        const onchain = await fetchJobEscrow(new PublicKey(job.pda));
+        if (onchain && onchain.status !== "Cancelled") {
+          throw new Error(
+            `On-chain JobEscrow status is '${onchain.status}'; expected 'Cancelled'.`,
+          );
+        }
+        // If the PDA is gone (close = poster directive) treat as cancelled too.
+      }
+    } catch (err) {
+      console.error("[cancel] on-chain verification failed:", err);
+      return NextResponse.json(
+        {
+          error: "cancel_job tx verification failed: " +
+            (err instanceof Error ? err.message : String(err)),
+        },
+        { status: 400 },
+      );
+    }
+
+    const updatedJob = await prisma.$transaction(async (tx) => {
+      const updated = await tx.job.update({
         where: { id },
         data: { status: "Cancelled" },
       });
 
-      // Send Solana marker transaction (non-blocking)
-      let txHash: string | null = null;
-      try {
-        txHash = await sendMarkerTransaction("cancel_job:" + id);
-        await prisma.transaction.create({
-          data: {
-            txHash,
-            type: "cancel_job",
-            jobId: id,
-            wallet: signerWallet,
-            amount: job.amount,
-            status: "confirmed",
+      // If we cancelled an Accepted-past-deadline job, the program also
+      // updates taker reputation. Mirror that side effect here.
+      if (job.status === "Accepted" && job.takerWallet && new Date() > job.deadline) {
+        await tx.reputation.upsert({
+          where: { walletAddress: job.takerWallet },
+          create: {
+            walletAddress: job.takerWallet,
+            jobsFailed: 1,
+          },
+          update: {
+            jobsFailed: { increment: 1 },
           },
         });
-      } catch (err) {
-        console.error("[solana] Failed to send marker tx for cancel_job:", err);
       }
 
-      // Attempt real token refund for known wallets
-      const knownWallets: Record<string, string> = {};
-      if (process.env.AGENT_ALPHA_WALLET) knownWallets[process.env.AGENT_ALPHA_WALLET] = "AGENT_ALPHA_KEYPAIR";
-      if (process.env.AGENT_OMEGA_WALLET) knownWallets[process.env.AGENT_OMEGA_WALLET] = "AGENT_OMEGA_KEYPAIR";
-      try {
-        const deployerKpRaw = JSON.parse(process.env.DEPLOYER_KEYPAIR || "[]");
-        if (deployerKpRaw.length > 0) {
-          const deployerWallet = Keypair.fromSecretKey(Uint8Array.from(deployerKpRaw)).publicKey.toBase58();
-          knownWallets[deployerWallet] = "DEPLOYER_KEYPAIR";
-        }
-      } catch { /* ignore */ }
+      await tx.transaction.create({
+        data: {
+          txHash,
+          type: "cancel_job",
+          jobId: id,
+          wallet: signerWallet,
+          amount: job.amount,
+          status: "confirmed",
+        },
+      }).catch(() => {/* unique txHash collision — ignore */});
 
-      const keypairEnv = knownWallets[job.posterWallet];
-      if (keypairEnv && job.paymentToken === "USDC") {
-        try {
-          const result = await refundToPoster(keypairEnv, job.amount);
-          await prisma.transaction.create({
-            data: {
-              txHash: result.txHash,
-              type: "escrow_refund",
-              jobId: id,
-              wallet: job.posterWallet,
-              amount: job.amount,
-              status: "confirmed",
-            },
-          });
-        } catch (err) {
-          console.error("[escrow] Refund failed:", err);
-        }
-      }
+      return updated;
+    });
 
-      return NextResponse.json({ ...updatedJob, txHash });
+    // Best-effort marker (non-blocking, advisory only).
+    try {
+      await sendMarkerTransaction("cancel_job:" + id);
+    } catch (err) {
+      console.error("[solana] Failed to send marker tx for cancel_job:", err);
     }
 
-    // Case 2: Accepted job can be cancelled after deadline passes
-    if (job.status === "Accepted" && new Date() > job.deadline) {
-      const updatedJob = await prisma.$transaction(async (tx) => {
-        const updated = await tx.job.update({
-          where: { id },
-          data: { status: "Cancelled" },
-        });
-
-        if (job.takerWallet) {
-          await tx.reputation.upsert({
-            where: { walletAddress: job.takerWallet },
-            create: {
-              walletAddress: job.takerWallet,
-              jobsFailed: 1,
-            },
-            update: {
-              jobsFailed: { increment: 1 },
-            },
-          });
-        }
-
-        return updated;
-      });
-
-      // Send Solana marker transaction (non-blocking)
-      let txHash: string | null = null;
-      try {
-        txHash = await sendMarkerTransaction("cancel_job:" + id);
-        await prisma.transaction.create({
-          data: {
-            txHash,
-            type: "cancel_job",
-            jobId: id,
-            wallet: signerWallet,
-            amount: job.amount,
-            status: "confirmed",
-          },
-        });
-      } catch (err) {
-        console.error("[solana] Failed to send marker tx for cancel_job:", err);
-      }
-
-      // Attempt real token refund for known wallets
-      const knownWallets2: Record<string, string> = {};
-      if (process.env.AGENT_ALPHA_WALLET) knownWallets2[process.env.AGENT_ALPHA_WALLET] = "AGENT_ALPHA_KEYPAIR";
-      if (process.env.AGENT_OMEGA_WALLET) knownWallets2[process.env.AGENT_OMEGA_WALLET] = "AGENT_OMEGA_KEYPAIR";
-      try {
-        const deployerKpRaw2 = JSON.parse(process.env.DEPLOYER_KEYPAIR || "[]");
-        if (deployerKpRaw2.length > 0) {
-          const deployerWallet2 = Keypair.fromSecretKey(Uint8Array.from(deployerKpRaw2)).publicKey.toBase58();
-          knownWallets2[deployerWallet2] = "DEPLOYER_KEYPAIR";
-        }
-      } catch { /* ignore */ }
-
-      const keypairEnv2 = knownWallets2[job.posterWallet];
-      if (keypairEnv2 && job.paymentToken === "USDC") {
-        try {
-          const result = await refundToPoster(keypairEnv2, job.amount);
-          await prisma.transaction.create({
-            data: {
-              txHash: result.txHash,
-              type: "escrow_refund",
-              jobId: id,
-              wallet: job.posterWallet,
-              amount: job.amount,
-              status: "confirmed",
-            },
-          });
-        } catch (err) {
-          console.error("[escrow] Refund failed:", err);
-        }
-      }
-
-      return NextResponse.json({ ...updatedJob, txHash });
-    }
-
-    return NextResponse.json(
-      { error: "Cannot cancel this job. Either you are not the poster, the job is not Open, or the deadline has not passed for an Accepted job." },
-      { status: 400 }
-    );
+    return NextResponse.json({ ...updatedJob, txHash });
   } catch (error) {
     console.error("POST /api/jobs/[id]/cancel error:", error);
     return NextResponse.json(
       { error: "Failed to cancel job" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

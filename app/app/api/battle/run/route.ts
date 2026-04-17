@@ -3,7 +3,13 @@ import { sendMarkerTransaction } from "@/lib/solana";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
 import { rateLimit } from "@/lib/rateLimit";
-import { releaseFundsToTaker } from "@/lib/escrow";
+// NOTE: battle/run is a head-less DEMO route. Real fund movement is
+// handled on chain via the standard create_job → submit_work →
+// finalize_payment flow (see lib/program-server.ts botCreateJob /
+// botFinalizePayment for the bot-signed equivalent). This handler
+// records demo events only; no USDC moves through a shared deployer
+// wallet. The previous custodial `releaseFundsToTaker` call was
+// removed as part of the on-chain settlement refactor (audit C-01).
 import Anthropic from "@anthropic-ai/sdk";
 import crypto from "crypto";
 import { executeCircuit } from "@/lib/work-metrics";
@@ -442,14 +448,10 @@ Respond ONLY with JSON: {"winner": "alpha" or "omega", "reason": "2-3 sentence e
           console.error("[battle] payment marker tx failed:", err);
         }
 
-        // Try real escrow release
-        let escrowTxHash: string | null = null;
-        try {
-          const releaseResult = await releaseFundsToTaker(winnerWallet, jobSpec.amount);
-          escrowTxHash = releaseResult.txHash;
-        } catch (err) {
-          console.error("[battle] escrow release failed:", err);
-        }
+        // No custodial release: battle is a demo flow without real
+        // on-chain escrow. Real settlement runs through the standard
+        // /api/jobs + /api/jobs/[id]/finalize on-chain pipeline.
+        const escrowTxHash: string | null = null;
 
         send("battle_payment", `${jobSpec.amount} USDC awarded to ${judgeResult.winner === "alpha" ? "Agent Alpha" : "Agent Omega"}`, {
           amount: jobSpec.amount,
