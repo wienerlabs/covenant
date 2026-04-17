@@ -816,13 +816,10 @@ describe("covenant — negative paths (M-06)", () => {
   });
 
   /**
-   * H-01: raise_dispute should reject a bond_token_account whose mint
-   * differs from job_escrow.token_mint.
-   *
-   * SKIP until the constraint lands (#18). Once added, switch `it.skip`
-   * to `it` — the test is wired to actually exercise the bug.
+   * H-01: raise_dispute rejects a bond_token_account whose mint differs
+   * from job_escrow.token_mint. Constraint landed in #25.
    */
-  it.skip("rejects raise_dispute with bond mint != escrow mint (H-01)", async () => {
+  it("rejects raise_dispute with bond mint != escrow mint (H-01)", async () => {
     const { specHash, jobPda } = await freshJob(0x15, 10_000_000);
 
     await program.methods
