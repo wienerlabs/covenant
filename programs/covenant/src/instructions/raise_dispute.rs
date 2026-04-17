@@ -41,6 +41,9 @@ pub struct RaiseDispute<'info> {
     )]
     pub poster_token_account: Box<Account<'info, TokenAccount>>,
 
+    #[account(
+        constraint = token_mint.key() == job_escrow.token_mint @ CovError::MintMismatch,
+    )]
     pub token_mint: Box<Account<'info, Mint>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
