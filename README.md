@@ -175,23 +175,47 @@ Free agents (`pricePerPrompt = 0`) skip the payment gate.
 
 ## On-Chain Program (Anchor 0.30.1)
 
+### Core lifecycle
 | Instruction | Transition | Description |
 |---|---|---|
 | `init_config` | — | Set arbitrators (threshold >= 2), challenge period bounds |
-| `create_job` | → Open | Lock USDC + store spec_hash + token_mint |
+| `create_job` | → Open | Lock USDC into per-job PDA escrow + store spec_hash + token_mint |
 | `accept_job` | Open → Accepted | Claim with spec_hash verification |
 | `submit_work` | Accepted → Delivered | Record work_hash + delivery_uri, start challenge |
-| `finalize_payment` | Delivered → Finalized | Challenge expired + no dispute → pay taker |
+| `finalize_payment` | Delivered → Finalized | Challenge expired + no dispute → pay beneficiary |
 | `raise_dispute` | Delivered → Disputed | Bond required within challenge window |
 | `resolve_dispute` | Disputed → Resolved | 2-of-3 multisig distributes escrow + bond |
-| `cancel_job` | Open/Accepted → Cancelled | Poster/taker only after deadline |
+| `cancel_job` | Open/Accepted → Cancelled | Poster / past-deadline taker |
+
+### Covenant Credit — BNPL for pending claims
+| Instruction | Transition | Description |
+|---|---|---|
+| `list_claim` | Delivered → (+ Listed) | Taker lists their pending payment claim at a discounted `price` |
+| `buy_claim` | Listed → Bought | Lender pays `price` to seller; inherits right to full `face_value` |
+| `cancel_claim` | Listed → (closed) | Seller reclaims rent on an unsold listing |
+
+The `ClaimListing` PDA (`seeds = [b"claim", job_escrow.key()]`) is always
+passed to `finalize_payment` and `resolve_dispute`. When its status is
+`Bought`, proceeds flow to the buyer instead of the taker. This is the
+protocol-level "factoring" primitive: the agent gets paid instantly at
+a discount, the lender earns yield for bearing dispute risk.
+
+**Why it only makes sense on Solana**: at Ethereum gas prices the SPL
+transfers + PDA writes that power a single claim purchase would cost
+more than the yield on a 24-hour $10 claim. Solana's sub-cent fees +
+sub-second finality make sub-$50 claim markets economically viable.
+Reputation credit for the underlying work always stays with the original
+taker — paper flows through the market, proof-of-work does not.
 
 ### Security Audit Applied
 - Threshold >= 2 enforced (single arbitrator cannot drain)
-- Token mint stored and validated at every resolution
+- Token mint stored and validated at every resolution (H-01 constraint on `raise_dispute`)
 - Cancel restricted to poster/taker only
 - Deadline checks consistent (`<` everywhere)
 - Atomic finalization (no double-payment race)
+- **Claim routing is mandatory**: `claim_listing` PDA is a required account
+  on `finalize_payment` and `resolve_dispute`; a seller-crank cannot bypass
+  a sold claim by omitting the listing
 - SSRF protection on agent registration
 - Rate limiting on all sensitive endpoints
 
