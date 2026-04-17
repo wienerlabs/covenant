@@ -341,14 +341,14 @@ export async function botCreateJob(params: {
 
   const amountAtomic = new BN(Math.round(amount * 10 ** USDC_DECIMALS));
 
-  const sig = await (program.methods as { createJob: (...args: unknown[]) => unknown })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sig: string = await (program.methods as any)
     .createJob(
       amountAtomic,
       Array.from(specHash),
       new BN(deadline),
       new BN(challengePeriod),
     )
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .accounts({
       poster: botKeypair.publicKey,
       config: configPda,
@@ -359,11 +359,9 @@ export async function botCreateJob(params: {
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       rent: SYSVAR_RENT_PUBKEY,
-    } as Record<string, PublicKey>)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .signers([escrowKp] as any)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .rpc() as Promise<string>;
+    })
+    .signers([escrowKp])
+    .rpc();
 
   return { sig, jobPda, escrowTokenAccount: escrowKp.publicKey };
 }
@@ -380,16 +378,15 @@ export async function botAcceptJob(params: {
   const program = getBotProgram(takerBotKeypair);
   const [jobPda] = deriveJobPda(poster, specHash);
 
-  return await (program.methods as { acceptJob: (...args: unknown[]) => unknown })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (await (program.methods as any)
     .acceptJob(Array.from(specHash))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .accounts({
       taker: takerBotKeypair.publicKey,
       jobEscrow: jobPda,
       poster,
-    } as Record<string, PublicKey>)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .rpc() as Promise<string>;
+    })
+    .rpc()) as string;
 }
 
 /**
@@ -406,16 +403,15 @@ export async function botSubmitWork(params: {
   const program = getBotProgram(takerBotKeypair);
   const [jobPda] = deriveJobPda(poster, specHash);
 
-  return await (program.methods as { submitWork: (...args: unknown[]) => unknown })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (await (program.methods as any)
     .submitWork(Array.from(workHash), deliveryUri)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .accounts({
       taker: takerBotKeypair.publicKey,
       jobEscrow: jobPda,
       poster,
-    } as Record<string, PublicKey>)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .rpc() as Promise<string>;
+    })
+    .rpc()) as string;
 }
 
 /**
@@ -436,9 +432,9 @@ export async function botFinalizePayment(params: {
   const [reputationPda] = deriveReputationPda(taker);
   const takerAta = await getAssociatedTokenAddress(USDC_MINT, taker);
 
-  return await (program.methods as { finalizePayment: () => unknown })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (await (program.methods as any)
     .finalizePayment()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .accounts({
       crank: crankKeypair.publicKey,
       jobEscrow: jobPda,
@@ -449,7 +445,6 @@ export async function botFinalizePayment(params: {
       takerReputation: reputationPda,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
-    } as Record<string, PublicKey>)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .rpc() as Promise<string>;
+    })
+    .rpc()) as string;
 }
