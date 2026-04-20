@@ -14,7 +14,30 @@ type WarriorState =
   | "victory"
   | "defeat"
   /** Sprite side-steps the incoming hit, leaving a translucent afterimage. */
-  | "dodge";
+  | "dodge"
+  /** Acrobatic backflip — 360° rotation with a forward arc. */
+  | "flip";
+
+/**
+ * Attack variants — picked internally when the attacker enters the "attack"
+ * state. Driven by (a) whether ultimate was consumed, (b) agent category,
+ * (c) random spice. The VICTIM's hit reaction is keyed off the ATTACKER's
+ * variant too, so each weapon has a matching hit response.
+ */
+type AttackVariant =
+  | "beam"
+  | "bazooka"
+  | "grenade"
+  | "sword"
+  | "fist"
+  | "kick"
+  | "uppercut"
+  /** Category-keyed visuals below (inherited from the original five). */
+  | "code"
+  | "art"
+  | "text"
+  | "music"
+  | "research";
 
 /** High-level battle category — drives themed arena backdrop. */
 type BattleCategory = "code" | "art" | "text" | "music" | "research" | string;
@@ -286,6 +309,19 @@ export default function PixelBattle({
   const alphaUltRef = useRef(0);
   const omegaUltRef = useRef(0);
 
+  // Picked at each attack transition — drives weapon visuals + victim reaction.
+  const alphaAttackVariantRef = useRef<AttackVariant>("beam");
+  const omegaAttackVariantRef = useRef<AttackVariant>("beam");
+
+  // Target HP overrides for defeat — when set, HP bar drains toward this value.
+  // null = follow the real alphaHP/omegaHP; 0 = force the bar to fully empty.
+  const alphaHPOverrideRef = useRef<number | null>(null);
+  const omegaHPOverrideRef = useRef<number | null>(null);
+
+  // Persistent impact craters at a victim's feet from heavy hits (bazooka/slam).
+  // Larger and more visible than the standard `cracksRef` marks.
+  const cratersRef = useRef<Array<{ x: number; y: number; radius: number; age: number; color: string }>>([]);
+
   // Spectator emoji projectiles drifting across the arena.
   const emojiProjectilesRef = useRef<Array<{
     x: number;
@@ -356,6 +392,43 @@ export default function PixelBattle({
       type: "dust",
     });
   }, []);
+
+  /**
+   * Pick an attack variant for a side entering "attack" state.
+   *
+   *   1. Ultimate just consumed → heavy move (bazooka / grenade / uppercut)
+   *   2. Agent has a category  → category-themed visual
+   *   3. Otherwise             → random melee pick for spice
+   */
+  const pickAttackVariant = useCallback(
+    (ultReady: boolean, agentCategory: BattleCategory | undefined): AttackVariant => {
+      if (ultReady) {
+        const heavy: AttackVariant[] = ["bazooka", "grenade", "uppercut"];
+        return heavy[Math.floor(Math.random() * heavy.length)];
+      }
+      if (agentCategory) {
+        const lc = String(agentCategory).toLowerCase();
+        if (lc.includes("code") || lc.includes("dev")) return "code";
+        if (lc.includes("art") || lc.includes("image") || lc.includes("design")) return "art";
+        if (lc.includes("text") || lc.includes("writ") || lc.includes("story")) return "text";
+        if (lc.includes("music") || lc.includes("audio") || lc.includes("sound")) return "music";
+        if (lc.includes("research") || lc.includes("science") || lc.includes("data")) return "research";
+      }
+      // Melee grab-bag so standard fights stay varied
+      const melee: AttackVariant[] = ["sword", "fist", "kick", "beam"];
+      return melee[Math.floor(Math.random() * melee.length)];
+    },
+    [],
+  );
+
+  /** Spawn a large crater pixel-scar at a given point. Used for bazooka/slam impacts. */
+  const spawnCrater = useCallback(
+    (x: number, y: number, radius: number, color: string) => {
+      cratersRef.current.push({ x, y, radius, age: 0, color });
+      while (cratersRef.current.length > 10) cratersRef.current.shift();
+    },
+    [],
+  );
 
   /** Queue a full-screen flash (lightning on crit, color-tinted on victory). */
   const triggerFlash = useCallback((color: string, intensity: number, duration = 12) => {
@@ -437,16 +510,31 @@ export default function PixelBattle({
       if (alphaState !== prevAlphaRef.current) {
         alphaAnimRef.current = { progress: 0, startFrame: frame };
         if (alphaState === "attack") {
+          // Pick an attack variant BEFORE spawning particles so we can tune them.
+          const ultReady = alphaUltRef.current >= 100;
+          const variant = pickAttackVariant(ultReady, alphaCategory);
+          alphaAttackVariantRef.current = variant;
+
+          // Opening particle burst at the attacker's muzzle — color + count
+          // scale with the variant (big moves get big sparks).
+          const burst = variant === "bazooka" || variant === "grenade" ? 20 : 12;
           setTimeout(() => {
-            spawnParticles(alphaBaseX + 35 * p, warriorBaseY + 6 * p, 12, "spark", ALPHA_COLOR);
+            spawnParticles(
+              alphaBaseX + 35 * p,
+              warriorBaseY + 6 * p,
+              burst,
+              "spark",
+              variant === "bazooka" || variant === "grenade" ? GOLD_COLOR : ALPHA_COLOR,
+            );
           }, 200);
-          // Ultimate consumption — if gauge is full, unleash upgraded attack.
-          if (alphaUltRef.current >= 100) {
+
+          if (ultReady) {
             alphaUltRef.current = 0;
+            const label = variant === "bazooka" ? "BAZOOKA!" : variant === "grenade" ? "GRENADE!" : "UPPERCUT!";
             floatingTextsRef.current.push({
               x: alphaBaseX + 8 * p,
               y: warriorBaseY - 22 * p,
-              text: "ULTIMATE!",
+              text: label,
               color: GOLD_COLOR,
               life: 55,
               maxLife: 55,
@@ -517,6 +605,59 @@ export default function PixelBattle({
           // Persistent ground crack at victim's feet.
           spawnCrack(alphaBaseX + 8 * p, groundY + 1, ALPHA_COLOR, dmg);
 
+          // Heavy-hit reactions tuned to the attacker's weapon variant.
+          const atkVar = omegaAttackVariantRef.current;
+          if (atkVar === "bazooka" || atkVar === "grenade") {
+            // Blast crater + massive shake + shockwave ring
+            spawnCrater(alphaBaseX + 8 * p, groundY + 1, 14, ALPHA_COLOR);
+            shakeRef.current.intensity = Math.max(shakeRef.current.intensity, 18);
+            spawnChantRing(alphaBaseX + 8 * p, warriorBaseY + 4 * p, GOLD_COLOR);
+            spawnParticles(alphaBaseX + 8 * p, warriorBaseY + 2 * p, 28, "spark", GOLD_COLOR);
+            spawnParticles(alphaBaseX + 8 * p, warriorBaseY - 4 * p, 16, "dust", "#8a8a8a");
+            floatingTextsRef.current.push({
+              x: alphaBaseX + 8 * p,
+              y: warriorBaseY - 28 * p,
+              text: "BOOM!",
+              color: GOLD_COLOR,
+              life: 50,
+              maxLife: 50,
+              scale: 2.3,
+            });
+            triggerFlash("#ffcf40", 0.6, 14);
+          } else if (atkVar === "uppercut") {
+            // Victim "launches" — we can't easily lift the sprite here without
+            // a new state, but we push a huge upward dust plume + impact stars.
+            spawnParticles(alphaBaseX + 8 * p, warriorBaseY, 14, "star", "#ffffff");
+            shakeRef.current.intensity = Math.max(shakeRef.current.intensity, 12);
+            floatingTextsRef.current.push({
+              x: alphaBaseX + 8 * p,
+              y: warriorBaseY - 28 * p,
+              text: "UPPERCUT!",
+              color: GOLD_COLOR,
+              life: 45,
+              maxLife: 45,
+              scale: 1.9,
+            });
+          } else if (atkVar === "sword") {
+            // Clean slash spark arc
+            spawnParticles(alphaBaseX + 8 * p, warriorBaseY + 4 * p, 10, "spark", "#ffffff");
+          } else if (atkVar === "kick") {
+            // Horizontal dust skid
+            for (let i = 0; i < 5; i++) {
+              particlesRef.current.push({
+                x: alphaBaseX + 8 * p,
+                y: groundY - 2,
+                vx: -2 - Math.random() * 1.5,
+                vy: -0.2 - Math.random() * 0.4,
+                life: 18 + Math.random() * 8,
+                maxLife: 26,
+                color: "#b0b0c0",
+                size: 2,
+                type: "dust",
+              });
+            }
+          }
+
           // Atmosphere reactions — lightning flash on crit, crowd hop on any hit.
           if (isCrit) triggerFlash("#ffffff", 0.45, 8);
           reactCrowd("hop");
@@ -542,6 +683,21 @@ export default function PixelBattle({
           spawnParticles(alphaBaseX + 8 * p, warriorBaseY + 5 * p, 10, "spark", ALPHA_COLOR);
           shakeRef.current.intensity = 5;
           freezeUntilRef.current = frame + FREEZE_DURATION;
+          // Force the HP bar to drain to zero regardless of the incoming prop —
+          // "yenilen agent'ın canı sıfırlansın" means the bar MUST visibly
+          // empty on defeat, not linger at whatever last value we received.
+          alphaHPOverrideRef.current = 0;
+          // Final scar — big crater at the loser's feet
+          spawnCrater(alphaBaseX + 8 * p, groundY + 1, 18, ALPHA_COLOR);
+          floatingTextsRef.current.push({
+            x: alphaBaseX + 8 * p,
+            y: warriorBaseY - 10 * p,
+            text: "K.O.",
+            color: "#FF4040",
+            life: 75,
+            maxLife: 75,
+            scale: 2.8,
+          });
         }
         if (alphaState === "dodge") {
           // Push an afterimage ghost at Alpha's previous position
@@ -574,15 +730,28 @@ export default function PixelBattle({
       if (omegaState !== prevOmegaRef.current) {
         omegaAnimRef.current = { progress: 0, startFrame: frame };
         if (omegaState === "attack") {
+          const ultReady = omegaUltRef.current >= 100;
+          const variant = pickAttackVariant(ultReady, omegaCategory);
+          omegaAttackVariantRef.current = variant;
+
+          const burst = variant === "bazooka" || variant === "grenade" ? 20 : 12;
           setTimeout(() => {
-            spawnParticles(omegaBaseX - 35 * p, warriorBaseY + 6 * p, 12, "spark", OMEGA_COLOR);
+            spawnParticles(
+              omegaBaseX - 35 * p,
+              warriorBaseY + 6 * p,
+              burst,
+              "spark",
+              variant === "bazooka" || variant === "grenade" ? GOLD_COLOR : OMEGA_COLOR,
+            );
           }, 200);
-          if (omegaUltRef.current >= 100) {
+
+          if (ultReady) {
             omegaUltRef.current = 0;
+            const label = variant === "bazooka" ? "BAZOOKA!" : variant === "grenade" ? "GRENADE!" : "UPPERCUT!";
             floatingTextsRef.current.push({
               x: omegaBaseX - 8 * p,
               y: warriorBaseY - 22 * p,
-              text: "ULTIMATE!",
+              text: label,
               color: GOLD_COLOR,
               life: 55,
               maxLife: 55,
@@ -647,6 +816,53 @@ export default function PixelBattle({
 
           spawnCrack(omegaBaseX - 8 * p, groundY + 1, OMEGA_COLOR, dmg);
 
+          const atkVar = alphaAttackVariantRef.current;
+          if (atkVar === "bazooka" || atkVar === "grenade") {
+            spawnCrater(omegaBaseX - 8 * p, groundY + 1, 14, OMEGA_COLOR);
+            shakeRef.current.intensity = Math.max(shakeRef.current.intensity, 18);
+            spawnChantRing(omegaBaseX - 8 * p, warriorBaseY + 4 * p, GOLD_COLOR);
+            spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 2 * p, 28, "spark", GOLD_COLOR);
+            spawnParticles(omegaBaseX - 8 * p, warriorBaseY - 4 * p, 16, "dust", "#8a8a8a");
+            floatingTextsRef.current.push({
+              x: omegaBaseX - 8 * p,
+              y: warriorBaseY - 28 * p,
+              text: "BOOM!",
+              color: GOLD_COLOR,
+              life: 50,
+              maxLife: 50,
+              scale: 2.3,
+            });
+            triggerFlash("#ffcf40", 0.6, 14);
+          } else if (atkVar === "uppercut") {
+            spawnParticles(omegaBaseX - 8 * p, warriorBaseY, 14, "star", "#ffffff");
+            shakeRef.current.intensity = Math.max(shakeRef.current.intensity, 12);
+            floatingTextsRef.current.push({
+              x: omegaBaseX - 8 * p,
+              y: warriorBaseY - 28 * p,
+              text: "UPPERCUT!",
+              color: GOLD_COLOR,
+              life: 45,
+              maxLife: 45,
+              scale: 1.9,
+            });
+          } else if (atkVar === "sword") {
+            spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 4 * p, 10, "spark", "#ffffff");
+          } else if (atkVar === "kick") {
+            for (let i = 0; i < 5; i++) {
+              particlesRef.current.push({
+                x: omegaBaseX - 8 * p,
+                y: groundY - 2,
+                vx: 2 + Math.random() * 1.5,
+                vy: -0.2 - Math.random() * 0.4,
+                life: 18 + Math.random() * 8,
+                maxLife: 26,
+                color: "#b0b0c0",
+                size: 2,
+                type: "dust",
+              });
+            }
+          }
+
           if (isCrit) triggerFlash("#ffffff", 0.45, 8);
           reactCrowd("hop");
           alphaUltRef.current = Math.min(100, alphaUltRef.current + dmg * 2.4);
@@ -667,6 +883,17 @@ export default function PixelBattle({
           spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 5 * p, 10, "spark", OMEGA_COLOR);
           shakeRef.current.intensity = 5;
           freezeUntilRef.current = frame + FREEZE_DURATION;
+          omegaHPOverrideRef.current = 0;
+          spawnCrater(omegaBaseX - 8 * p, groundY + 1, 18, OMEGA_COLOR);
+          floatingTextsRef.current.push({
+            x: omegaBaseX - 8 * p,
+            y: warriorBaseY - 10 * p,
+            text: "K.O.",
+            color: "#FF4040",
+            life: 75,
+            maxLife: 75,
+            scale: 2.8,
+          });
         }
         if (omegaState === "dodge") {
           const walkFrame = Math.floor(frame / 10) % 2 === 0;
@@ -730,9 +957,18 @@ export default function PixelBattle({
       alphaAnimRef.current.progress = Math.min(1, alphaE / 30);
       omegaAnimRef.current.progress = Math.min(1, omegaE / 30);
 
-      /* ---- Animate HP bars smoothly ---- */
-      alphaHPAnimRef.current += (alphaHP - alphaHPAnimRef.current) * 0.05;
-      omegaHPAnimRef.current += (omegaHP - omegaHPAnimRef.current) * 0.05;
+      /* ---- Animate HP bars smoothly. On defeat, an override ref drags the
+             bar down to zero even if the caller's HP value didn't reach 0. ---- */
+      const alphaHPTarget = alphaHPOverrideRef.current ?? alphaHP;
+      const omegaHPTarget = omegaHPOverrideRef.current ?? omegaHP;
+      // Faster decay when forced to zero — we want the KO bar drain to feel decisive.
+      const alphaEase = alphaHPOverrideRef.current === 0 ? 0.12 : 0.05;
+      const omegaEase = omegaHPOverrideRef.current === 0 ? 0.12 : 0.05;
+      alphaHPAnimRef.current += (alphaHPTarget - alphaHPAnimRef.current) * alphaEase;
+      omegaHPAnimRef.current += (omegaHPTarget - omegaHPAnimRef.current) * omegaEase;
+      // Snap to zero once close enough so the bar reads "empty" cleanly
+      if (alphaHPOverrideRef.current === 0 && alphaHPAnimRef.current < 0.6) alphaHPAnimRef.current = 0;
+      if (omegaHPOverrideRef.current === 0 && omegaHPAnimRef.current < 0.6) omegaHPAnimRef.current = 0;
 
       /* ---- Screen shake ---- */
       const shake = shakeRef.current;
@@ -841,6 +1077,32 @@ export default function PixelBattle({
         if ((gx * 11 + 3) % 7 === 0) {
           ctx.fillStyle = "#181836";
           ctx.fillRect(gx, groundY, 3, 2);
+        }
+      }
+
+      /* ---- Heavy impact craters (bazooka / slam / KO) ---- */
+      for (const cr of cratersRef.current) {
+        cr.age++;
+        const [rr, rg, rb] = hexToRgb(cr.color);
+        // Dark inner crater
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.beginPath();
+        ctx.ellipse(cr.x, cr.y, cr.radius, cr.radius * 0.35, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Colored ring
+        ctx.fillStyle = `rgba(${rr},${rg},${rb},0.28)`;
+        ctx.beginPath();
+        ctx.ellipse(cr.x, cr.y, cr.radius + 4, cr.radius * 0.45, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Spider-crack tendrils — 5 radial lines
+        ctx.fillStyle = "#0a0a18";
+        for (let i = 0; i < 5; i++) {
+          const ang = (i / 5) * Math.PI * 2 + cr.age * 0.002;
+          const dx = Math.cos(ang);
+          const dy = Math.sin(ang) * 0.35;
+          for (let r = cr.radius; r < cr.radius + 10; r += 2) {
+            ctx.fillRect(cr.x + dx * r, cr.y + dy * r, 2, 1);
+          }
         }
       }
 
@@ -1128,6 +1390,7 @@ export default function PixelBattle({
         omegaIntroX,
         alphaHP,
         alphaCategory,
+        alphaAttackVariantRef.current,
       );
 
       drawWarrior(
@@ -1143,6 +1406,7 @@ export default function PixelBattle({
         alphaIntroX,
         omegaHP,
         omegaCategory,
+        omegaAttackVariantRef.current,
       );
 
       /* ---- INTRO banner: fire "FIGHT!" once when the walk-on finishes ---- */
@@ -1271,6 +1535,8 @@ export default function PixelBattle({
       spectatorEmojis,
       chatMessages,
       tournamentRound,
+      pickAttackVariant,
+      spawnCrater,
     ],
   );
 
@@ -1464,6 +1730,8 @@ function drawWarrior(
   hp: number,
   /** Agent category (code/art/text/music/research) — drives tool overlay. */
   agentCategory?: BattleCategory,
+  /** Attack variant — drives which weapon renders during the attack state. */
+  attackVariant: AttackVariant = "beam",
 ) {
   const dark = darken(color, 40);
   const dir = facing === "right" ? 1 : -1;
@@ -1537,6 +1805,17 @@ function drawWarrior(
       offsetX = -dir * 22 * p * Math.sin(t * Math.PI);
       offsetY = -6 * p * Math.sin(t * Math.PI * 2);
       scaleX = 1 - 0.08 * Math.sin(t * Math.PI);
+      break;
+    }
+    case "flip": {
+      // TAKLA — arcing backflip. Full 360° rotation over the whole state.
+      const t = Math.min(1, elapsed / 35);
+      offsetX = dir * 14 * p * Math.sin(t * Math.PI);
+      // Parabolic arc — up then back down
+      offsetY = -24 * p * Math.sin(t * Math.PI);
+      // Rotate 360° through the full flip
+      fallAngle = dir * Math.PI * 2 * t;
+      scaleX = 1 + 0.08 * Math.sin(t * Math.PI);
       break;
     }
   }
@@ -1720,11 +1999,11 @@ function drawWarrior(
     }
   }
 
-  // Attack effect — category-driven weapon variant
+  // Attack effect — driven by the explicit variant picked at attack start.
   if (state === "attack") {
     const t = Math.min(1, elapsed / 25);
-    if (t > 0.25 && t < 0.85) {
-      drawWeaponAttack(ctx, bx, drawY + 4 * p, p, facing, t, color, agentCategory);
+    if (t > 0.1 && t < 0.95) {
+      drawWeaponAttack(ctx, bx, drawY + 4 * p, p, facing, t, color, attackVariant);
     }
   }
 
@@ -2276,15 +2555,21 @@ function drawHourglass(
 /* ================================================================== */
 
 /**
- * Category-keyed attack visuals. Each is a pure pixel-art rendering of
- * the weapon animation at normalized progress `t` (0.25 .. 0.85).
+ * Variant-keyed attack visuals. Each is a pure pixel-art rendering of the
+ * weapon animation at normalized progress `t` (0.10 .. 0.95).
  *
- *   code     → flying binary glyphs (0/1)
- *   art      → paint splat trail
- *   text     → ink droplet stream
- *   music    → soundwave concentric rings
- *   research → orbital particle orbs
- *   default  → the classic pixel laser beam
+ *   bazooka   → rocket with exhaust trail + mushroom cloud on impact
+ *   grenade   → arcing projectile that explodes on landing
+ *   sword     → arcing slash with motion lines + glint
+ *   fist      → telescoping punch block with impact starburst
+ *   kick      → spinning foot arc with motion trail
+ *   uppercut  → rising pixel fist with upward streaks
+ *   code      → flying binary glyphs (0/1)
+ *   art       → paint splat trail
+ *   text      → ink droplet stream
+ *   music     → soundwave concentric rings
+ *   research  → orbital particle orbs
+ *   beam      → the classic pixel laser beam (default)
  */
 function drawWeaponAttack(
   ctx: CanvasRenderingContext2D,
@@ -2294,16 +2579,279 @@ function drawWeaponAttack(
   facing: "left" | "right",
   t: number,
   color: string,
-  agentCategory: BattleCategory | undefined,
+  variant: AttackVariant,
 ) {
   const dir = facing === "right" ? 1 : -1;
   const origin = bx + dir * 6 * p;
   const reach = 36 * p;
-  const progress = (t - 0.25) / 0.6; // 0..1
+  const progress = (t - 0.1) / 0.85; // 0..1
   const accent = "#ffffff";
-  const lc = agentCategory ? String(agentCategory).toLowerCase() : "";
 
-  if (lc.includes("code") || lc.includes("dev")) {
+  /* ---- BAZOOKA: rocket with exhaust, arriving at reach with a mushroom burst ---- */
+  if (variant === "bazooka") {
+    if (progress < 0.7) {
+      // Launcher tube muzzle flash (first 20% of progress)
+      if (progress < 0.18) {
+        ctx.fillStyle = GOLD_COLOR;
+        ctx.fillRect(origin - dir * 2 * p, beamY - p, 6 * p, 3 * p);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(origin + dir * p, beamY - 1, 4 * p, 2);
+      }
+      // Rocket body flying forward
+      const rocketX = origin + dir * reach * (progress / 0.7);
+      // Exhaust trail — 4 fading smoke puffs behind
+      for (let i = 0; i < 4; i++) {
+        const ex = rocketX - dir * (i + 1) * 3 * p;
+        const alpha = 0.55 - i * 0.13;
+        ctx.fillStyle = `rgba(180,180,200,${alpha})`;
+        ctx.fillRect(ex, beamY - 1 + Math.sin(i * 0.7) * 2, 3, 3);
+        ctx.fillStyle = `rgba(255,170,60,${alpha * 0.8})`;
+        ctx.fillRect(ex, beamY, 2, 1);
+      }
+      // Rocket body (tip white, shaft gold, fins dark)
+      ctx.fillStyle = "#2a2a3a";
+      ctx.fillRect(rocketX, beamY - 2, 5 * p, 4);
+      ctx.fillStyle = GOLD_COLOR;
+      ctx.fillRect(rocketX, beamY - 1, 5 * p, 2);
+      // Tip
+      ctx.fillStyle = "#ffffff";
+      if (facing === "right") {
+        ctx.fillRect(rocketX + 5 * p, beamY - 1, 2, 2);
+        ctx.fillRect(rocketX + 5 * p + 2, beamY, 1, 1);
+      } else {
+        ctx.fillRect(rocketX - 2, beamY - 1, 2, 2);
+        ctx.fillRect(rocketX - 3, beamY, 1, 1);
+      }
+      // Fins
+      ctx.fillStyle = "#ff6040";
+      ctx.fillRect(rocketX - dir * p, beamY - 3, p, 2);
+      ctx.fillRect(rocketX - dir * p, beamY + 2, p, 2);
+    } else {
+      // Mushroom cloud explosion at the target
+      const impactX = origin + dir * reach;
+      const expT = (progress - 0.7) / 0.3;
+      const r = 4 + expT * 24;
+      // Outer shockwave ring
+      ctx.strokeStyle = `rgba(255,200,60,${1 - expT})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(impactX, beamY, r + 4, 0, Math.PI * 2);
+      ctx.stroke();
+      // Fireball
+      const fbGrad = ctx.createRadialGradient(impactX, beamY, 0, impactX, beamY, r);
+      fbGrad.addColorStop(0, `rgba(255,255,220,${1 - expT})`);
+      fbGrad.addColorStop(0.4, `rgba(255,180,50,${0.9 - expT * 0.9})`);
+      fbGrad.addColorStop(1, `rgba(180,40,20,0)`);
+      ctx.fillStyle = fbGrad;
+      ctx.beginPath();
+      ctx.arc(impactX, beamY, r, 0, Math.PI * 2);
+      ctx.fill();
+      // Mushroom stem + cap (upper half)
+      ctx.fillStyle = `rgba(100,100,120,${0.6 - expT * 0.6})`;
+      ctx.fillRect(impactX - 3, beamY - r * 1.3, 6, r);
+      ctx.beginPath();
+      ctx.arc(impactX, beamY - r * 1.4, r * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+
+  /* ---- GRENADE: arcing parabolic projectile that lands + bursts ---- */
+  if (variant === "grenade") {
+    const peakHeight = 16 * p;
+    if (progress < 0.65) {
+      const arcT = progress / 0.65;
+      const gx = origin + dir * reach * arcT;
+      const gy = beamY - Math.sin(arcT * Math.PI) * peakHeight;
+      // Body
+      ctx.fillStyle = "#3a6030";
+      ctx.fillRect(gx - 2, gy - 2, 4, 4);
+      ctx.fillStyle = "#5a8050";
+      ctx.fillRect(gx - 2, gy - 2, 2, 2);
+      // Pin at top
+      ctx.fillStyle = "#b0b0b0";
+      ctx.fillRect(gx - 1, gy - 4, 2, 1);
+      // Fuse spark
+      ctx.fillStyle = GOLD_COLOR;
+      ctx.fillRect(gx, gy - 5, 1, 1);
+      if (Math.floor(arcT * 10) % 2 === 0) {
+        ctx.fillStyle = "#ff8800";
+        ctx.fillRect(gx + 1, gy - 6, 1, 1);
+      }
+    } else {
+      // Explosion radial burst
+      const impactX = origin + dir * reach;
+      const expT = (progress - 0.65) / 0.35;
+      const r = 3 + expT * 20;
+      ctx.strokeStyle = `rgba(255,160,40,${1 - expT})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(impactX, beamY, r + 2, 0, Math.PI * 2);
+      ctx.stroke();
+      const fbGrad = ctx.createRadialGradient(impactX, beamY, 0, impactX, beamY, r);
+      fbGrad.addColorStop(0, `rgba(255,255,180,${1 - expT})`);
+      fbGrad.addColorStop(0.5, `rgba(255,120,40,${0.8 - expT})`);
+      fbGrad.addColorStop(1, "rgba(60,20,10,0)");
+      ctx.fillStyle = fbGrad;
+      ctx.beginPath();
+      ctx.arc(impactX, beamY, r, 0, Math.PI * 2);
+      ctx.fill();
+      // Shrapnel pixels flying outward
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2;
+        const sr = r * (0.6 + expT * 0.4);
+        ctx.fillStyle = "#a0a0a0";
+        ctx.fillRect(impactX + Math.cos(ang) * sr, beamY + Math.sin(ang) * sr, 2, 2);
+      }
+    }
+    return;
+  }
+
+  /* ---- SWORD: arcing slash with motion streaks ---- */
+  if (variant === "sword") {
+    // Sword extends out, arcs down, with glint + motion lines
+    const arcAng = -Math.PI / 2.5 + progress * Math.PI * 0.9; // -72° to +90°
+    const bladeLen = 14 * p;
+    const hiltX = origin + dir * 2 * p;
+    const hiltY = beamY;
+    const tipX = hiltX + dir * Math.cos(arcAng) * bladeLen;
+    const tipY = hiltY + Math.sin(arcAng) * bladeLen;
+    // Hilt
+    ctx.fillStyle = "#8a6a40";
+    ctx.fillRect(hiltX - 1, hiltY - 1, 3, 3);
+    ctx.fillStyle = GOLD_COLOR;
+    ctx.fillRect(hiltX - 2, hiltY - 2, 5, 1);
+    // Blade (interpolate pixels along hilt→tip)
+    const steps = 12;
+    for (let i = 0; i < steps; i++) {
+      const lerp = i / steps;
+      const bxp = hiltX + (tipX - hiltX) * lerp;
+      const byp = hiltY + (tipY - hiltY) * lerp;
+      ctx.fillStyle = i > steps - 3 ? "#ffffff" : "#d8d8e8";
+      ctx.fillRect(bxp, byp, 2, 2);
+    }
+    // Motion-line echoes (lighter arcs behind the blade)
+    for (let k = 1; k <= 3; k++) {
+      const lagAng = arcAng - k * 0.15 * dir;
+      const ex = hiltX + dir * Math.cos(lagAng) * bladeLen;
+      const ey = hiltY + Math.sin(lagAng) * bladeLen;
+      ctx.fillStyle = `rgba(255,255,255,${0.3 - k * 0.08})`;
+      ctx.fillRect(ex, ey, 2, 2);
+    }
+    // Glint flash at mid-swing
+    if (progress > 0.4 && progress < 0.55) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(tipX + dir * 2, tipY - 1, 3, 3);
+      ctx.fillRect(tipX + dir * 4, tipY, 1, 1);
+    }
+    return;
+  }
+
+  /* ---- FIST: telescoping punch block with impact star at apex ---- */
+  if (variant === "fist") {
+    const extend = Math.sin(progress * Math.PI); // out then back
+    const fistX = origin + dir * (4 * p + extend * 20 * p);
+    // Arm (thick line from sprite to fist)
+    ctx.fillStyle = darken(color, 20);
+    const steps = 8;
+    for (let i = 0; i < steps; i++) {
+      const lerp = i / steps;
+      const ax = origin + (fistX - origin) * lerp;
+      ctx.fillRect(ax, beamY - 1, 3, 3);
+    }
+    // Fist
+    ctx.fillStyle = color;
+    ctx.fillRect(fistX - 1, beamY - 3, 5, 6);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(fistX + dir * p, beamY - 1, 2, 1); // knuckle highlight
+    ctx.fillStyle = darken(color, 50);
+    ctx.fillRect(fistX - 1, beamY + 2, 5, 1);
+    // Impact star at extension peak
+    if (progress > 0.4 && progress < 0.6) {
+      const iX = fistX + dir * 3;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(iX - 4, beamY, 3, 1);
+      ctx.fillRect(iX + 2, beamY, 3, 1);
+      ctx.fillRect(iX, beamY - 4, 1, 3);
+      ctx.fillRect(iX, beamY + 2, 1, 3);
+      ctx.fillStyle = GOLD_COLOR;
+      ctx.fillRect(iX - 1, beamY - 1, 3, 3);
+    }
+    return;
+  }
+
+  /* ---- KICK: spinning foot arc with motion trail ---- */
+  if (variant === "kick") {
+    // Leg extends outward in a sweeping arc bottom→top
+    const arcAng = Math.PI * 0.8 - progress * Math.PI * 1.2;
+    const legLen = 16 * p;
+    const hipX = origin;
+    const hipY = beamY + 4;
+    const footX = hipX + dir * Math.cos(arcAng) * legLen;
+    const footY = hipY + Math.sin(arcAng) * legLen;
+    // Leg
+    ctx.fillStyle = color;
+    const steps = 10;
+    for (let i = 0; i < steps; i++) {
+      const lerp = i / steps;
+      const lxp = hipX + (footX - hipX) * lerp;
+      const lyp = hipY + (footY - hipY) * lerp;
+      ctx.fillRect(lxp, lyp, 3, 3);
+    }
+    // Foot
+    ctx.fillStyle = darken(color, 30);
+    ctx.fillRect(footX - 1, footY - 1, 6, 4);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(footX + dir * p, footY, 2, 1);
+    // Motion trail — 3 lagging arcs
+    for (let k = 1; k <= 3; k++) {
+      const lagAng = arcAng + k * 0.18;
+      const fx = hipX + dir * Math.cos(lagAng) * legLen;
+      const fy = hipY + Math.sin(lagAng) * legLen;
+      ctx.fillStyle = `rgba(255,255,255,${0.3 - k * 0.07})`;
+      ctx.fillRect(fx, fy, 3, 3);
+    }
+    return;
+  }
+
+  /* ---- UPPERCUT: rising fist with upward streak lines ---- */
+  if (variant === "uppercut") {
+    const rise = progress * 22 * p;
+    const fistX = origin + dir * 3 * p;
+    const fistY = beamY - rise;
+    // Streak lines (vertical motion trail)
+    for (let i = 0; i < 4; i++) {
+      const ty = beamY - rise * (i / 4);
+      ctx.fillStyle = `rgba(255,255,255,${0.25 + i * 0.1})`;
+      ctx.fillRect(fistX, ty, 2, 3);
+      ctx.fillStyle = `rgba(${hexToRgb(color).join(",")},${0.2 + i * 0.1})`;
+      ctx.fillRect(fistX + dir * 2, ty, 1, 2);
+    }
+    // Arm
+    ctx.fillStyle = darken(color, 20);
+    const segs = 6;
+    for (let i = 0; i < segs; i++) {
+      const ly = beamY - (rise * (i / segs));
+      ctx.fillRect(fistX - 1, ly, 3, 3);
+    }
+    // Fist block
+    ctx.fillStyle = color;
+    ctx.fillRect(fistX - 2, fistY - 4, 6, 6);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(fistX + 1, fistY - 3, 2, 1);
+    // Shockwave ring at apex
+    if (progress > 0.7) {
+      const sr = (progress - 0.7) / 0.3;
+      ctx.strokeStyle = `rgba(255,255,200,${1 - sr})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(fistX + 1, fistY, 4 + sr * 14, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    return;
+  }
+
+  if (variant === "code") {
     // Binary glyphs flying forward
     ctx.font = "bold 8px monospace";
     ctx.textAlign = "center";
@@ -2321,7 +2869,7 @@ function drawWeaponAttack(
     return;
   }
 
-  if (lc.includes("art") || lc.includes("image") || lc.includes("design")) {
+  if (variant === "art") {
     // Paint splat — growing blob with colored droplets
     const palette = ["#FF6B9D", "#FFC857", "#4ECDC4", "#B983FF", color];
     for (let i = 0; i < 7; i++) {
@@ -2337,7 +2885,7 @@ function drawWeaponAttack(
     return;
   }
 
-  if (lc.includes("text") || lc.includes("writ") || lc.includes("story")) {
+  if (variant === "text") {
     // Ink trail with drips
     for (let i = 0; i < 8; i++) {
       const gt = Math.min(1, progress + i * 0.05);
@@ -2355,7 +2903,7 @@ function drawWeaponAttack(
     return;
   }
 
-  if (lc.includes("music") || lc.includes("audio") || lc.includes("sound")) {
+  if (variant === "music") {
     // Concentric soundwave rings expanding outward
     for (let i = 0; i < 3; i++) {
       const ringT = (progress - i * 0.18);
@@ -2372,7 +2920,7 @@ function drawWeaponAttack(
     return;
   }
 
-  if (lc.includes("research") || lc.includes("science") || lc.includes("data")) {
+  if (variant === "research") {
     // Orbital particle cluster traveling forward
     const cx = origin + dir * reach * progress;
     ctx.fillStyle = color;
