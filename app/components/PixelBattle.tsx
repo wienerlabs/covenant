@@ -27,6 +27,13 @@ const OMEGA_COLOR = "#FF425E";
 const GOLD_COLOR = "#FFE342";
 const SILVER_COLOR = "#C0C0C0";
 
+/** Combo window in frames (~60fps). A follow-up hit inside this window grows the combo. */
+const COMBO_WINDOW = 90;
+/** HP delta threshold above which a hit is treated as a "critical" hit. */
+const CRIT_THRESHOLD = 18;
+/** Max accumulated cracks per side (older ones get recycled). */
+const MAX_CRACKS = 40;
+
 /* ------------------------------------------------------------------ */
 /*  Color helpers                                                      */
 /* ------------------------------------------------------------------ */
@@ -93,6 +100,28 @@ interface FloatingText {
   color: string;
   life: number;
   maxLife: number;
+  /** Slight x velocity so stacked numbers don't overlap. */
+  vx?: number;
+  /** Base font scale. Crits / victory texts are larger. */
+  scale?: number;
+}
+
+/** Persistent ground damage mark accumulated across the battle. */
+interface Crack {
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+  /** Irregular orientation so cracks don't look uniform. */
+  dir: number;
+}
+
+/** Per-side combo + crit tracking. */
+interface ComboState {
+  /** Consecutive hits within COMBO_WINDOW frames. */
+  count: number;
+  /** Frame the last hit landed on. */
+  lastHitFrame: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -131,6 +160,53 @@ export default function PixelBattle({
   // Previous HP for damage number calculation
   const prevAlphaHPRef = useRef(100);
   const prevOmegaHPRef = useRef(100);
+
+  // Persistent ground cracks accumulated through the battle (per-side).
+  const cracksRef = useRef<Crack[]>([]);
+
+  // Per-side combo state. A hit inside COMBO_WINDOW frames grows the combo.
+  const alphaComboRef = useRef<ComboState>({ count: 0, lastHitFrame: -999 });
+  const omegaComboRef = useRef<ComboState>({ count: 0, lastHitFrame: -999 });
+
+  // Track last sweat-drop spawn frame per side so low-HP panting doesn't spam.
+  const alphaSweatRef = useRef(0);
+  const omegaSweatRef = useRef(0);
+
+  /** Drop a small cluster of ground-crack pixels near a warrior's feet. */
+  const spawnCrack = useCallback(
+    (x: number, y: number, color: string, intensity: number) => {
+      const count = 3 + Math.floor(intensity / 6);
+      for (let i = 0; i < count; i++) {
+        cracksRef.current.push({
+          x: x + (Math.random() - 0.5) * 18,
+          y: y + (Math.random() - 0.5) * 3,
+          size: 1 + Math.random() * 1.5,
+          color,
+          dir: Math.random() * Math.PI,
+        });
+      }
+      // Recycle oldest marks so the array stays bounded.
+      while (cracksRef.current.length > MAX_CRACKS * 2) {
+        cracksRef.current.shift();
+      }
+    },
+    [],
+  );
+
+  /** Drop a sweat bead that falls toward the ground — used for low HP panting. */
+  const spawnSweat = useCallback((x: number, y: number) => {
+    particlesRef.current.push({
+      x,
+      y,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: 0.8 + Math.random() * 0.4,
+      life: 22 + Math.random() * 10,
+      maxLife: 30,
+      color: "#9fd8ff",
+      size: 2,
+      type: "dust",
+    });
+  }, []);
 
   const spawnParticles = useCallback(
     (
@@ -183,16 +259,65 @@ export default function PixelBattle({
           }, 200);
         }
         if (alphaState === "hit") {
-          // Screen shake on hit
-          shakeRef.current.intensity = 8;
-          // Damage number
           const dmg = Math.round(prevAlphaHPRef.current - alphaHP);
+          const isCrit = dmg >= CRIT_THRESHOLD;
+
+          // Combo bookkeeping — Omega landed this hit on Alpha.
+          const combo = omegaComboRef.current;
+          if (frame - combo.lastHitFrame <= COMBO_WINDOW) {
+            combo.count += 1;
+          } else {
+            combo.count = 1;
+          }
+          combo.lastHitFrame = frame;
+
+          // Screen shake: harder for crits + extra shake per combo step.
+          shakeRef.current.intensity = isCrit ? 14 : 8;
+          if (combo.count >= 2) shakeRef.current.intensity += 2;
+
+          // Damage number — red for normal, gold + bigger for crits.
           if (dmg > 0) {
             floatingTextsRef.current.push({
-              x: alphaBaseX + 8 * p, y: warriorBaseY - 5 * p,
-              text: `-${dmg}`, color: "#FF4444", life: 40, maxLife: 40,
+              x: alphaBaseX + 8 * p,
+              y: warriorBaseY - 5 * p,
+              text: isCrit ? `-${dmg}!!` : `-${dmg}`,
+              color: isCrit ? GOLD_COLOR : "#FF4444",
+              life: isCrit ? 55 : 40,
+              maxLife: isCrit ? 55 : 40,
+              vx: (Math.random() - 0.5) * 0.3,
+              scale: isCrit ? 1.9 : 1.5,
             });
           }
+
+          // KABOOM banner on crit + extra sparks.
+          if (isCrit) {
+            floatingTextsRef.current.push({
+              x: alphaBaseX + 8 * p,
+              y: warriorBaseY - 14 * p,
+              text: "KABOOM!",
+              color: GOLD_COLOR,
+              life: 45,
+              maxLife: 45,
+              scale: 2,
+            });
+            spawnParticles(alphaBaseX + 8 * p, warriorBaseY + 4 * p, 18, "spark", GOLD_COLOR);
+          }
+
+          // Combo banner (x2+).
+          if (combo.count >= 2) {
+            floatingTextsRef.current.push({
+              x: alphaBaseX + 8 * p,
+              y: warriorBaseY - 22 * p,
+              text: `x${combo.count} COMBO!`,
+              color: OMEGA_COLOR,
+              life: 40,
+              maxLife: 40,
+              scale: 1.7,
+            });
+          }
+
+          // Persistent ground crack at victim's feet.
+          spawnCrack(alphaBaseX + 8 * p, groundY + 1, ALPHA_COLOR, dmg);
         }
         if (alphaState === "victory") {
           // Victory star burst — more particles for celebration
@@ -221,14 +346,59 @@ export default function PixelBattle({
           }, 200);
         }
         if (omegaState === "hit") {
-          shakeRef.current.intensity = 8;
           const dmg = Math.round(prevOmegaHPRef.current - omegaHP);
+          const isCrit = dmg >= CRIT_THRESHOLD;
+
+          const combo = alphaComboRef.current;
+          if (frame - combo.lastHitFrame <= COMBO_WINDOW) {
+            combo.count += 1;
+          } else {
+            combo.count = 1;
+          }
+          combo.lastHitFrame = frame;
+
+          shakeRef.current.intensity = isCrit ? 14 : 8;
+          if (combo.count >= 2) shakeRef.current.intensity += 2;
+
           if (dmg > 0) {
             floatingTextsRef.current.push({
-              x: omegaBaseX - 8 * p, y: warriorBaseY - 5 * p,
-              text: `-${dmg}`, color: "#FF4444", life: 40, maxLife: 40,
+              x: omegaBaseX - 8 * p,
+              y: warriorBaseY - 5 * p,
+              text: isCrit ? `-${dmg}!!` : `-${dmg}`,
+              color: isCrit ? GOLD_COLOR : "#FF4444",
+              life: isCrit ? 55 : 40,
+              maxLife: isCrit ? 55 : 40,
+              vx: (Math.random() - 0.5) * 0.3,
+              scale: isCrit ? 1.9 : 1.5,
             });
           }
+
+          if (isCrit) {
+            floatingTextsRef.current.push({
+              x: omegaBaseX - 8 * p,
+              y: warriorBaseY - 14 * p,
+              text: "KABOOM!",
+              color: GOLD_COLOR,
+              life: 45,
+              maxLife: 45,
+              scale: 2,
+            });
+            spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 4 * p, 18, "spark", GOLD_COLOR);
+          }
+
+          if (combo.count >= 2) {
+            floatingTextsRef.current.push({
+              x: omegaBaseX - 8 * p,
+              y: warriorBaseY - 22 * p,
+              text: `x${combo.count} COMBO!`,
+              color: ALPHA_COLOR,
+              life: 40,
+              maxLife: 40,
+              scale: 1.7,
+            });
+          }
+
+          spawnCrack(omegaBaseX - 8 * p, groundY + 1, OMEGA_COLOR, dmg);
         }
         if (omegaState === "victory") {
           spawnParticles(omegaBaseX - 8 * p, warriorBaseY - 10 * p, 25, "star", GOLD_COLOR);
@@ -316,6 +486,21 @@ export default function PixelBattle({
         }
       }
 
+      /* ---- Persistent ground cracks (accumulated damage marks) ---- */
+      for (const c of cracksRef.current) {
+        // Soft tinted underlay + bright core
+        const [cr, cg, cb] = hexToRgb(c.color);
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},0.18)`;
+        const dx = Math.cos(c.dir) * 3;
+        const dy = Math.sin(c.dir) * 1.2;
+        ctx.fillRect(c.x - dx, c.y - dy, c.size + 2, c.size + 1);
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},0.55)`;
+        ctx.fillRect(c.x, c.y, c.size, c.size);
+        // Tiny highlight flecks so cracks read at distance
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.fillRect(c.x + dx, c.y + 1, 1, 1);
+      }
+
       /* ---- Warrior shadows on ground ---- */
       ctx.fillStyle = "rgba(0,0,0,0.25)";
       ctx.beginPath();
@@ -324,6 +509,16 @@ export default function PixelBattle({
       ctx.beginPath();
       ctx.ellipse(omegaBaseX + 8 * p, groundY + 1, 12 * p, 3 * p, 0, 0, Math.PI * 2);
       ctx.fill();
+
+      /* ---- Low HP panting: spawn sweat drops periodically ---- */
+      if (alphaHP < 30 && alphaHP > 0 && frame - alphaSweatRef.current > 28) {
+        spawnSweat(alphaBaseX + 4 * p, warriorBaseY - 2 * p);
+        alphaSweatRef.current = frame;
+      }
+      if (omegaHP < 30 && omegaHP > 0 && frame - omegaSweatRef.current > 28) {
+        spawnSweat(omegaBaseX - 4 * p, warriorBaseY - 2 * p);
+        omegaSweatRef.current = frame;
+      }
 
       /* ---- Draw HP Bars ---- */
       const hpBarWidth = 120;
@@ -367,6 +562,8 @@ export default function PixelBattle({
         frame,
         alphaAnimRef.current,
         p,
+        omegaBaseX,
+        alphaHP,
       );
 
       drawWarrior(
@@ -379,6 +576,8 @@ export default function PixelBattle({
         frame,
         omegaAnimRef.current,
         p,
+        alphaBaseX,
+        omegaHP,
       );
 
       /* ---- Update and draw particles ---- */
@@ -416,12 +615,15 @@ export default function PixelBattle({
       for (const ft of floatingTextsRef.current) {
         ft.life--;
         ft.y -= 0.8; // float upward
+        if (ft.vx) ft.x += ft.vx;
         if (ft.life > 0) {
           const alpha = Math.max(0, ft.life / ft.maxLife);
-          const scale = ft.text === "VICTORY" ? 2 : 1.5;
+          const scale = ft.scale ?? (ft.text === "VICTORY" ? 2 : 1.5);
+          // Crit / combo banners get a subtle pop as they appear.
+          const pop = ft.life > ft.maxLife - 6 ? 1 + (ft.maxLife - ft.life) * 0.06 : 1;
           ctx.save();
           ctx.globalAlpha = alpha;
-          ctx.font = `bold ${Math.round(10 * scale)}px monospace`;
+          ctx.font = `bold ${Math.round(10 * scale * pop)}px monospace`;
           ctx.textAlign = "center";
           // Shadow
           ctx.fillStyle = "rgba(0,0,0,0.6)";
@@ -447,7 +649,17 @@ export default function PixelBattle({
       }
       ctx.restore();
     },
-    [alphaState, omegaState, alphaHP, omegaHP, width, height, spawnParticles],
+    [
+      alphaState,
+      omegaState,
+      alphaHP,
+      omegaHP,
+      width,
+      height,
+      spawnParticles,
+      spawnCrack,
+      spawnSweat,
+    ],
   );
 
   useEffect(() => {
@@ -625,10 +837,15 @@ function drawWarrior(
   frame: number,
   animState: AnimState,
   p: number,
+  /** Horizontal position of the opponent — used for eye tracking. */
+  opponentX: number,
+  /** Current HP (0-100) — drives panting amplitude + low-HP eye recolor. */
+  hp: number,
 ) {
   const dark = darken(color, 40);
   const dir = facing === "right" ? 1 : -1;
   const elapsed = frame - animState.startFrame;
+  const lowHP = hp > 0 && hp < 30;
 
   /* ---- Compute offsets based on state ---- */
   let offsetX = 0;
@@ -642,7 +859,10 @@ function drawWarrior(
 
   switch (state) {
     case "idle": {
-      offsetY = Math.sin(frame * 0.06) * p * 1.5;
+      // Low HP → heavier breathing (2.5x amplitude + slightly faster).
+      const amp = lowHP ? 4.2 : 1.5;
+      const speed = lowHP ? 0.11 : 0.06;
+      offsetY = Math.sin(frame * speed) * p * amp;
       break;
     }
     case "taunt": {
@@ -730,6 +950,39 @@ function drawWarrior(
     ctx.fill();
   }
 
+  /* ---- Charge-up aura (first ~35% of attack — builds tension before beam) ---- */
+  if (state === "attack") {
+    const t = Math.min(1, elapsed / 25);
+    if (t < 0.35) {
+      const auraT = t / 0.35;
+      const baseR = spriteW * p * 0.45;
+      const radius = baseR + auraT * baseR * 0.9;
+      const [ar, ag, ab] = hexToRgb(color);
+      const cx = bx;
+      const cy = by + 4 * p;
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      grad.addColorStop(0, `rgba(${ar},${ag},${ab},${0.55 * (1 - auraT)})`);
+      grad.addColorStop(0.55, `rgba(${ar},${ag},${ab},${0.28 * (1 - auraT)})`);
+      grad.addColorStop(1, `rgba(${ar},${ag},${ab},0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+      // Crackling ring — 6 rotating white pixels form an orbit of static.
+      const ringR = radius * 0.82;
+      for (let i = 0; i < 6; i++) {
+        const ang = (frame * 0.22 + (i * Math.PI) / 3) % (Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(
+          cx + Math.cos(ang) * ringR - 1,
+          cy + Math.sin(ang) * ringR - 1,
+          2,
+          2,
+        );
+      }
+    }
+  }
+
   // Mirror for left-facing
   if (facing === "left") {
     ctx.translate(bx, 0);
@@ -737,18 +990,57 @@ function drawWarrior(
     ctx.translate(-bx, 0);
   }
 
-  // Draw sprite pixels
+  /* ---- Draw sprite pixels (skip eyes — eyes are drawn separately for tracking) ---- */
   for (let row = 0; row < spriteH; row++) {
     for (let col = 0; col < spriteW; col++) {
       const val = sprite[row][col];
-      if (val === 0) continue;
-      ctx.fillStyle = val === 2 ? eyeColor : val === 1 ? mainColor : accentColor;
+      if (val === 0 || val === 2) continue;
+      ctx.fillStyle = val === 1 ? mainColor : accentColor;
       ctx.fillRect(
         drawX + col * p * scaleX,
         drawY + row * p * scaleY,
         Math.ceil(p * scaleX),
         Math.ceil(p * scaleY),
       );
+    }
+  }
+
+  /* ---- Eye tracking — shift eyes toward opponent + low-HP red recolor ---- */
+  {
+    void opponentX; // direction handled via `facing`; opponentX reserved for vertical tracking later
+    const eyeShiftX = 1; // in sprite coords, +1 == toward opponent for both sides thanks to mirroring
+    const lowHPEye = hp > 0 && hp < 25;
+    // Blink every ~90 frames (closed for 3 frames) — keeps sprites alive.
+    const blinking = Math.floor(frame / 90) !== Math.floor((frame - 3) / 90) && frame % 90 < 3;
+    const finalEyeColor = blinking
+      ? mainColor
+      : isFlashing
+        ? "#FFAAAA"
+        : lowHPEye
+          ? Math.floor(frame / 8) % 2 === 0
+            ? "#FF4A4A"
+            : "#FFB0B0"
+          : "#FFFFFF";
+    for (let row = 0; row < spriteH; row++) {
+      for (let col = 0; col < spriteW; col++) {
+        if (sprite[row][col] !== 2) continue;
+        // Fill original eye slot with body color (so the shift doesn't leave a gap).
+        ctx.fillStyle = mainColor;
+        ctx.fillRect(
+          drawX + col * p * scaleX,
+          drawY + row * p * scaleY,
+          Math.ceil(p * scaleX),
+          Math.ceil(p * scaleY),
+        );
+        // Draw tracking eye shifted by +1 pixel cell toward opponent.
+        ctx.fillStyle = finalEyeColor;
+        ctx.fillRect(
+          drawX + (col + eyeShiftX) * p * scaleX,
+          drawY + row * p * scaleY,
+          Math.ceil(p * scaleX),
+          Math.ceil(p * scaleY),
+        );
+      }
     }
   }
 
