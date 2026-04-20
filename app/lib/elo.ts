@@ -39,10 +39,14 @@ export function calculateEloDraw(
 }
 
 /**
- * Get or create an agent's ELO record.
+ * Get or create an agent's ELO record. If a name is provided AND the
+ * stored record's name is still the wallet-fallback (new agent that
+ * was first created without a name), update it to the real name. This
+ * lets the leaderboard + battle history show "MyCustomBot" instead of
+ * the raw wallet for every agent that ever plays a named battle.
  */
 export async function getAgentElo(agentWallet: string, agentName?: string) {
-  return prisma.agentElo.upsert({
+  const row = await prisma.agentElo.upsert({
     where: { agentWallet },
     create: {
       agentWallet,
@@ -51,18 +55,38 @@ export async function getAgentElo(agentWallet: string, agentName?: string) {
     },
     update: {},
   });
+
+  // Backfill missing / stale name without rewriting on every call.
+  if (agentName && agentName !== row.agentName && row.agentName === row.agentWallet) {
+    try {
+      await prisma.agentElo.update({
+        where: { agentWallet },
+        data: { agentName },
+      });
+      row.agentName = agentName;
+    } catch {
+      /* non-fatal — keep returning the row we have */
+    }
+  }
+
+  return row;
 }
 
 /**
  * Update ELO after a battle. Saves to DB and returns deltas.
+ * `winnerName` / `loserName` let the arena pass custom agent display
+ * names through to the ELO table so the leaderboard shows the real
+ * name instead of the wallet address fallback.
  */
 export async function updateEloAfterBattle(
   winnerWallet: string,
   loserWallet: string,
   battleId: string,
+  winnerName?: string,
+  loserName?: string,
 ) {
-  const winner = await getAgentElo(winnerWallet);
-  const loser = await getAgentElo(loserWallet);
+  const winner = await getAgentElo(winnerWallet, winnerName);
+  const loser = await getAgentElo(loserWallet, loserName);
 
   const [newWinnerElo, newLoserElo] = calculateElo(winner.elo, loser.elo);
 

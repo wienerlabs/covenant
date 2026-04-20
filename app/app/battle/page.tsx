@@ -930,8 +930,22 @@ export default function BattlePage() {
   const recordBattleResult = useCallback(
     async (winnerSide: string) => {
       try {
+        // Resolve each side's identity: when the user picked custom
+        // agents, the arena battle MUST be recorded against the custom
+        // wallet and name so the Battle History and ELO leaderboard
+        // reflect the real participants. Previously both sides were
+        // hardcoded to ALPHA_WALLET / OMEGA_WALLET which caused every
+        // custom battle to show up as "Alpha vs Omega" (audit fix).
+        const alphaIsCustom = useCustomAgents && selectedAlpha;
+        const omegaIsCustom = useCustomAgents && selectedOmega;
+        const alphaAgentWallet =
+          (alphaIsCustom && (selectedAlpha.wallet || selectedAlpha.walletAddress)) || ALPHA_WALLET;
+        const omegaAgentWallet =
+          (omegaIsCustom && (selectedOmega.wallet || selectedOmega.walletAddress)) || OMEGA_WALLET;
+        const alphaAgentName = alphaIsCustom ? selectedAlpha.name : "Agent Alpha";
+        const omegaAgentName = omegaIsCustom ? selectedOmega.name : "Agent Omega";
         const winnerAgent =
-          winnerSide === "alpha" ? ALPHA_WALLET : OMEGA_WALLET;
+          winnerSide === "alpha" ? alphaAgentWallet : omegaAgentWallet;
 
         // Try to get spectator wallet from Solana connector
         let spectatorWallet: string | undefined;
@@ -951,8 +965,10 @@ export default function BattlePage() {
           body: JSON.stringify({
             challengeText: challenge || battleTitle || "Arena Battle",
             category: selectedCategory || battleCategory || "text_writing",
-            alphaAgent: ALPHA_WALLET,
-            omegaAgent: OMEGA_WALLET,
+            alphaAgent: alphaAgentWallet,
+            omegaAgent: omegaAgentWallet,
+            alphaName: alphaAgentName,
+            omegaName: omegaAgentName,
             alphaOutput: alphaFullText || undefined,
             omegaOutput: omegaFullText || undefined,
             alphaScore: alphaScore || 0,
@@ -1008,6 +1024,9 @@ export default function BattlePage() {
       alphaScore,
       omegaScore,
       judgeReason,
+      useCustomAgents,
+      selectedAlpha,
+      selectedOmega,
     ],
   );
 
@@ -1804,7 +1823,7 @@ export default function BattlePage() {
   /* ================================================================ */
 
   function renderAgentPanel(
-    config: typeof ALPHA_CONFIG,
+    config: typeof ALPHA_CONFIG & { avatarUrl?: string | null },
     state: AgentState,
     status: string,
     displayText: string,
@@ -1937,7 +1956,26 @@ export default function BattlePage() {
                 transition: "all 0.3s ease",
               }}
             >
-              <PixelAgent seed={config.avatarSeed} color={config.color} size={80} state={state} />
+              {config.avatarUrl ? (
+                // Custom agent uploaded avatar — show the actual image
+                // framed in a colored square so it reads like the
+                // default PixelAgent badge. (Audit: community agent
+                // profile images were not appearing in-battle.)
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={config.avatarUrl}
+                  alt={config.name}
+                  style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: 12,
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <PixelAgent seed={config.avatarSeed} color={config.color} size={80} state={state} />
+              )}
             </div>
           </div>
 
@@ -3374,7 +3412,14 @@ export default function BattlePage() {
             <div style={{ display: "flex", gap: "0px", alignItems: "stretch" }}>
               {/* Alpha Panel */}
               {renderAgentPanel(
-                useCustomAgents && selectedAlpha ? { ...ALPHA_CONFIG, name: selectedAlpha.name, avatarSeed: selectedAlpha.avatarSeed || selectedAlpha.id } : ALPHA_CONFIG,
+                useCustomAgents && selectedAlpha
+                  ? {
+                      ...ALPHA_CONFIG,
+                      name: selectedAlpha.name,
+                      avatarSeed: selectedAlpha.avatarSeed || selectedAlpha.id,
+                      avatarUrl: selectedAlpha.avatarUrl ?? null,
+                    }
+                  : ALPHA_CONFIG,
                 alphaState,
                 alphaStatus,
                 alphaDisplayText,
@@ -3463,7 +3508,14 @@ export default function BattlePage() {
 
               {/* Omega Panel */}
               {renderAgentPanel(
-                useCustomAgents && selectedOmega ? { ...OMEGA_CONFIG, name: selectedOmega.name, avatarSeed: selectedOmega.avatarSeed || selectedOmega.id } : OMEGA_CONFIG,
+                useCustomAgents && selectedOmega
+                  ? {
+                      ...OMEGA_CONFIG,
+                      name: selectedOmega.name,
+                      avatarSeed: selectedOmega.avatarSeed || selectedOmega.id,
+                      avatarUrl: selectedOmega.avatarUrl ?? null,
+                    }
+                  : OMEGA_CONFIG,
                 omegaState,
                 omegaStatus,
                 omegaDisplayText,

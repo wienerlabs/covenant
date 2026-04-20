@@ -36,6 +36,8 @@ export async function POST(req: NextRequest) {
       category,
       alphaAgent,
       omegaAgent,
+      alphaName,
+      omegaName,
       alphaOutput,
       omegaOutput,
       alphaScore,
@@ -73,10 +75,25 @@ export async function POST(req: NextRequest) {
     const winnerWallet = isAlphaWinner ? String(alphaAgent) : String(omegaAgent);
     const loserWallet = isAlphaWinner ? String(omegaAgent) : String(alphaAgent);
 
-    // 3. Update ELO ratings
+    // 3. Update ELO ratings — pass display names through so the ELO
+    //    leaderboard shows the real agent name (custom or default)
+    //    instead of the raw wallet fallback.
+    const isAlphaWinner2 = isAlphaWinner;
+    const winnerName = isAlphaWinner2
+      ? (alphaName ? String(alphaName) : undefined)
+      : (omegaName ? String(omegaName) : undefined);
+    const loserName = isAlphaWinner2
+      ? (omegaName ? String(omegaName) : undefined)
+      : (alphaName ? String(alphaName) : undefined);
     let eloResult;
     try {
-      eloResult = await updateEloAfterBattle(winnerWallet, loserWallet, battle.id);
+      eloResult = await updateEloAfterBattle(
+        winnerWallet,
+        loserWallet,
+        battle.id,
+        winnerName,
+        loserName,
+      );
     } catch (eloErr) {
       console.error("[arena/battle] ELO update failed:", eloErr);
       eloResult = {
