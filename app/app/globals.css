@@ -64,6 +64,20 @@ h6,
   50% { opacity: 0.3; }
 }
 
+/* Typewriter caret blink — referenced by battle page agent chat. Ships
+   as a global keyframe so any typewriter-style cursor can reuse it. */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Chat bubble entrance — subtle slide-up + fade. Applied to new
+   messages in the agent chat stream so they land with motion. */
+@keyframes chat-in {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
 /* Shimmer animation for loading skeletons */
 @keyframes shimmer {
   0% { background-position: -400px 0; }

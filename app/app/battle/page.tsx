@@ -25,7 +25,9 @@ interface BattleEvent {
 }
 
 interface ChatMessage {
-  agent: string;
+  agent: string;           // "alpha" | "omega"
+  agentName?: string;      // custom agent name, falls back to capitalized side
+  phase?: string;          // "pre_battle" | "post_battle" | "mid_battle" | etc.
   message: string;
   timestamp: string;
   displayText: string;
@@ -398,8 +400,36 @@ export default function BattlePage() {
   const [tournamentScores, setTournamentScores] = useState<{alpha: number, omega: number}>({alpha: 0, omega: 0});
 
   /* ---- Spectator chat ---- */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [spectatorChatMessages, setSpectatorChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const spectatorChatRef = useRef<HTMLDivElement>(null);
+  const [myChatSessionId, setMyChatSessionId] = useState<string | null>(null);
+
+  // Capture our own sessionId so we can highlight our own messages with
+  // a "You" badge.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let sid = sessionStorage.getItem("battle_session");
+    if (!sid) {
+      sid = crypto.randomUUID();
+      sessionStorage.setItem("battle_session", sid);
+    }
+    setMyChatSessionId(sid);
+  }, []);
+
+  // Smart scroll for spectator chat.
+  useEffect(() => {
+    const el = spectatorChatRef.current;
+    if (!el) return;
+    const distanceFromBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 80) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [spectatorChatMessages]);
 
   /* ================================================================ */
   /*  Fetch ELO data                                                   */
@@ -642,9 +672,15 @@ export default function BattlePage() {
     return () => clearInterval(interval);
   }, [chatMessages]);
 
+  // Smart auto-scroll: only pin to bottom if user is already near the
+  // bottom. If they scrolled up to re-read an earlier exchange, don't
+  // yank them back down.
   useEffect(() => {
-    if (chatPanelRef.current) {
-      chatPanelRef.current.scrollTop = chatPanelRef.current.scrollHeight;
+    const el = chatPanelRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 80) {
+      el.scrollTop = el.scrollHeight;
     }
   }, [chatMessages]);
 
@@ -792,15 +828,67 @@ export default function BattlePage() {
   }, [phase]);
 
   async function sendChat() {
-    if (!chatInput.trim()) return;
+    const trimmed = chatInput.trim();
+    if (!trimmed || chatSending) return;
     let sid = sessionStorage.getItem("battle_session");
-    if (!sid) { sid = crypto.randomUUID(); sessionStorage.setItem("battle_session", sid); }
-    await fetch("/api/battle/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: sid, wallet: account || null, message: chatInput.trim() }),
-    });
-    setChatInput("");
+    if (!sid) {
+      sid = crypto.randomUUID();
+      sessionStorage.setItem("battle_session", sid);
+      setMyChatSessionId(sid);
+    }
+    setChatSending(true);
+    setChatError(null);
+    try {
+      const res = await fetch("/api/battle/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: sid,
+          wallet: account || null,
+          message: trimmed,
+        }),
+      });
+      if (!res.ok) {
+        let msg = "Failed to send.";
+        try {
+          const json = await res.json();
+          if (json?.error) msg = String(json.error);
+        } catch {
+          /* keep default */
+        }
+        if (res.status === 429) {
+          msg = "Slow down — you're chatting too fast.";
+        }
+        setChatError(msg);
+        setTimeout(() => setChatError(null), 4000);
+        return;
+      }
+      setChatInput("");
+      // Optimistic: prepend the new message so it renders instantly even
+      // before the next poll cycle fetches the DB row back.
+      const optimistic = await res.json().catch(() => null);
+      if (optimistic) {
+        setSpectatorChatMessages((prev) =>
+          [...prev, optimistic].slice(-50),
+        );
+      }
+    } catch (err) {
+      console.error("[chat] send failed:", err);
+      setChatError("Network error. Try again.");
+      setTimeout(() => setChatError(null), 4000);
+    } finally {
+      setChatSending(false);
+    }
+  }
+
+  function formatChatTime(iso: string | undefined): string {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return "";
+    }
   }
 
   /* ================================================================ */
@@ -832,6 +920,8 @@ export default function BattlePage() {
             ...prev,
             {
               agent: String(event.data!.agent || ""),
+              agentName: event.data!.agentName ? String(event.data!.agentName) : undefined,
+              phase: event.data!.phase ? String(event.data!.phase) : undefined,
               message: String(event.data!.message || ""),
               timestamp: getTimestamp(),
               displayText: "",
@@ -2523,56 +2613,243 @@ export default function BattlePage() {
           <div
             className="glass-card"
             style={{
-              padding: "16px",
+              padding: "16px 18px",
               marginTop: "16px",
               marginBottom: "16px",
-              maxHeight: "200px",
             }}
           >
-            <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
-              Spectator Chat
-            </div>
-            <div style={{ maxHeight: "120px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "4px" }}>
-              {spectatorChatMessages.map((m: any) => (
-                <div key={m.id} style={{ fontSize: "12px" }}>
-                  <span style={{ color: "#fffeb2", fontWeight: 600 }}>{m.wallet ? m.wallet.slice(0, 4) + "..." : "Anon"}</span>
-                  <span style={{ color: "rgba(255,255,255,0.6)", marginLeft: "6px" }}>{m.message}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-              <input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") sendChat(); }}
-                placeholder="Say something..."
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 10,
+              }}
+            >
+              <div
                 style={{
-                  flex: 1,
-                  fontFamily: "inherit",
-                  fontSize: "12px",
-                  padding: "8px 12px",
-                  borderRadius: "6px",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.04)",
-                  color: "#fff",
-                  outline: "none",
-                }}
-              />
-              <button
-                onClick={sendChat}
-                style={{
-                  fontFamily: "inherit",
-                  fontSize: "12px",
-                  padding: "8px 16px",
-                  borderRadius: "6px",
-                  border: "none",
-                  background: "#fffeb2",
-                  color: "#000",
-                  cursor: "pointer",
-                  fontWeight: 600,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.5)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
                 }}
               >
-                Send
+                Spectator Chat
+                {spectatorChatMessages.length > 0 && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: "1px 6px",
+                      borderRadius: 99,
+                      background: "rgba(255,255,255,0.08)",
+                      color: "rgba(255,255,255,0.5)",
+                    }}
+                  >
+                    {spectatorChatMessages.length}
+                  </span>
+                )}
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.3)",
+                  fontWeight: 600,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {viewerCount} watching
+              </div>
+            </div>
+
+            <div
+              ref={spectatorChatRef}
+              style={{
+                maxHeight: 160,
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                paddingRight: 4,
+              }}
+            >
+              {spectatorChatMessages.length === 0 ? (
+                <div
+                  style={{
+                    padding: "16px 8px",
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.3)",
+                    fontStyle: "italic",
+                    textAlign: "center",
+                  }}
+                >
+                  Be the first to say something.
+                </div>
+              ) : (
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                spectatorChatMessages.map((m: any) => {
+                  const isMine = m.sessionId && myChatSessionId && m.sessionId === myChatSessionId;
+                  const name = m.wallet
+                    ? `${String(m.wallet).slice(0, 4)}…${String(m.wallet).slice(-4)}`
+                    : "Anon";
+                  return (
+                    <div
+                      key={m.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 8,
+                        fontSize: 12,
+                        padding: "4px 8px",
+                        borderRadius: 6,
+                        background: isMine ? "rgba(255,254,178,0.08)" : "transparent",
+                        animation: "chat-in 0.2s ease-out",
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: isMine ? "#fffeb2" : "rgba(255,255,255,0.5)",
+                          fontWeight: 700,
+                          letterSpacing: "0.02em",
+                          fontVariantNumeric: "tabular-nums",
+                          flexShrink: 0,
+                          minWidth: 44,
+                        }}
+                      >
+                        {formatChatTime(m.createdAt) || ""}
+                      </span>
+                      <span
+                        style={{
+                          color: "#fffeb2",
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {name}
+                      </span>
+                      {isMine && (
+                        <span
+                          style={{
+                            fontSize: 9,
+                            padding: "1px 5px",
+                            borderRadius: 3,
+                            background: "#fffeb2",
+                            color: "#000",
+                            fontWeight: 800,
+                            letterSpacing: "0.06em",
+                          }}
+                        >
+                          YOU
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          color: "rgba(255,255,255,0.85)",
+                          wordBreak: "break-word",
+                          minWidth: 0,
+                          flex: 1,
+                        }}
+                      >
+                        {m.message}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {chatError && (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "6px 10px",
+                  fontSize: 11,
+                  color: "#FF425E",
+                  background: "rgba(255,66,94,0.08)",
+                  border: "1px solid rgba(255,66,94,0.3)",
+                  borderRadius: 6,
+                }}
+              >
+                {chatError}
+              </div>
+            )}
+
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                marginTop: 10,
+                alignItems: "center",
+              }}
+            >
+              <div style={{ position: "relative", flex: 1 }}>
+                <input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value.slice(0, 200))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") sendChat();
+                  }}
+                  placeholder="Say something…"
+                  disabled={chatSending}
+                  maxLength={200}
+                  style={{
+                    width: "100%",
+                    fontFamily: "inherit",
+                    fontSize: 12,
+                    padding: "9px 52px 9px 12px",
+                    borderRadius: 6,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: "#fff",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <span
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    fontSize: 10,
+                    color:
+                      chatInput.length > 180
+                        ? "#FFB84D"
+                        : "rgba(255,255,255,0.3)",
+                    fontVariantNumeric: "tabular-nums",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {chatInput.length}/200
+                </span>
+              </div>
+              <button
+                onClick={sendChat}
+                disabled={chatSending || !chatInput.trim()}
+                style={{
+                  fontFamily: "inherit",
+                  fontSize: 11,
+                  padding: "9px 16px",
+                  borderRadius: 6,
+                  border: "none",
+                  background:
+                    chatSending || !chatInput.trim()
+                      ? "rgba(255,254,178,0.4)"
+                      : "#fffeb2",
+                  color: "#000",
+                  cursor:
+                    chatSending || !chatInput.trim() ? "not-allowed" : "pointer",
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                {chatSending ? "…" : "Send"}
               </button>
             </div>
           </div>
@@ -3217,83 +3494,250 @@ export default function BattlePage() {
         {/*  Agent Chat -- always show when messages exist                */}
         {/* ============================================================ */}
 
-        {chatMessages.length > 0 && (
+        {(chatMessages.length > 0 || phase === "fighting") && (
           <div
             className="glass-card-strong"
             style={{ padding: "20px", marginBottom: "28px" }}
           >
             <div
-              className="font-display"
               style={{
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "rgba(255,255,255,0.3)",
-                textTransform: "uppercase",
-                letterSpacing: "0.12em",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
                 marginBottom: "16px",
               }}
             >
-              Agent Chat
+              <div
+                className="font-display"
+                style={{
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.4)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                }}
+              >
+                Agent Chat
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.35)",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: phase === "fighting" ? "#7CFF7C" : "rgba(255,255,255,0.3)",
+                    boxShadow: phase === "fighting" ? "0 0 6px #7CFF7C" : "none",
+                    animation: phase === "fighting" ? "pulse 1.4s ease-in-out infinite" : "none",
+                  }}
+                />
+                {phase === "fighting" ? "Live" : "Replay"}
+              </div>
             </div>
-            <div ref={chatPanelRef} style={{ maxHeight: "280px", overflowY: "auto" }}>
-              {chatMessages.map((msg, i) => {
-                const isAlpha = msg.agent === "alpha";
-                const agentColor = isAlpha ? ALPHA_COLOR : OMEGA_COLOR;
-                const isLastTyping = i === chatMessages.length - 1 && msg.displayText.length < msg.message.length;
-                const alignment = isAlpha ? "flex-start" : "flex-end";
+            <div
+              ref={chatPanelRef}
+              style={{
+                maxHeight: "320px",
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                paddingRight: 4,
+              }}
+            >
+              {chatMessages.length === 0 ? (
+                <div
+                  style={{
+                    padding: "24px 12px",
+                    textAlign: "center",
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.35)",
+                    fontStyle: "italic",
+                  }}
+                >
+                  Agents are preparing…
+                </div>
+              ) : (
+                chatMessages.map((msg, i) => {
+                  const isAlpha = msg.agent === "alpha";
+                  const agentColor = isAlpha ? ALPHA_COLOR : OMEGA_COLOR;
+                  const isLastTyping =
+                    i === chatMessages.length - 1 &&
+                    msg.displayText.length < msg.message.length;
+                  const alignment = isAlpha ? "flex-start" : "flex-end";
 
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      display: "flex",
-                      justifyContent: alignment,
-                      marginBottom: "10px",
-                    }}
-                  >
+                  // Custom agent name fallback: prefer msg.agentName (sent
+                  // by backend for custom agents), else use selected
+                  // custom agent's name from local state, else static
+                  // "Alpha" / "Omega".
+                  const displayName =
+                    msg.agentName ||
+                    (useCustomAgents && isAlpha && selectedAlpha?.name) ||
+                    (useCustomAgents && !isAlpha && selectedOmega?.name) ||
+                    (isAlpha ? "Alpha" : "Omega");
+
+                  // Group consecutive messages from the same agent
+                  // within the same phase so we don't repeat the
+                  // avatar + name header on every bubble.
+                  const prev = chatMessages[i - 1];
+                  const isGrouped =
+                    prev && prev.agent === msg.agent && prev.phase === msg.phase;
+
+                  // Phase badge — only for the first message in a group
+                  // and only when phase is known. "pre_battle" → TAUNT,
+                  // "post_battle" → winner/loser tagged by content.
+                  let phaseLabel: string | null = null;
+                  let phaseTone = "rgba(255,255,255,0.4)";
+                  if (!isGrouped && msg.phase === "pre_battle") {
+                    phaseLabel = "Taunt";
+                  } else if (!isGrouped && msg.phase === "post_battle") {
+                    phaseLabel = winner === msg.agent ? "Victory" : "Concede";
+                    phaseTone = winner === msg.agent ? "#7CFF7C" : "rgba(255,255,255,0.45)";
+                  }
+
+                  // Avatar initial
+                  const initial = displayName.trim().charAt(0).toUpperCase() || "?";
+
+                  return (
                     <div
+                      key={i}
                       style={{
-                        maxWidth: "70%",
-                        padding: "10px 16px",
-                        borderRadius: isAlpha ? "16px 16px 16px 4px" : "16px 16px 4px 16px",
-                        background: `${agentColor}15`,
-                        border: `1px solid ${agentColor}25`,
+                        display: "flex",
+                        justifyContent: alignment,
+                        marginTop: isGrouped ? 2 : 8,
+                        animation: "chat-in 0.25s ease-out",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                        <span
-                          style={{
-                            fontSize: "12px",
-                            fontWeight: 800,
-                            color: agentColor,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
-                          {isAlpha ? "Alpha" : "Omega"}
-                        </span>
-                        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.15)" }}>
-                          {msg.timestamp}
-                        </span>
-                      </div>
                       <div
                         style={{
-                          fontSize: "12px",
-                          color: "rgba(255,255,255,0.8)",
-                          lineHeight: 1.6,
+                          display: "flex",
+                          flexDirection: isAlpha ? "row" : "row-reverse",
+                          alignItems: "flex-end",
+                          gap: 8,
+                          maxWidth: "75%",
                         }}
                       >
-                        {msg.displayText || msg.message}
-                        {isLastTyping && (
-                          <span style={{ color: agentColor, animation: "blink 1s step-end infinite" }}>
-                            {"\u258A"}
-                          </span>
-                        )}
+                        {/* Avatar — hidden on grouped messages */}
+                        <div
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 999,
+                            flexShrink: 0,
+                            visibility: isGrouped ? "hidden" : "visible",
+                            background: `${agentColor}20`,
+                            border: `1.5px solid ${agentColor}60`,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: agentColor,
+                            fontWeight: 800,
+                            fontSize: 12,
+                            letterSpacing: 0,
+                          }}
+                        >
+                          {initial}
+                        </div>
+
+                        <div style={{ minWidth: 0 }}>
+                          {/* Header — hidden on grouped messages */}
+                          {!isGrouped && (
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                marginBottom: 4,
+                                paddingLeft: isAlpha ? 4 : 0,
+                                paddingRight: isAlpha ? 0 : 4,
+                                flexDirection: isAlpha ? "row" : "row-reverse",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  color: agentColor,
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.06em",
+                                }}
+                              >
+                                {displayName}
+                              </span>
+                              {phaseLabel && (
+                                <span
+                                  style={{
+                                    fontSize: 9,
+                                    padding: "1px 6px",
+                                    borderRadius: 3,
+                                    fontWeight: 700,
+                                    letterSpacing: "0.08em",
+                                    textTransform: "uppercase",
+                                    color: phaseTone,
+                                    background: `${phaseTone === "#7CFF7C" ? "#7CFF7C" : "#fff"}10`,
+                                    border: `1px solid ${phaseTone}30`,
+                                  }}
+                                >
+                                  {phaseLabel}
+                                </span>
+                              )}
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  color: "rgba(255,255,255,0.2)",
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              >
+                                {msg.timestamp}
+                              </span>
+                            </div>
+                          )}
+
+                          <div
+                            style={{
+                              padding: "9px 14px",
+                              borderRadius: isAlpha
+                                ? `${isGrouped ? 14 : 14}px 14px 14px ${isGrouped ? 14 : 4}px`
+                                : `14px ${isGrouped ? 14 : 14}px ${isGrouped ? 14 : 4}px 14px`,
+                              background: `${agentColor}15`,
+                              border: `1px solid ${agentColor}25`,
+                              fontSize: 13,
+                              lineHeight: 1.55,
+                              color: "rgba(255,255,255,0.88)",
+                              wordBreak: "break-word",
+                            }}
+                          >
+                            {msg.displayText}
+                            {isLastTyping && (
+                              <span
+                                style={{
+                                  color: agentColor,
+                                  marginLeft: 1,
+                                  animation: "blink 0.9s step-end infinite",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {"\u258A"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         )}
