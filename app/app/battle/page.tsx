@@ -3158,6 +3158,13 @@ export default function BattlePage() {
                 useCustomAgents && selectedOmega ? selectedOmega.category : battleCategory
               }
               predictionSide={userPrediction}
+              tournamentRound={tournamentMode ? tournamentRound : undefined}
+              chatMessages={spectatorChatMessages
+                .slice(-20)
+                .map((m) =>
+                  typeof m === "string" ? m : String(m?.text ?? m?.message ?? ""),
+                )
+                .filter(Boolean)}
             />
           </div>
         )}

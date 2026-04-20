@@ -42,6 +42,13 @@ interface PixelBattleProps {
    * grows, new entries spawn pixel emoji projectiles flying across the arena.
    */
   spectatorEmojis?: string[];
+  /**
+   * Rolling buffer of spectator chat messages. New entries drift across the
+   * edges of the arena as pixel speech bubbles.
+   */
+  chatMessages?: string[];
+  /** Tournament round (1-3) — drives day/night sky cycle. */
+  tournamentRound?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -208,6 +215,8 @@ export default function PixelBattle({
   roundTimerPct,
   predictionSide,
   spectatorEmojis,
+  chatMessages,
+  tournamentRound,
 }: PixelBattleProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
@@ -293,6 +302,17 @@ export default function PixelBattle({
   }>>([]);
   /** Track how many emojis we've already consumed from the parent's buffer. */
   const emojiConsumedCountRef = useRef(0);
+
+  // Chat speech bubbles drifting across the edges.
+  const chatProjectilesRef = useRef<Array<{
+    x: number;
+    y: number;
+    vx: number;
+    text: string;
+    age: number;
+    maxAge: number;
+  }>>([]);
+  const chatConsumedCountRef = useRef(0);
 
   // Afterimage ghosts left behind by dodges.
   const afterimagesRef = useRef<Array<{
@@ -754,6 +774,9 @@ export default function PixelBattle({
         });
       }
 
+      /* ---- Day/night sky gradient (drives atmosphere behind mountains) ---- */
+      drawSky(ctx, width, groundY, tournamentRound, frame);
+
       /* ---- Parallax mountain / skyline layers (initialized lazily) ---- */
       if (!mountainsRef.current) {
         mountainsRef.current = generateMountains(width, height);
@@ -762,6 +785,9 @@ export default function PixelBattle({
 
       /* ---- Category-themed arena backdrop (code grid / art palette / text paper) ---- */
       drawCategoryBackdrop(ctx, width, height, groundY, category, frame);
+
+      /* ---- Category-driven weather particles (matrix rain / paper scraps / sparkles) ---- */
+      drawWeather(ctx, width, groundY, category, frame);
 
       /* ---- Ambient chant rings (crowd noise waves) ---- */
       // Spawn a new ring every ~70 frames, scaled by viewerCount presence.
@@ -1003,6 +1029,62 @@ export default function PixelBattle({
       }
       emojiProjectilesRef.current = aliveEmojis;
 
+      /* ---- Spectator chat rain — short messages drift across the upper band ---- */
+      if (Array.isArray(chatMessages) && chatMessages.length > chatConsumedCountRef.current) {
+        const fresh = chatMessages.slice(chatConsumedCountRef.current);
+        for (const msg of fresh) {
+          if (!msg || typeof msg !== "string") continue;
+          const trimmed = msg.length > 32 ? msg.slice(0, 31) + "…" : msg;
+          chatProjectilesRef.current.push({
+            x: width + 20,
+            y: 32 + Math.random() * (groundY - 110),
+            vx: -(0.6 + Math.random() * 0.4),
+            text: trimmed,
+            age: 0,
+            maxAge: 520,
+          });
+        }
+        chatConsumedCountRef.current = chatMessages.length;
+        while (chatProjectilesRef.current.length > 8) {
+          chatProjectilesRef.current.shift();
+        }
+      }
+      const aliveChats: typeof chatProjectilesRef.current = [];
+      for (const msg of chatProjectilesRef.current) {
+        msg.age++;
+        msg.x += msg.vx;
+        if (msg.age < msg.maxAge && msg.x > -200) {
+          const fade =
+            msg.age < 20
+              ? msg.age / 20
+              : msg.age > msg.maxAge - 40
+                ? (msg.maxAge - msg.age) / 40
+                : 1;
+          const alpha = Math.max(0, Math.min(1, fade)) * 0.6;
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          // Pixel speech bubble
+          ctx.font = "bold 9px monospace";
+          const w = ctx.measureText(msg.text).width + 8;
+          ctx.fillStyle = "rgba(10,10,25,0.85)";
+          ctx.fillRect(msg.x, msg.y - 8, w, 12);
+          ctx.strokeStyle = "rgba(255,255,255,0.3)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(msg.x + 0.5, msg.y - 7.5, w - 1, 11);
+          // Tail
+          ctx.fillStyle = "rgba(10,10,25,0.85)";
+          ctx.fillRect(msg.x + 6, msg.y + 4, 3, 2);
+          ctx.fillRect(msg.x + 7, msg.y + 6, 2, 1);
+          // Text
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          ctx.textAlign = "left";
+          ctx.fillText(msg.text, msg.x + 4, msg.y + 1);
+          ctx.restore();
+          aliveChats.push(msg);
+        }
+      }
+      chatProjectilesRef.current = aliveChats;
+
       /* ---- Walk-on intro: both sprites slide in from the edges over INTRO_DURATION frames ---- */
       introFrameRef.current = Math.min(INTRO_DURATION, introFrameRef.current + 1);
       const introT = introFrameRef.current / INTRO_DURATION;
@@ -1197,6 +1279,8 @@ export default function PixelBattle({
       roundTimerPct,
       predictionSide,
       spectatorEmojis,
+      chatMessages,
+      tournamentRound,
     ],
   );
 
@@ -1647,16 +1731,11 @@ function drawWarrior(
     }
   }
 
-  // Attack beam — shoot a pixel projectile during attack
+  // Attack effect — category-driven weapon variant
   if (state === "attack") {
     const t = Math.min(1, elapsed / 25);
-    if (t > 0.3 && t < 0.7) {
-      const beamLen = 20 * p * ((t - 0.3) / 0.4);
-      ctx.fillStyle = mainColor;
-      const beamY = drawY + 4 * p;
-      ctx.fillRect(bx + (facing === "right" ? 6 * p : -6 * p - beamLen), beamY, beamLen, p);
-      ctx.fillStyle = eyeColor;
-      ctx.fillRect(bx + (facing === "right" ? 6 * p + beamLen : -6 * p - beamLen), beamY, 2 * p, p);
+    if (t > 0.25 && t < 0.85) {
+      drawWeaponAttack(ctx, bx, drawY + 4 * p, p, facing, t, color, agentCategory);
     }
   }
 
@@ -2200,5 +2279,289 @@ function drawHourglass(
   if (pct > 0 && pct < 1 && frame % 4 !== 0) {
     ctx.fillStyle = "#FFD060";
     ctx.fillRect(x + w / 2, y + h / 2 - 1 + ((frame % 3)), 1, 1);
+  }
+}
+
+/* ================================================================== */
+/*  Weapon variants, sky, weather                                      */
+/* ================================================================== */
+
+/**
+ * Category-keyed attack visuals. Each is a pure pixel-art rendering of
+ * the weapon animation at normalized progress `t` (0.25 .. 0.85).
+ *
+ *   code     → flying binary glyphs (0/1)
+ *   art      → paint splat trail
+ *   text     → ink droplet stream
+ *   music    → soundwave concentric rings
+ *   research → orbital particle orbs
+ *   default  → the classic pixel laser beam
+ */
+function drawWeaponAttack(
+  ctx: CanvasRenderingContext2D,
+  bx: number,
+  beamY: number,
+  p: number,
+  facing: "left" | "right",
+  t: number,
+  color: string,
+  agentCategory: BattleCategory | undefined,
+) {
+  const dir = facing === "right" ? 1 : -1;
+  const origin = bx + dir * 6 * p;
+  const reach = 36 * p;
+  const progress = (t - 0.25) / 0.6; // 0..1
+  const accent = "#ffffff";
+  const lc = agentCategory ? String(agentCategory).toLowerCase() : "";
+
+  if (lc.includes("code") || lc.includes("dev")) {
+    // Binary glyphs flying forward
+    ctx.font = "bold 8px monospace";
+    ctx.textAlign = "center";
+    for (let i = 0; i < 6; i++) {
+      const gt = Math.min(1, progress + i * 0.08);
+      if (gt < 0) continue;
+      const gx = origin + dir * reach * gt;
+      const gy = beamY + Math.sin(gt * Math.PI * 2 + i) * 3;
+      const glyph = (i + Math.floor(t * 10)) % 2 === 0 ? "1" : "0";
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillText(glyph, gx + 1, gy + 1);
+      ctx.fillStyle = i % 2 === 0 ? color : "#7cff7c";
+      ctx.fillText(glyph, gx, gy);
+    }
+    return;
+  }
+
+  if (lc.includes("art") || lc.includes("image") || lc.includes("design")) {
+    // Paint splat — growing blob with colored droplets
+    const palette = ["#FF6B9D", "#FFC857", "#4ECDC4", "#B983FF", color];
+    for (let i = 0; i < 7; i++) {
+      const gt = Math.min(1, progress + i * 0.06);
+      if (gt < 0) continue;
+      const gx = origin + dir * reach * gt;
+      const offsetY = Math.sin(i * 1.3) * 4 + Math.cos(gt * Math.PI) * 2;
+      ctx.fillStyle = palette[i % palette.length];
+      ctx.fillRect(gx - 2, beamY + offsetY - 1, 3, 3);
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.fillRect(gx - 1, beamY + offsetY - 1, 1, 1);
+    }
+    return;
+  }
+
+  if (lc.includes("text") || lc.includes("writ") || lc.includes("story")) {
+    // Ink trail with drips
+    for (let i = 0; i < 8; i++) {
+      const gt = Math.min(1, progress + i * 0.05);
+      if (gt < 0) continue;
+      const gx = origin + dir * reach * gt;
+      const gy = beamY + Math.sin(gt * Math.PI) * 2;
+      ctx.fillStyle = i % 3 === 0 ? "#0d0d1a" : color;
+      ctx.fillRect(gx - 1, gy, 2, 2);
+      // Drip
+      if (i % 2 === 0) {
+        ctx.fillStyle = "rgba(15,15,30,0.6)";
+        ctx.fillRect(gx, gy + 3, 1, 2);
+      }
+    }
+    return;
+  }
+
+  if (lc.includes("music") || lc.includes("audio") || lc.includes("sound")) {
+    // Concentric soundwave rings expanding outward
+    for (let i = 0; i < 3; i++) {
+      const ringT = (progress - i * 0.18);
+      if (ringT < 0 || ringT > 1) continue;
+      const radius = 6 * p + ringT * reach * 0.6;
+      const alpha = (1 - ringT) * 0.9;
+      const [cr, cg, cb] = hexToRgb(color);
+      ctx.strokeStyle = `rgba(${cr},${cg},${cb},${alpha})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(origin, beamY, radius, facing === "right" ? -Math.PI / 2 : Math.PI / 2, facing === "right" ? Math.PI / 2 : Math.PI * 1.5);
+      ctx.stroke();
+    }
+    return;
+  }
+
+  if (lc.includes("research") || lc.includes("science") || lc.includes("data")) {
+    // Orbital particle cluster traveling forward
+    const cx = origin + dir * reach * progress;
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - 1, beamY - 1, 2, 2);
+    for (let i = 0; i < 3; i++) {
+      const ang = t * 10 + (i * Math.PI * 2) / 3;
+      const r = 3 + Math.sin(t * 8) * 1.5;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(cx + Math.cos(ang) * r * p, beamY + Math.sin(ang) * r * p, 1, 1);
+    }
+    return;
+  }
+
+  // Default: classic pixel laser beam
+  const beamLen = reach * Math.min(1, (t - 0.3) / 0.4);
+  ctx.fillStyle = color;
+  ctx.fillRect(facing === "right" ? origin : origin - beamLen, beamY, beamLen, p);
+  ctx.fillStyle = accent;
+  ctx.fillRect(facing === "right" ? origin + beamLen : origin - beamLen - p, beamY, 2 * p, p);
+}
+
+/**
+ * Day / dusk / night sky gradient based on tournamentRound.
+ *   1 → day (cool blues)
+ *   2 → dusk (purples + orange horizon)
+ *   3 → night (deep blue + moon + extra stars)
+ * Drawn at the very back, only fills the sky region above the ground.
+ */
+function drawSky(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  groundY: number,
+  round: number | undefined,
+  frame: number,
+) {
+  if (!round || round < 1) return; // default canvas background already handles this
+  let topColor: string;
+  let midColor: string;
+  let botColor: string;
+  if (round === 1) {
+    topColor = "#1a2a4a";
+    midColor = "#2a3f68";
+    botColor = "#3a5680";
+  } else if (round === 2) {
+    topColor = "#2c1a40";
+    midColor = "#6a2a55";
+    botColor = "#d06a44";
+  } else {
+    topColor = "#050518";
+    midColor = "#0c1030";
+    botColor = "#181a40";
+  }
+  const grad = ctx.createLinearGradient(0, 0, 0, groundY);
+  grad.addColorStop(0, topColor);
+  grad.addColorStop(0.6, midColor);
+  grad.addColorStop(1, botColor);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, groundY);
+
+  if (round >= 3) {
+    // Moon at upper right
+    const mx = width - 48;
+    const my = 32;
+    ctx.fillStyle = "#e0d8c0";
+    ctx.beginPath();
+    ctx.arc(mx, my, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#0c1030";
+    ctx.beginPath();
+    ctx.arc(mx - 4, my - 2, 9, 0, Math.PI * 2);
+    ctx.fill();
+    // Extra twinkling stars
+    for (let i = 0; i < 25; i++) {
+      const sx = ((i * 71) % width);
+      const sy = ((i * 31) % (groundY - 80));
+      const twinkle = Math.floor((frame + i * 13) / 10) % 4 === 0 ? 2 : 1;
+      ctx.fillStyle = `rgba(255,255,255,${0.3 + (twinkle - 1) * 0.4})`;
+      ctx.fillRect(sx, sy + 5, twinkle, twinkle);
+    }
+  } else if (round === 2) {
+    // Setting sun at the horizon
+    ctx.fillStyle = "#ffb870";
+    ctx.beginPath();
+    ctx.arc(width * 0.7, groundY - 18, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,140,80,0.4)";
+    ctx.fillRect(width * 0.2, groundY - 4, width * 0.6, 2);
+  }
+}
+
+/**
+ * Category weather particles — persistent ambient streams that reinforce
+ * the arena theme. Lightweight procedural render (no particle system).
+ */
+function drawWeather(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  groundY: number,
+  category: BattleCategory | undefined,
+  frame: number,
+) {
+  if (!category) return;
+  const lc = String(category).toLowerCase();
+
+  if (lc.includes("code") || lc.includes("dev")) {
+    // Green matrix rain — vertical trails of 0s and 1s
+    ctx.font = "bold 10px monospace";
+    ctx.textAlign = "center";
+    for (let col = 0; col < 18; col++) {
+      const x = 20 + col * (width / 20);
+      const base = (frame * 2 + col * 73) % (groundY + 80);
+      for (let k = 0; k < 6; k++) {
+        const y = base - k * 12;
+        if (y < 0 || y > groundY) continue;
+        const alpha = (1 - k / 6) * 0.3;
+        ctx.fillStyle = `rgba(110,255,150,${alpha})`;
+        ctx.fillText((col + k) % 2 === 0 ? "1" : "0", x, y);
+      }
+    }
+    return;
+  }
+
+  if (lc.includes("art") || lc.includes("image") || lc.includes("design")) {
+    // Drifting pastel sparkles
+    const palette = ["#FF6B9D", "#FFC857", "#4ECDC4", "#B983FF", "#FF9A76"];
+    for (let i = 0; i < 14; i++) {
+      const drift = (frame * 0.4 + i * 37) % (width + 40);
+      const x = drift - 20;
+      const y = ((i * 23 + frame * 0.2) % (groundY - 40)) + 10;
+      const col = palette[i % palette.length];
+      const [pr, pg, pb] = hexToRgb(col);
+      const a = 0.3 + Math.sin(frame * 0.05 + i) * 0.2;
+      ctx.fillStyle = `rgba(${pr},${pg},${pb},${a})`;
+      ctx.fillRect(x, y, 2, 2);
+      ctx.fillStyle = "rgba(255,255,255,0.2)";
+      ctx.fillRect(x, y, 1, 1);
+    }
+    return;
+  }
+
+  if (lc.includes("text") || lc.includes("writ") || lc.includes("story")) {
+    // Floating paper scraps
+    for (let i = 0; i < 6; i++) {
+      const drift = (frame * 0.3 + i * 79) % (width + 40);
+      const x = width - drift;
+      const yBase = 30 + (i * 41) % (groundY - 80);
+      const y = yBase + Math.sin(frame * 0.04 + i) * 6;
+      ctx.fillStyle = "rgba(245,240,210,0.3)";
+      ctx.fillRect(x, y, 5, 4);
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(x + 1, y + 1, 3, 1);
+      ctx.fillRect(x + 1, y + 2, 2, 1);
+    }
+    return;
+  }
+
+  if (lc.includes("music") || lc.includes("audio") || lc.includes("sound")) {
+    // Pulsing bassline dots along the bottom
+    for (let i = 0; i < 30; i++) {
+      const x = (i * width) / 30;
+      const bass = Math.sin(frame * 0.15 + i * 0.4);
+      const radius = 1.5 + Math.max(0, bass) * 2;
+      ctx.fillStyle = `rgba(180,120,255,${0.15 + bass * 0.15})`;
+      ctx.beginPath();
+      ctx.arc(x, groundY - 14, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (lc.includes("research") || lc.includes("science") || lc.includes("data")) {
+    // Drifting lattice dots
+    ctx.fillStyle = "rgba(130,200,255,0.25)";
+    for (let i = 0; i < 20; i++) {
+      const x = (i * 41 + frame * 0.6) % width;
+      const y = 12 + ((i * 19) % (groundY - 40));
+      ctx.fillRect(x, y, 2, 2);
+    }
+    return;
   }
 }
