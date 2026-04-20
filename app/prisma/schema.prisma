@@ -3,8 +3,15 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // url      — runtime queries; typically pooled (pgbouncer) on
+  //             Neon/Supabase/Vercel Postgres
+  url       = env("DATABASE_URL")
+  // directUrl — schema migrations (prisma db push / migrate) cannot
+  //             run through a pgbouncer transaction-pooled connection.
+  //             Falls back to DATABASE_URL when DIRECT_URL isn't set
+  //             (handled by Prisma automatically).
+  directUrl = env("DIRECT_URL")
 }
 
 // ============================================================================

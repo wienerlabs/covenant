@@ -79,20 +79,33 @@ export async function GET(
       return NextResponse.json([]);
     }
 
-    // ---- 2. Lazy-load Prisma ----
+    // ---- 2. Lazy-load Prisma + ensure schema ----
     // If @/lib/prisma fails to evaluate (missing DATABASE_URL, broken
-    // generated client, etc.) we catch it here and serve empty instead
-    // of letting Next.js emit a 500.
+    // generated client, etc.) we catch it here and serve empty.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let prisma: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let ensureSchema: (() => Promise<void>) | null = null;
     try {
-      prisma = (await import("@/lib/prisma")).prisma;
+      const mod = await import("@/lib/prisma");
+      prisma = mod.prisma;
+      ensureSchema = mod.ensureSchema;
       if (!prisma) {
         throw new Error("prisma export missing from @/lib/prisma");
       }
     } catch (err) {
       console.error("[notifications] prisma import failed:", err);
       return NextResponse.json([]);
+    }
+
+    // Run idempotent schema migration to cover any production DB
+    // drift (e.g. Job.escrowAta missing) — failure is non-fatal.
+    if (ensureSchema) {
+      try {
+        await ensureSchema();
+      } catch (err) {
+        console.error("[notifications] ensureSchema failed:", err);
+      }
     }
 
     // ---- 3. Queries (each isolated) ----

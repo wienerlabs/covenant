@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureSchema } from "@/lib/prisma";
 import {
   fetchClaimListing,
   verifyTxInvokedCovenant,
@@ -29,6 +29,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   try {
+    await ensureSchema().catch(() => { /* non-fatal */ });
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") ?? "Listed";
     const sellerWallet = searchParams.get("sellerWallet");
@@ -186,6 +187,7 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
+    await ensureSchema().catch(() => { /* non-fatal */ });
     const body = await req.json();
     const { jobId, txSignature } = body as {
       jobId?: string;

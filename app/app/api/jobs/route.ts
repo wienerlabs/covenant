@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureSchema } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { rateLimit } from "@/lib/rateLimit";
 import crypto from "crypto";
@@ -14,6 +14,7 @@ import {
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureSchema().catch(() => { /* non-fatal */ });
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const poster = searchParams.get("poster");
@@ -91,6 +92,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  await ensureSchema().catch(() => { /* non-fatal */ });
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
   const rl = rateLimit(`jobs:${ip}`, 20);
   if (!rl.allowed) {

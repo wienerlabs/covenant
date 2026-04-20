@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureSchema } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
@@ -123,6 +123,12 @@ export async function POST(request: NextRequest) {
       }
 
       try {
+        // Make sure the DB schema is up-to-date before we touch any
+        // tables. If the production DB is behind schema.prisma (new
+        // columns / tables missing), ensureSchema runs idempotent
+        // ALTER / CREATE IF NOT EXISTS statements via raw SQL.
+        await ensureSchema();
+
         const client = new Anthropic();
         await ensureBattleProfiles();
 
@@ -192,6 +198,12 @@ export async function POST(request: NextRequest) {
         };
         const specHash = crypto.createHash("sha256").update(JSON.stringify(specJson)).digest("hex");
 
+        // Explicit `select:` — return ONLY fields we actually consume
+        // downstream. This protects against schema-drift on newer
+        // columns (escrowAta, pda, claim relation, etc.) that may
+        // not yet exist on the production DB when Prisma Client was
+        // generated from a newer schema. Without this, create() does
+        // SELECT * after INSERT and blows up on any missing column.
         const job = await prisma.job.create({
           data: {
             posterWallet: AGENT_ALPHA.wallet,
@@ -206,6 +218,7 @@ export async function POST(request: NextRequest) {
             status: "Accepted",
             takerWallet: AGENT_OMEGA.wallet,
           },
+          select: { id: true, amount: true, posterWallet: true, takerWallet: true },
         });
 
         let createTxHash: string | null = null;
