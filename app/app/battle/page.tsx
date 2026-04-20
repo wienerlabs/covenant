@@ -357,10 +357,28 @@ export default function BattlePage() {
   const [spectatorXpAwarded, setSpectatorXpAwarded] = useState<number>(0);
   const [eloLoading, setEloLoading] = useState(true);
 
-  /* ---- Prediction state ---- */
-  const [battleId] = useState<string>(() => `battle-${Date.now()}`);
+  /* ---- Prediction state ----
+     battleId is regenerated at each startBattle() so predictions, chat,
+     and server-side resolution stay scoped to the current round. (Audit
+     M5 / WHO WILL WIN): reusing a session-wide id leaked predictions
+     from battle N into battle N+1 and made 409 "Already predicted"
+     stick permanently. */
+  const [battleId, setBattleId] = useState<string>(() => `battle-${Date.now()}`);
   const [userPrediction, setUserPrediction] = useState<"alpha" | "omega" | null>(null);
   const [predictionStats, setPredictionStats] = useState<{ alphaPercent: number; omegaPercent: number; total: number }>({ alphaPercent: 50, omegaPercent: 50, total: 0 });
+
+  // Tournament auto-continue timeout — tracked via ref so we can cancel
+  // it from resetBattle / unmount (audit H2).
+  const tournamentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Always cancel on unmount so navigation away kills the timer.
+  useEffect(() => {
+    return () => {
+      if (tournamentTimeoutRef.current) {
+        clearTimeout(tournamentTimeoutRef.current);
+      }
+    };
+  }, []);
 
   /* ---- Spectator count ---- */
   const [viewerCount, setViewerCount] = useState<number>(1);
@@ -949,12 +967,10 @@ export default function BattlePage() {
             recordBattleResult(w);
           }, 500);
 
-          // Resolve predictions
-          fetch("/api/battle/predict", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ battleId, winner: w }),
-          }).catch(() => {});
+          // Prediction resolution is now handled server-side inside
+          // /api/battle/run after judging completes (audit C2/H4). The
+          // old frontend PATCH call was a no-op anyway because the
+          // battleId never matched arenaBattle.id.
         }
         // Tournament mode: track round wins and auto-continue
         if (tournamentMode && tournamentRound < 3) {
@@ -965,8 +981,12 @@ export default function BattlePage() {
           setTournamentScores(updatedScores);
           setTournamentRound((r) => r + 1);
           toast(`Round ${tournamentRound}/3 complete! ${w === "alpha" ? "Alpha" : "Omega"} wins this round.`, "info");
-          // Auto-start next round after a short delay
-          setTimeout(() => {
+          // Auto-start next round after a short delay. Store in a ref so
+          // resetBattle / unmount can cancel before it fires (audit H2).
+          if (tournamentTimeoutRef.current) {
+            clearTimeout(tournamentTimeoutRef.current);
+          }
+          tournamentTimeoutRef.current = setTimeout(() => {
             setChallenge(RANDOM_CHALLENGES[Math.floor(Math.random() * RANDOM_CHALLENGES.length)]);
             startBattle();
           }, 3000);
@@ -1011,11 +1031,20 @@ export default function BattlePage() {
         fireConfetti();
         break;
 
-      case "error":
+      case "error": {
         setPhase("setup");
         setRunning(false);
-        toast("Battle error occurred", "error");
+        // Surface the actual error detail instead of a generic toast
+        // (audit M3). Backend emits error detail in event.message.
+        const detail = event.message || "Battle error occurred";
+        toast(detail.slice(0, 140), "error");
+        // Stop any tournament auto-continue on error.
+        if (tournamentTimeoutRef.current) {
+          clearTimeout(tournamentTimeoutRef.current);
+          tournamentTimeoutRef.current = null;
+        }
         break;
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordBattleResult, battleId, tournamentMode, tournamentRound, tournamentScores]);
@@ -1025,6 +1054,31 @@ export default function BattlePage() {
   /* ================================================================ */
 
   async function startBattle() {
+    // Cancel any pending tournament auto-continue from a previous round
+    // so a rapid "Start again" doesn't double-fire (audit H2).
+    if (tournamentTimeoutRef.current) {
+      clearTimeout(tournamentTimeoutRef.current);
+      tournamentTimeoutRef.current = null;
+    }
+
+    // Tournament state hygiene (audit H1): if the previous tournament
+    // finished (round 3 complete) or tournament mode was disabled,
+    // reset round counter and scores before starting a new one. This
+    // prevents the "Tournament over!" toast from firing on what the
+    // user intends to be a single standalone battle.
+    const isTournamentStart =
+      tournamentMode && (tournamentRound >= 3 || tournamentRound < 1);
+    if (isTournamentStart || !tournamentMode) {
+      setTournamentRound(1);
+      setTournamentScores({ alpha: 0, omega: 0 });
+    }
+
+    // Fresh battleId for this battle (audit M5 / WHO WILL WIN).
+    const thisBattleId = `battle-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    setBattleId(thisBattleId);
+    setUserPrediction(null);
+    setPredictionStats({ alphaPercent: 50, omegaPercent: 50, total: 0 });
+
     // Reset everything
     setRunning(true);
     setPhase("fighting");
@@ -1074,6 +1128,7 @@ export default function BattlePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          battleId: thisBattleId,
           jobSpec: {
             title: challenge || undefined,
             category: selectedCategory,
@@ -1084,12 +1139,14 @@ export default function BattlePage() {
             name: selectedAlpha.name,
             systemPrompt: selectedAlpha.systemPrompt,
             model: selectedAlpha.model,
+            wallet: selectedAlpha.wallet || selectedAlpha.walletAddress,
           } : undefined,
           customOmega: useCustomAgents && selectedOmega ? {
             id: selectedOmega.id,
             name: selectedOmega.name,
             systemPrompt: selectedOmega.systemPrompt,
             model: selectedOmega.model,
+            wallet: selectedOmega.wallet || selectedOmega.walletAddress,
           } : undefined,
         }),
       });
@@ -1141,6 +1198,20 @@ export default function BattlePage() {
   }
 
   function resetBattle() {
+    // Cancel any pending tournament auto-continue (audit H2) so the
+    // user's "Back to lobby" click doesn't result in a rogue battle
+    // firing 3 seconds later.
+    if (tournamentTimeoutRef.current) {
+      clearTimeout(tournamentTimeoutRef.current);
+      tournamentTimeoutRef.current = null;
+    }
+    // Also reset tournament state so the next battle doesn't see stale
+    // round counters (audit H1).
+    setTournamentRound(1);
+    setTournamentScores({ alpha: 0, omega: 0 });
+    setUserPrediction(null);
+    setPredictionStats({ alphaPercent: 50, omegaPercent: 50, total: 0 });
+
     setPhase("setup");
     setRunning(false);
     setWinner(null);
