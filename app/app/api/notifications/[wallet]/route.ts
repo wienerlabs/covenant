@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 
+// Force Node.js runtime — Prisma does not run on Edge. Without this hint
+// Vercel can occasionally pick Edge for dynamic routes under the wrong
+// conditions and the whole module fails to initialize → opaque 500.
+export const runtime = "nodejs";
+
+// Dynamic so Next never tries to cache a (possibly failing) response.
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 interface Notification {
   id: string;
@@ -13,7 +19,7 @@ interface Notification {
   createdAt: string;
 }
 
-/** Wallet addresses are base58 32-44 chars — validate before querying. */
+/** Base58 wallet shape guard. */
 function looksLikeWallet(w: unknown): w is string {
   return typeof w === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w);
 }
@@ -40,38 +46,56 @@ function toIso(v: unknown): string {
 /**
  * GET /api/notifications/[wallet]
  *
- * Frontend polls this repeatedly; a 500 here storms the console and
- * the logs. We bias hard toward returning an empty array on ANY
- * failure — the endpoint is best-effort notifications, not a critical
- * data source.
+ * CONTRACT: this endpoint MUST NEVER return a 5xx. It is polled every
+ * few seconds by the frontend; a 500 floods both browser console and
+ * server logs. If anything goes wrong — missing env, broken Prisma
+ * client, schema drift, Edge runtime accident, unknown runtime error —
+ * we log it server-side and return `[]` to the client.
  *
- * Every internal step is individually try/catched AND the whole
- * function is wrapped in a top-level try/catch that returns `[]` on
- * unexpected errors (e.g. Prisma init failures, schema drift against
- * production DB, runtime module issues).
+ * Strategy:
+ *   1. Top-level try/catch wraps the entire handler body
+ *   2. Prisma is imported lazily INSIDE the try/catch so a module-load
+ *      failure of @/lib/prisma (e.g. generated client missing on an
+ *      edge-case deploy) is recoverable
+ *   3. Each individual Prisma query is isolated in its own try/catch
+ *   4. Each per-job row is processed in its own try/catch
+ *   5. Date coercion, number formatting, and wallet truncation never
+ *      throw on null / undefined / malformed input
  */
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ wallet: string }> },
 ) {
   try {
+    // ---- 1. Resolve params ----
     let wallet: string | undefined;
     try {
       const p = await params;
       wallet = p?.wallet;
     } catch {
-      // params resolution failed
+      /* fall through — wallet stays undefined → empty array */
     }
-
-    if (!wallet) {
-      return NextResponse.json([]);
-    }
-    if (!looksLikeWallet(wallet)) {
+    if (!wallet || !looksLikeWallet(wallet)) {
       return NextResponse.json([]);
     }
 
-    // Each query is isolated so a transient failure in one (e.g.
-    // schema drift on the production DB) doesn't take out the other.
+    // ---- 2. Lazy-load Prisma ----
+    // If @/lib/prisma fails to evaluate (missing DATABASE_URL, broken
+    // generated client, etc.) we catch it here and serve empty instead
+    // of letting Next.js emit a 500.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let prisma: any;
+    try {
+      prisma = (await import("@/lib/prisma")).prisma;
+      if (!prisma) {
+        throw new Error("prisma export missing from @/lib/prisma");
+      }
+    } catch (err) {
+      console.error("[notifications] prisma import failed:", err);
+      return NextResponse.json([]);
+    }
+
+    // ---- 3. Queries (each isolated) ----
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let jobs: any[] = [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -99,12 +123,11 @@ export async function GET(
       console.error("[notifications] transaction.findMany failed:", err);
     }
 
+    // ---- 4. Build notifications (per-row safety) ----
     const notifications: Notification[] = [];
-
-    // Per-row try/catch so one malformed row can't abort the whole loop.
     for (const job of jobs) {
       try {
-        if (!job || !job.id) continue;
+        if (!job || typeof job !== "object" || !job.id) continue;
         const shortTaker = shortWallet(job.takerWallet);
         const shortPoster = shortWallet(job.posterWallet);
         const isPoster = job.posterWallet === wallet;
@@ -183,7 +206,7 @@ export async function GET(
       }
     }
 
-    // Enrich with transaction hashes (best effort).
+    // ---- 5. Transaction hash enrichment (best effort) ----
     try {
       const txByJobAndType = new Map<string, string>();
       for (const tx of transactions) {
@@ -191,14 +214,14 @@ export async function GET(
           txByJobAndType.set(`${tx.type}_${tx.jobId}`, tx.txHash);
         }
       }
+      const typeMap: Record<string, string> = {
+        job_accepted: "accept_job",
+        job_completed: "submit_completion",
+        job_cancelled: "cancel_job",
+        job_created: "create_job",
+      };
       for (const n of notifications) {
         if (!n.txHash && n.jobId) {
-          const typeMap: Record<string, string> = {
-            job_accepted: "accept_job",
-            job_completed: "submit_completion",
-            job_cancelled: "cancel_job",
-            job_created: "create_job",
-          };
           const txType = typeMap[n.type];
           if (txType) {
             const hash = txByJobAndType.get(`${txType}_${n.jobId}`);
@@ -210,16 +233,28 @@ export async function GET(
       console.error("[notifications] tx enrichment failed:", err);
     }
 
-    notifications.sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+    // ---- 6. Sort + respond ----
+    try {
+      notifications.sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+    } catch {
+      /* sort failure → unsorted is fine */
+    }
 
     return NextResponse.json(notifications.slice(0, 20));
   } catch (err) {
-    // Absolute last resort — never let this endpoint 500 the frontend
-    // poll loop. Log + serve empty.
+    // Absolute last resort. Whatever happened, don't 500.
     console.error("[notifications] fatal:", err);
-    return NextResponse.json([]);
+    try {
+      return NextResponse.json([]);
+    } catch {
+      // Even JSON serialization failed — raw 200 body.
+      return new NextResponse("[]", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
   }
 }
