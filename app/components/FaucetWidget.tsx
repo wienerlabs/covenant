@@ -192,7 +192,7 @@ export default function FaucetWidget() {
             fontWeight: 600,
             textTransform: "uppercase",
             letterSpacing: "0.04em",
-            padding: "8px 16px",
+            padding: "8px 14px 8px 10px",
             cursor: "pointer",
             border: "1px solid rgba(255,255,255,0.2)",
             borderRadius: "20px",
@@ -200,8 +200,18 @@ export default function FaucetWidget() {
             backdropFilter: "blur(12px)",
             color: "rgba(255,255,255,0.7)",
             transition: "all 0.15s ease",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
           }}
         >
+          <img
+            src="/logos/usdc.svg"
+            alt="USDC"
+            width={18}
+            height={18}
+            style={{ display: "block", borderRadius: "50%" }}
+          />
           GET USDC
         </button>
       )}
