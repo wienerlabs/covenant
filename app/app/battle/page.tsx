@@ -3149,6 +3149,8 @@ export default function BattlePage() {
               omegaHP={omegaHP}
               width={700}
               height={220}
+              category={battleCategory}
+              viewerCount={viewerCount}
             />
           </div>
         )}

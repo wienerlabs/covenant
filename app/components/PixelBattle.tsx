@@ -8,6 +8,9 @@ import { useRef, useEffect, useCallback } from "react";
 
 type WarriorState = "idle" | "taunt" | "attack" | "hit" | "victory" | "defeat";
 
+/** High-level battle category — drives themed arena backdrop. */
+type BattleCategory = "code" | "art" | "text" | "music" | "research" | string;
+
 interface PixelBattleProps {
   alphaState: WarriorState;
   omegaState: WarriorState;
@@ -15,6 +18,10 @@ interface PixelBattleProps {
   omegaHP: number;
   width?: number;
   height?: number;
+  /** Battle category — drives themed arena backdrop (code grid / art palette / text paper). */
+  category?: BattleCategory;
+  /** Number of spectators — more viewers = denser crowd silhouettes. */
+  viewerCount?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -124,6 +131,39 @@ interface ComboState {
   lastHitFrame: number;
 }
 
+/** Single head in the pixel-crowd silhouette at the bottom of the arena. */
+interface CrowdHead {
+  x: number;
+  y: number;
+  /** Height of the head block (6-9 px). */
+  size: number;
+  /** Independent phase so each head bobs slightly differently. */
+  phase: number;
+  /** Remaining frames of the current reaction hop (0 = idle). */
+  hop: number;
+  /** Whether this head is currently raising arms (victory reaction). */
+  cheering: number;
+}
+
+/** Pulsing ring that represents a wave of crowd noise. */
+interface ChantRing {
+  x: number;
+  y: number;
+  /** Age in frames; radius grows with age. */
+  age: number;
+  /** Max age before removal. */
+  maxAge: number;
+  color: string;
+}
+
+/** Full-screen flash overlay (lightning for crits / victory). */
+interface ScreenFlash {
+  age: number;
+  maxAge: number;
+  color: string;
+  intensity: number;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -135,6 +175,8 @@ export default function PixelBattle({
   omegaHP,
   width = 600,
   height = 200,
+  category,
+  viewerCount = 0,
 }: PixelBattleProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
@@ -172,6 +214,20 @@ export default function PixelBattle({
   const alphaSweatRef = useRef(0);
   const omegaSweatRef = useRef(0);
 
+  // Pixel crowd silhouettes along the bottom of the arena. Lazily initialized
+  // on first draw so dimensions / viewerCount are known.
+  const crowdRef = useRef<CrowdHead[] | null>(null);
+
+  // Parallax mountain / skyline silhouettes (3 layers). Generated once.
+  const mountainsRef = useRef<{ near: number[]; mid: number[]; far: number[] } | null>(null);
+
+  // Pulsing chant rings (ambient crowd noise waves).
+  const chantRingsRef = useRef<ChantRing[]>([]);
+  const lastChantFrameRef = useRef(0);
+
+  // Lightning / victory screen flashes.
+  const flashesRef = useRef<ScreenFlash[]>([]);
+
   /** Drop a small cluster of ground-crack pixels near a warrior's feet. */
   const spawnCrack = useCallback(
     (x: number, y: number, color: string, intensity: number) => {
@@ -206,6 +262,40 @@ export default function PixelBattle({
       size: 2,
       type: "dust",
     });
+  }, []);
+
+  /** Queue a full-screen flash (lightning on crit, color-tinted on victory). */
+  const triggerFlash = useCallback((color: string, intensity: number, duration = 12) => {
+    flashesRef.current.push({ age: 0, maxAge: duration, color, intensity });
+    // Only keep latest 3 to avoid stacking.
+    while (flashesRef.current.length > 3) flashesRef.current.shift();
+  }, []);
+
+  /** Spawn a pulsing chant ring somewhere behind the action (ambient noise wave). */
+  const spawnChantRing = useCallback(
+    (x: number, y: number, color: string) => {
+      chantRingsRef.current.push({
+        x,
+        y,
+        age: 0,
+        maxAge: 60,
+        color,
+      });
+      while (chantRingsRef.current.length > 6) chantRingsRef.current.shift();
+    },
+    [],
+  );
+
+  /** Trigger a crowd reaction (hop on hit, cheer on victory). */
+  const reactCrowd = useCallback((kind: "hop" | "cheer") => {
+    const crowd = crowdRef.current;
+    if (!crowd) return;
+    for (const head of crowd) {
+      if (Math.random() < (kind === "cheer" ? 0.7 : 0.45)) {
+        if (kind === "cheer") head.cheering = 60 + Math.floor(Math.random() * 20);
+        else head.hop = 8 + Math.floor(Math.random() * 4);
+      }
+    }
   }, []);
 
   const spawnParticles = useCallback(
@@ -318,6 +408,10 @@ export default function PixelBattle({
 
           // Persistent ground crack at victim's feet.
           spawnCrack(alphaBaseX + 8 * p, groundY + 1, ALPHA_COLOR, dmg);
+
+          // Atmosphere reactions — lightning flash on crit, crowd hop on any hit.
+          if (isCrit) triggerFlash("#ffffff", 0.45, 8);
+          reactCrowd("hop");
         }
         if (alphaState === "victory") {
           // Victory star burst — more particles for celebration
@@ -327,6 +421,8 @@ export default function PixelBattle({
             x: alphaBaseX + 2 * p, y: warriorBaseY - 20 * p,
             text: "VICTORY", color: GOLD_COLOR, life: 80, maxLife: 80,
           });
+          triggerFlash(ALPHA_COLOR, 0.5, 18);
+          reactCrowd("cheer");
         }
         if (alphaState === "defeat") {
           // Pixel scatter death — more dust particles erupting
@@ -399,6 +495,9 @@ export default function PixelBattle({
           }
 
           spawnCrack(omegaBaseX - 8 * p, groundY + 1, OMEGA_COLOR, dmg);
+
+          if (isCrit) triggerFlash("#ffffff", 0.45, 8);
+          reactCrowd("hop");
         }
         if (omegaState === "victory") {
           spawnParticles(omegaBaseX - 8 * p, warriorBaseY - 10 * p, 25, "star", GOLD_COLOR);
@@ -407,6 +506,8 @@ export default function PixelBattle({
             x: omegaBaseX - 14 * p, y: warriorBaseY - 20 * p,
             text: "VICTORY", color: GOLD_COLOR, life: 80, maxLife: 80,
           });
+          triggerFlash(OMEGA_COLOR, 0.5, 18);
+          reactCrowd("cheer");
         }
         if (omegaState === "defeat") {
           spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 10 * p, 20, "dust", OMEGA_COLOR);
@@ -456,6 +557,51 @@ export default function PixelBattle({
           type: "dust",
         });
       }
+
+      /* ---- Parallax mountain / skyline layers (initialized lazily) ---- */
+      if (!mountainsRef.current) {
+        mountainsRef.current = generateMountains(width, height);
+      }
+      drawMountains(ctx, mountainsRef.current, width, height, groundY, frame, shakeX);
+
+      /* ---- Category-themed arena backdrop (code grid / art palette / text paper) ---- */
+      drawCategoryBackdrop(ctx, width, height, groundY, category, frame);
+
+      /* ---- Ambient chant rings (crowd noise waves) ---- */
+      // Spawn a new ring every ~70 frames, scaled by viewerCount presence.
+      if (viewerCount > 0 && frame - lastChantFrameRef.current > 70) {
+        const side = Math.random() < 0.5 ? 0.15 : 0.85;
+        spawnChantRing(
+          width * side,
+          groundY - 30 - Math.random() * 30,
+          Math.random() < 0.5 ? ALPHA_COLOR : OMEGA_COLOR,
+        );
+        lastChantFrameRef.current = frame;
+      }
+      // Update + draw rings
+      const aliveRings: ChantRing[] = [];
+      for (const ring of chantRingsRef.current) {
+        ring.age++;
+        if (ring.age < ring.maxAge) {
+          const t = ring.age / ring.maxAge;
+          const radius = 6 + t * 42;
+          const alpha = (1 - t) * 0.22;
+          const [rr, rg, rb] = hexToRgb(ring.color);
+          ctx.strokeStyle = `rgba(${rr},${rg},${rb},${alpha})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(ring.x, ring.y, radius, 0, Math.PI * 2);
+          ctx.stroke();
+          aliveRings.push(ring);
+        }
+      }
+      chantRingsRef.current = aliveRings;
+
+      /* ---- Pixel crowd silhouettes (near ground, in front of mountains) ---- */
+      if (!crowdRef.current) {
+        crowdRef.current = generateCrowd(width, groundY, viewerCount);
+      }
+      drawCrowd(ctx, crowdRef.current, frame);
 
       /* ---- Draw ground line + texture ---- */
       // Ground shadow gradient
@@ -640,6 +786,23 @@ export default function PixelBattle({
       /* ---- Close screen shake transform ---- */
       ctx.restore();
 
+      /* ---- Lightning / victory flashes (full-screen tint overlay) ---- */
+      const aliveFlashes: ScreenFlash[] = [];
+      for (const f of flashesRef.current) {
+        f.age++;
+        if (f.age < f.maxAge) {
+          const t = f.age / f.maxAge;
+          // Fast attack, slower decay — classic lightning feel.
+          const envelope = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
+          const a = Math.max(0, envelope) * f.intensity;
+          const [fr, fg, fb] = hexToRgb(f.color);
+          ctx.fillStyle = `rgba(${fr},${fg},${fb},${a})`;
+          ctx.fillRect(0, 0, width, height);
+          aliveFlashes.push(f);
+        }
+      }
+      flashesRef.current = aliveFlashes;
+
       /* ---- CRT scanline overlay ---- */
       ctx.save();
       ctx.globalAlpha = 0.04;
@@ -659,6 +822,11 @@ export default function PixelBattle({
       spawnParticles,
       spawnCrack,
       spawnSweat,
+      category,
+      viewerCount,
+      triggerFlash,
+      spawnChantRing,
+      reactCrowd,
     ],
   );
 
@@ -1058,4 +1226,239 @@ function drawWarrior(
   }
 
   ctx.restore();
+}
+
+/* ================================================================== */
+/*  Atmosphere: parallax mountains, crowd silhouettes, themed arena    */
+/* ================================================================== */
+
+/**
+ * Generate three parallax layers of mountain / skyline pixel heights.
+ * Each layer is an array of column heights; draw fills up from the ground.
+ */
+function generateMountains(
+  width: number,
+  _height: number,
+): { near: number[]; mid: number[]; far: number[] } {
+  void _height;
+  function seedRand(seed: number): () => number {
+    let s = seed >>> 0;
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 0xffffffff;
+    };
+  }
+  function buildRidge(columns: number, peakRange: [number, number], seed: number): number[] {
+    const rand = seedRand(seed);
+    const out: number[] = [];
+    let h = peakRange[0] + rand() * (peakRange[1] - peakRange[0]);
+    for (let i = 0; i < columns; i++) {
+      h += (rand() - 0.5) * (peakRange[1] - peakRange[0]) * 0.35;
+      h = Math.max(peakRange[0], Math.min(peakRange[1], h));
+      out.push(Math.round(h));
+    }
+    return out;
+  }
+  const cols = Math.ceil(width / 2);
+  return {
+    far: buildRidge(cols, [14, 30], 11),
+    mid: buildRidge(cols, [22, 52], 7),
+    near: buildRidge(cols, [34, 70], 3),
+  };
+}
+
+/** Draw parallax mountains. Shake dampens per-layer (far layers barely move). */
+function drawMountains(
+  ctx: CanvasRenderingContext2D,
+  m: { near: number[]; mid: number[]; far: number[] },
+  width: number,
+  height: number,
+  groundY: number,
+  frame: number,
+  shakeX: number,
+) {
+  // Subtle horizontal scroll — arena feels alive even when sprites are idle.
+  const scroll = (frame * 0.05) % width;
+  const layers: Array<{ data: number[]; color: string; shakeMul: number; scrollMul: number }> = [
+    { data: m.far, color: "#181a35", shakeMul: 0.1, scrollMul: 0.2 },
+    { data: m.mid, color: "#222450", shakeMul: 0.35, scrollMul: 0.5 },
+    { data: m.near, color: "#2d2f66", shakeMul: 0.7, scrollMul: 1 },
+  ];
+  for (const layer of layers) {
+    const sx = -shakeX * layer.shakeMul;
+    ctx.fillStyle = layer.color;
+    for (let i = 0; i < layer.data.length; i++) {
+      const x = (i * 2 + sx + scroll * layer.scrollMul) % width;
+      const finalX = x < 0 ? x + width : x;
+      const h = layer.data[i];
+      ctx.fillRect(finalX, groundY - h, 2, h);
+    }
+  }
+  // Tiny dotted stars in the far layer sky
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  for (let i = 0; i < 18; i++) {
+    const sx = ((i * 47) + (frame >> 5)) % width;
+    const sy = ((i * 29) % (height - 90)) + 6;
+    ctx.fillRect(sx, sy, 1, 1);
+  }
+}
+
+/**
+ * Category-themed backdrop overlays a subtle pattern so different battle
+ * categories feel visually distinct. Low opacity so it never upstages the
+ * warriors.
+ */
+function drawCategoryBackdrop(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  groundY: number,
+  category: BattleCategory | undefined,
+  frame: number,
+) {
+  if (!category) return;
+  const lc = String(category).toLowerCase();
+
+  if (lc.includes("code")) {
+    // Green terminal grid
+    ctx.strokeStyle = "rgba(80,220,120,0.08)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < width; x += 24) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, groundY);
+      ctx.stroke();
+    }
+    for (let y = 0; y < groundY; y += 24) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+    // Occasional scrolling "01" glyphs
+    ctx.fillStyle = "rgba(120,255,160,0.14)";
+    ctx.font = "bold 9px monospace";
+    for (let i = 0; i < 8; i++) {
+      const x = (i * 83 + (frame * 0.4)) % width;
+      const y = ((i * 37 + frame * 0.3) % (groundY - 20)) + 10;
+      ctx.fillText(i % 2 === 0 ? "10" : "01", x, y);
+    }
+  } else if (lc.includes("art") || lc.includes("image") || lc.includes("design")) {
+    // Soft color splotches — artist palette vibe
+    const palette = ["#FF6B9D", "#FFC857", "#4ECDC4", "#B983FF", "#FF9A76"];
+    for (let i = 0; i < 5; i++) {
+      const px = ((i * 137 + (frame * 0.12)) % (width + 80)) - 40;
+      const py = 20 + ((i * 53) % (groundY - 60));
+      const r = 22 + (i % 3) * 6;
+      const col = palette[i % palette.length];
+      const [pr, pg, pb] = hexToRgb(col);
+      ctx.fillStyle = `rgba(${pr},${pg},${pb},0.08)`;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (lc.includes("text") || lc.includes("writ") || lc.includes("story")) {
+    // Faint horizontal paper-lines
+    ctx.fillStyle = "rgba(255,255,255,0.04)";
+    for (let y = 30; y < groundY; y += 14) {
+      ctx.fillRect(20, y, width - 40, 1);
+    }
+    // Drifting quill-tick marks
+    ctx.fillStyle = "rgba(255,240,200,0.14)";
+    for (let i = 0; i < 5; i++) {
+      const x = ((i * 191 + frame * 0.25) % width);
+      const y = 30 + ((i * 37) % (groundY - 50));
+      ctx.fillRect(x, y, 2, 1);
+      ctx.fillRect(x + 3, y + 1, 3, 1);
+    }
+  } else if (lc.includes("music") || lc.includes("audio") || lc.includes("sound")) {
+    // EQ-style vertical bars pulsing in the bg
+    ctx.fillStyle = "rgba(180,120,255,0.08)";
+    const bars = 32;
+    const barW = Math.floor(width / bars);
+    for (let i = 0; i < bars; i++) {
+      const h = 10 + Math.abs(Math.sin(frame * 0.05 + i * 0.3)) * 60;
+      ctx.fillRect(i * barW, groundY - h, barW - 1, h);
+    }
+  } else if (lc.includes("research") || lc.includes("science") || lc.includes("data")) {
+    // Molecular / lattice dots
+    ctx.fillStyle = "rgba(130,200,255,0.14)";
+    for (let y = 16; y < groundY; y += 18) {
+      for (let x = 16; x < width; x += 18) {
+        const off = Math.sin(frame * 0.04 + x * 0.1 + y * 0.1) * 2;
+        ctx.fillRect(x + off, y, 2, 2);
+      }
+    }
+  }
+  // Height param reserved for future ceiling FX.
+  void height;
+}
+
+/** Generate deterministic crowd head positions scaled by viewer count. */
+function generateCrowd(width: number, groundY: number, viewerCount: number): CrowdHead[] {
+  const baseCount = 14;
+  const bonus = Math.min(22, Math.floor(Math.log2(Math.max(1, viewerCount)) * 4));
+  const count = baseCount + bonus;
+  const heads: CrowdHead[] = [];
+  // Seeded pseudo-random for reproducibility across renders.
+  let s = 0xC0FFEE;
+  const rand = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0xffffffff;
+  };
+  for (let i = 0; i < count; i++) {
+    const x = rand() * (width - 8);
+    // Tight stagger right above the ground.
+    const y = groundY - 6 - Math.floor(rand() * 4);
+    const size = 6 + Math.floor(rand() * 3);
+    heads.push({
+      x,
+      y,
+      size,
+      phase: rand() * Math.PI * 2,
+      hop: 0,
+      cheering: 0,
+    });
+  }
+  // Sort by x so drawing is left→right (stable visual order).
+  heads.sort((a, b) => a.x - b.x);
+  return heads;
+}
+
+/** Draw the pixel-silhouette crowd. Hops on hits, raises arms on cheer. */
+function drawCrowd(ctx: CanvasRenderingContext2D, heads: CrowdHead[], frame: number) {
+  for (const head of heads) {
+    // Idle gentle bob
+    const bob = Math.sin(frame * 0.04 + head.phase) * 0.6;
+    let liftY = bob;
+    // Hop reaction on hits
+    if (head.hop > 0) {
+      liftY -= Math.sin((1 - head.hop / 12) * Math.PI) * 5;
+      head.hop--;
+    }
+    // Cheer — raised arms + steady float
+    const cheer = head.cheering > 0;
+    if (cheer) {
+      liftY -= 2 + Math.sin(frame * 0.2 + head.phase) * 1.2;
+      head.cheering--;
+    }
+    const hx = Math.round(head.x);
+    const hy = Math.round(head.y + liftY);
+
+    // Body (shoulders) — darker underlay
+    ctx.fillStyle = "#111126";
+    ctx.fillRect(hx - 1, hy + head.size - 2, head.size + 2, 3);
+    // Head
+    ctx.fillStyle = "#1d1f40";
+    ctx.fillRect(hx, hy, head.size, head.size - 2);
+    // Tiny highlight pixel (eye)
+    ctx.fillStyle = cheer ? "#ffd24a" : "rgba(255,255,255,0.3)";
+    ctx.fillRect(hx + 1, hy + 2, 1, 1);
+    // Raised arms on cheer — two pixel sticks pointing up
+    if (cheer) {
+      ctx.fillStyle = "#1d1f40";
+      ctx.fillRect(hx - 1, hy - 2, 1, 3);
+      ctx.fillRect(hx + head.size, hy - 2, 1, 3);
+    }
+  }
 }
