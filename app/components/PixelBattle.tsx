@@ -6,7 +6,15 @@ import { useRef, useEffect, useCallback } from "react";
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type WarriorState = "idle" | "taunt" | "attack" | "hit" | "victory" | "defeat";
+type WarriorState =
+  | "idle"
+  | "taunt"
+  | "attack"
+  | "hit"
+  | "victory"
+  | "defeat"
+  /** Sprite side-steps the incoming hit, leaving a translucent afterimage. */
+  | "dodge";
 
 /** High-level battle category — drives themed arena backdrop. */
 type BattleCategory = "code" | "art" | "text" | "music" | "research" | string;
@@ -22,6 +30,9 @@ interface PixelBattleProps {
   category?: BattleCategory;
   /** Number of spectators — more viewers = denser crowd silhouettes. */
   viewerCount?: number;
+  /** Per-agent category — drives weapon/tool overlay (brush, keyboard, pen, note, atom). */
+  alphaCategory?: BattleCategory;
+  omegaCategory?: BattleCategory;
 }
 
 /* ------------------------------------------------------------------ */
@@ -40,6 +51,12 @@ const COMBO_WINDOW = 90;
 const CRIT_THRESHOLD = 18;
 /** Max accumulated cracks per side (older ones get recycled). */
 const MAX_CRACKS = 40;
+
+/** Walk-on intro length in frames (~60fps → 1 second). */
+const INTRO_DURATION = 60;
+
+/** Freeze-frame length when a KO blow lands (~0.4s). */
+const FREEZE_DURATION = 24;
 
 /* ------------------------------------------------------------------ */
 /*  Color helpers                                                      */
@@ -177,6 +194,8 @@ export default function PixelBattle({
   height = 200,
   category,
   viewerCount = 0,
+  alphaCategory,
+  omegaCategory,
 }: PixelBattleProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
@@ -227,6 +246,31 @@ export default function PixelBattle({
 
   // Lightning / victory screen flashes.
   const flashesRef = useRef<ScreenFlash[]>([]);
+
+  // Walk-on intro — runs on mount. Sprites slide in from the edges, pose,
+  // then settle. Zero = first-frame; increments each frame to INTRO_DURATION.
+  const introFrameRef = useRef(0);
+  /** One-shot guard for the "FIGHT!" banner that plays when the intro ends. */
+  const didShowFightRef = useRef(false);
+
+  // KO freeze frame — when victory/defeat first fires, freeze animations for
+  // FREEZE_DURATION frames so the decisive blow lingers.
+  const freezeUntilRef = useRef(-1);
+
+  // Clash detection — guarded frame counter so the banner only fires once
+  // per simultaneous attack window.
+  const lastClashFrameRef = useRef(-999);
+
+  // Afterimage ghosts left behind by dodges.
+  const afterimagesRef = useRef<Array<{
+    x: number;
+    y: number;
+    color: string;
+    sprite: number[][];
+    facing: "left" | "right";
+    age: number;
+    maxAge: number;
+  }>>([]);
 
   /** Drop a small cluster of ground-crack pixels near a warrior's feet. */
   const spawnCrack = useCallback(
@@ -423,12 +467,39 @@ export default function PixelBattle({
           });
           triggerFlash(ALPHA_COLOR, 0.5, 18);
           reactCrowd("cheer");
+          // KO freeze — let the decisive blow linger
+          freezeUntilRef.current = frame + FREEZE_DURATION;
         }
         if (alphaState === "defeat") {
           // Pixel scatter death — more dust particles erupting
           spawnParticles(alphaBaseX + 8 * p, warriorBaseY + 10 * p, 20, "dust", ALPHA_COLOR);
           spawnParticles(alphaBaseX + 8 * p, warriorBaseY + 5 * p, 10, "spark", ALPHA_COLOR);
           shakeRef.current.intensity = 5;
+          freezeUntilRef.current = frame + FREEZE_DURATION;
+        }
+        if (alphaState === "dodge") {
+          // Push an afterimage ghost at Alpha's previous position
+          const walkFrame = Math.floor(frame / 10) % 2 === 0;
+          const sprite = walkFrame ? SPRITE_ALPHA_WALK : SPRITE_ALPHA;
+          afterimagesRef.current.push({
+            x: alphaBaseX,
+            y: warriorBaseY,
+            color: ALPHA_COLOR,
+            sprite,
+            facing: "right",
+            age: 0,
+            maxAge: 22,
+          });
+          floatingTextsRef.current.push({
+            x: alphaBaseX + 8 * p,
+            y: warriorBaseY - 8 * p,
+            text: "MISS!",
+            color: "#ffffff",
+            life: 35,
+            maxLife: 35,
+            scale: 1.6,
+          });
+          spawnParticles(alphaBaseX + 8 * p, warriorBaseY + 4 * p, 6, "dust", ALPHA_COLOR);
         }
         prevAlphaRef.current = alphaState;
       }
@@ -508,13 +579,67 @@ export default function PixelBattle({
           });
           triggerFlash(OMEGA_COLOR, 0.5, 18);
           reactCrowd("cheer");
+          freezeUntilRef.current = frame + FREEZE_DURATION;
         }
         if (omegaState === "defeat") {
           spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 10 * p, 20, "dust", OMEGA_COLOR);
           spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 5 * p, 10, "spark", OMEGA_COLOR);
           shakeRef.current.intensity = 5;
+          freezeUntilRef.current = frame + FREEZE_DURATION;
+        }
+        if (omegaState === "dodge") {
+          const walkFrame = Math.floor(frame / 10) % 2 === 0;
+          const sprite = walkFrame ? SPRITE_OMEGA_WALK : SPRITE_OMEGA;
+          afterimagesRef.current.push({
+            x: omegaBaseX,
+            y: warriorBaseY,
+            color: OMEGA_COLOR,
+            sprite,
+            facing: "left",
+            age: 0,
+            maxAge: 22,
+          });
+          floatingTextsRef.current.push({
+            x: omegaBaseX - 8 * p,
+            y: warriorBaseY - 8 * p,
+            text: "MISS!",
+            color: "#ffffff",
+            life: 35,
+            maxLife: 35,
+            scale: 1.6,
+          });
+          spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 4 * p, 6, "dust", OMEGA_COLOR);
         }
         prevOmegaRef.current = omegaState;
+      }
+
+      /* ---- Clash detection — both warriors attacking at the same time ---- */
+      if (
+        alphaState === "attack" &&
+        omegaState === "attack" &&
+        frame - lastClashFrameRef.current > 45
+      ) {
+        const aElapsed = frame - alphaAnimRef.current.startFrame;
+        const oElapsed = frame - omegaAnimRef.current.startFrame;
+        // Both near their impact frame (t ~0.5)
+        if (aElapsed > 10 && aElapsed < 16 && oElapsed > 10 && oElapsed < 16) {
+          lastClashFrameRef.current = frame;
+          const mx = (alphaBaseX + omegaBaseX) / 2;
+          const my = warriorBaseY + 4 * p;
+          floatingTextsRef.current.push({
+            x: mx,
+            y: my - 18 * p,
+            text: "CLASH!",
+            color: GOLD_COLOR,
+            life: 45,
+            maxLife: 45,
+            scale: 2,
+          });
+          spawnParticles(mx, my, 24, "spark", GOLD_COLOR);
+          spawnParticles(mx, my, 10, "star", "#ffffff");
+          shakeRef.current.intensity = 12;
+          triggerFlash("#ffffff", 0.3, 6);
+        }
       }
 
       /* ---- Update animation progress ---- */
@@ -697,10 +822,49 @@ export default function PixelBattle({
         p,
       );
 
+      /* ---- Walk-on intro: both sprites slide in from the edges over INTRO_DURATION frames ---- */
+      introFrameRef.current = Math.min(INTRO_DURATION, introFrameRef.current + 1);
+      const introT = introFrameRef.current / INTRO_DURATION;
+      // Ease-out so arrivals decelerate into their final spots.
+      const introEase = 1 - Math.pow(1 - introT, 3);
+      const alphaIntroX = alphaBaseX - (1 - introEase) * alphaBaseX - 20 * p * (1 - introEase);
+      const omegaIntroX = omegaBaseX + (1 - introEase) * (width - omegaBaseX) + 20 * p * (1 - introEase);
+
+      /* ---- Draw afterimages left behind by dodges ---- */
+      const aliveImages: typeof afterimagesRef.current = [];
+      for (const im of afterimagesRef.current) {
+        im.age++;
+        if (im.age < im.maxAge) {
+          const alpha = (1 - im.age / im.maxAge) * 0.5;
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          const spriteW = im.sprite[0].length;
+          const spriteH = im.sprite.length;
+          const drawX = im.x - (spriteW * p) / 2;
+          const drawY = im.y - (spriteH * p) / 2 + 4 * p;
+          if (im.facing === "left") {
+            ctx.translate(im.x, 0);
+            ctx.scale(-1, 1);
+            ctx.translate(-im.x, 0);
+          }
+          const [cr, cg, cb] = hexToRgb(im.color);
+          ctx.fillStyle = `rgba(${cr},${cg},${cb},1)`;
+          for (let row = 0; row < spriteH; row++) {
+            for (let col = 0; col < spriteW; col++) {
+              if (im.sprite[row][col] === 0) continue;
+              ctx.fillRect(drawX + col * p, drawY + row * p, p, p);
+            }
+          }
+          ctx.restore();
+          aliveImages.push(im);
+        }
+      }
+      afterimagesRef.current = aliveImages;
+
       /* ---- Draw Warriors ---- */
       drawWarrior(
         ctx,
-        alphaBaseX,
+        alphaIntroX,
         warriorBaseY,
         ALPHA_COLOR,
         "right",
@@ -708,13 +872,14 @@ export default function PixelBattle({
         frame,
         alphaAnimRef.current,
         p,
-        omegaBaseX,
+        omegaIntroX,
         alphaHP,
+        alphaCategory,
       );
 
       drawWarrior(
         ctx,
-        omegaBaseX,
+        omegaIntroX,
         warriorBaseY,
         OMEGA_COLOR,
         "left",
@@ -722,9 +887,28 @@ export default function PixelBattle({
         frame,
         omegaAnimRef.current,
         p,
-        alphaBaseX,
+        alphaIntroX,
         omegaHP,
+        omegaCategory,
       );
+
+      /* ---- INTRO banner: fire "FIGHT!" once when the walk-on finishes ---- */
+      if (
+        introFrameRef.current === INTRO_DURATION &&
+        !didShowFightRef.current
+      ) {
+        didShowFightRef.current = true;
+        floatingTextsRef.current.push({
+          x: width / 2,
+          y: warriorBaseY - 14 * p,
+          text: "FIGHT!",
+          color: GOLD_COLOR,
+          life: 55,
+          maxLife: 55,
+          scale: 2.5,
+        });
+        spawnParticles(width / 2, warriorBaseY - 6 * p, 10, "spark", GOLD_COLOR);
+      }
 
       /* ---- Update and draw particles ---- */
       const aliveParticles: Particle[] = [];
@@ -827,6 +1011,8 @@ export default function PixelBattle({
       triggerFlash,
       spawnChantRing,
       reactCrowd,
+      alphaCategory,
+      omegaCategory,
     ],
   );
 
@@ -840,8 +1026,17 @@ export default function PixelBattle({
     // Disable image smoothing for crisp pixels
     ctx.imageSmoothingEnabled = false;
 
+    // During a KO freeze frame we only advance the game clock on 1 of every 3
+    // RAF ticks — produces a "bullet-time" slowdown instead of a hard pause.
+    let freezeCounter = 0;
     function animate() {
-      frameRef.current++;
+      const inFreeze = frameRef.current < freezeUntilRef.current;
+      if (inFreeze) {
+        freezeCounter = (freezeCounter + 1) % 3;
+        if (freezeCounter === 0) frameRef.current++;
+      } else {
+        frameRef.current++;
+      }
       draw(ctx!);
       rafRef.current = requestAnimationFrame(animate);
     }
@@ -1009,11 +1204,14 @@ function drawWarrior(
   opponentX: number,
   /** Current HP (0-100) — drives panting amplitude + low-HP eye recolor. */
   hp: number,
+  /** Agent category (code/art/text/music/research) — drives tool overlay. */
+  agentCategory?: BattleCategory,
 ) {
   const dark = darken(color, 40);
   const dir = facing === "right" ? 1 : -1;
   const elapsed = frame - animState.startFrame;
   const lowHP = hp > 0 && hp < 30;
+  const lastStand = hp > 0 && hp < 15;
 
   /* ---- Compute offsets based on state ---- */
   let offsetX = 0;
@@ -1075,6 +1273,14 @@ function drawWarrior(
       scaleY = 1 - 0.3 * t;
       break;
     }
+    case "dodge": {
+      const t = Math.min(1, elapsed / 20);
+      // Side-step backward, bounce, then return. Ghost is drawn separately.
+      offsetX = -dir * 22 * p * Math.sin(t * Math.PI);
+      offsetY = -6 * p * Math.sin(t * Math.PI * 2);
+      scaleX = 1 - 0.08 * Math.sin(t * Math.PI);
+      break;
+    }
   }
 
   // Choose sprite based on creature type + walk cycle
@@ -1116,6 +1322,51 @@ function drawWarrior(
     ctx.beginPath();
     ctx.arc(bx, by + 4 * p, spriteW * p * 0.7, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  /* ---- Last Stand (RAGE) aura — pulsing fire-red halo when HP<15 ---- */
+  if (lastStand && state !== "defeat") {
+    const pulse = 0.35 + 0.25 * Math.sin(frame * 0.22);
+    const radius = spriteW * p * (0.65 + 0.08 * Math.sin(frame * 0.18));
+    const grad = ctx.createRadialGradient(
+      bx,
+      by + 4 * p,
+      radius * 0.3,
+      bx,
+      by + 4 * p,
+      radius,
+    );
+    grad.addColorStop(0, `rgba(255,90,40,${pulse * 0.8})`);
+    grad.addColorStop(0.5, `rgba(255,160,40,${pulse * 0.5})`);
+    grad.addColorStop(1, "rgba(255,200,40,0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(bx, by + 4 * p, radius, 0, Math.PI * 2);
+    ctx.fill();
+    // Ember particles — not spawned here (would need spawnParticles), just
+    // draw a few drifting pixel embers locked to the aura.
+    for (let i = 0; i < 5; i++) {
+      const ang = frame * 0.08 + (i * Math.PI * 2) / 5;
+      const r = radius * 0.72 + Math.sin(frame * 0.15 + i) * 2;
+      ctx.fillStyle = i % 2 === 0 ? "#FFC040" : "#FF6020";
+      ctx.fillRect(
+        bx + Math.cos(ang) * r - 1,
+        by + 4 * p + Math.sin(ang) * r - 1,
+        2,
+        2,
+      );
+    }
+    // RAGE label floats above on peak pulses (every 60 frames).
+    if (frame % 60 === 0) {
+      ctx.save();
+      ctx.font = "bold 9px monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillText("RAGE", bx + 1, by - 10 * p + 1);
+      ctx.fillStyle = "#FFB040";
+      ctx.fillText("RAGE", bx, by - 10 * p);
+      ctx.restore();
+    }
   }
 
   /* ---- Charge-up aura (first ~35% of attack — builds tension before beam) ---- */
@@ -1225,7 +1476,107 @@ function drawWarrior(
     }
   }
 
+  /* ---- Category tool overlay — tiny weapon/prop drawn above the sprite.
+         (Drawn before restore so it benefits from the mirror transform for
+         left-facing omega.) ------------------------------------------------- */
+  drawCategoryTool(ctx, bx, by, p, color, agentCategory, state, elapsed);
+
   ctx.restore();
+}
+
+/**
+ * Draw a small pixel tool floating above the warrior based on category.
+ * These are flavor overlays — they don't affect collision or HP.
+ */
+function drawCategoryTool(
+  ctx: CanvasRenderingContext2D,
+  bx: number,
+  by: number,
+  p: number,
+  color: string,
+  category: BattleCategory | undefined,
+  state: WarriorState,
+  elapsed: number,
+) {
+  if (!category) return;
+  const lc = String(category).toLowerCase();
+  // Tool hovers above the sprite, bobs with the sprite, swings forward on attack.
+  const hover = Math.sin(elapsed * 0.08) * 1;
+  const swing = state === "attack" && elapsed < 25 ? Math.sin((elapsed / 25) * Math.PI) * 4 : 0;
+  const tx = bx - 4 * p;
+  const ty = by - 14 * p + hover - swing;
+  const dark = darken(color, 40);
+
+  if (lc.includes("code") || lc.includes("dev")) {
+    // KEYBOARD — 8x3 block of tiny keys
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fillRect(tx, ty, 8 * p, 3 * p);
+    ctx.fillStyle = "#a0a0c0";
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(tx + 1 + i * 2 * p, ty + 1, p, p);
+      ctx.fillRect(tx + 1 + i * 2 * p, ty + 1 + p, p, p);
+    }
+    // Blinking cursor glyph on top
+    if (Math.floor(elapsed / 15) % 2 === 0) {
+      ctx.fillStyle = color;
+      ctx.fillRect(tx + 3 * p, ty - 2, p, 2);
+    }
+  } else if (lc.includes("art") || lc.includes("image") || lc.includes("design")) {
+    // BRUSH — diagonal pixel brush
+    const palette = ["#FF6B9D", "#FFC857", "#4ECDC4", "#B983FF"];
+    // Handle
+    ctx.fillStyle = dark;
+    for (let i = 0; i < 5; i++) {
+      ctx.fillRect(tx + i * p, ty + i * p, p, p);
+    }
+    // Bristles
+    ctx.fillStyle = palette[Math.floor(elapsed / 20) % palette.length];
+    ctx.fillRect(tx + 5 * p, ty + 5 * p, 2 * p, p);
+    ctx.fillRect(tx + 6 * p, ty + 5 * p + p, 2 * p, p);
+  } else if (lc.includes("text") || lc.includes("writ") || lc.includes("story")) {
+    // PEN — feather quill
+    ctx.fillStyle = "#e8e0c0";
+    // Quill shaft
+    for (let i = 0; i < 6; i++) {
+      ctx.fillRect(tx + i * p, ty + 5 - i, p, p);
+    }
+    // Feather barbs
+    ctx.fillStyle = "#fff8d8";
+    ctx.fillRect(tx - p, ty + 4, p, p);
+    ctx.fillRect(tx - 2, ty + 5, p, p);
+    // Inky tip
+    ctx.fillStyle = "#121225";
+    ctx.fillRect(tx + 6 * p, ty - 1, p, p);
+  } else if (lc.includes("music") || lc.includes("audio") || lc.includes("sound")) {
+    // NOTE — eighth note glyph + vibrating halo
+    ctx.fillStyle = color;
+    // Note head
+    ctx.fillRect(tx, ty + 4, 3 * p, 2 * p);
+    // Stem
+    ctx.fillRect(tx + 2 * p, ty - 2 * p, p, 6 * p);
+    // Flag
+    ctx.fillRect(tx + 3 * p, ty - 2 * p, 2 * p, p);
+    ctx.fillRect(tx + 4 * p, ty - p, p, 2 * p);
+    // Pulsing halo pixel
+    if (Math.floor(elapsed / 8) % 2 === 0) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(tx + 6 * p, ty - 3 * p, p, p);
+    }
+  } else if (lc.includes("research") || lc.includes("science") || lc.includes("data")) {
+    // ATOM — small orbiting electrons around a nucleus pixel
+    const cx = tx + 3 * p;
+    const cy = ty + 2 * p;
+    ctx.fillStyle = color;
+    ctx.fillRect(cx, cy, p, p);
+    // Two orbiting electrons
+    for (let i = 0; i < 2; i++) {
+      const ang = elapsed * 0.12 + i * Math.PI;
+      const ox = Math.cos(ang) * 4 * p;
+      const oy = Math.sin(ang) * 2 * p;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(cx + ox, cy + oy, p, p);
+    }
+  }
 }
 
 /* ================================================================== */

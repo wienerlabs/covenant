@@ -3151,6 +3151,12 @@ export default function BattlePage() {
               height={220}
               category={battleCategory}
               viewerCount={viewerCount}
+              alphaCategory={
+                useCustomAgents && selectedAlpha ? selectedAlpha.category : battleCategory
+              }
+              omegaCategory={
+                useCustomAgents && selectedOmega ? selectedOmega.category : battleCategory
+              }
             />
           </div>
         )}
