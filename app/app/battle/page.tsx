@@ -3157,6 +3157,7 @@ export default function BattlePage() {
               omegaCategory={
                 useCustomAgents && selectedOmega ? selectedOmega.category : battleCategory
               }
+              predictionSide={userPrediction}
             />
           </div>
         )}

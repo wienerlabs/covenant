@@ -33,6 +33,15 @@ interface PixelBattleProps {
   /** Per-agent category — drives weapon/tool overlay (brush, keyboard, pen, note, atom). */
   alphaCategory?: BattleCategory;
   omegaCategory?: BattleCategory;
+  /** Round timer fill (0-1). When provided, a pixel hourglass appears top-left. */
+  roundTimerPct?: number;
+  /** Spectator's predicted winner — tints that side's arena edge with a flare. */
+  predictionSide?: "alpha" | "omega" | null;
+  /**
+   * Rolling buffer of emojis dropped by spectators. When this array's length
+   * grows, new entries spawn pixel emoji projectiles flying across the arena.
+   */
+  spectatorEmojis?: string[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -196,6 +205,9 @@ export default function PixelBattle({
   viewerCount = 0,
   alphaCategory,
   omegaCategory,
+  roundTimerPct,
+  predictionSide,
+  spectatorEmojis,
 }: PixelBattleProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
@@ -260,6 +272,27 @@ export default function PixelBattle({
   // Clash detection — guarded frame counter so the banner only fires once
   // per simultaneous attack window.
   const lastClashFrameRef = useRef(-999);
+
+  // Ultimate gauge per side (0-100). Fills as the OPPOSITE side takes damage.
+  const alphaUltRef = useRef(0);
+  const omegaUltRef = useRef(0);
+
+  // Track whether each side has consumed their ultimate on the current attack.
+  const alphaUltConsumedRef = useRef(false);
+  const omegaUltConsumedRef = useRef(false);
+
+  // Spectator emoji projectiles drifting across the arena.
+  const emojiProjectilesRef = useRef<Array<{
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    emoji: string;
+    age: number;
+    maxAge: number;
+  }>>([]);
+  /** Track how many emojis we've already consumed from the parent's buffer. */
+  const emojiConsumedCountRef = useRef(0);
 
   // Afterimage ghosts left behind by dodges.
   const afterimagesRef = useRef<Array<{
@@ -391,6 +424,24 @@ export default function PixelBattle({
           setTimeout(() => {
             spawnParticles(alphaBaseX + 35 * p, warriorBaseY + 6 * p, 12, "spark", ALPHA_COLOR);
           }, 200);
+          // Ultimate consumption — if gauge is full, unleash upgraded attack.
+          if (alphaUltRef.current >= 100) {
+            alphaUltConsumedRef.current = true;
+            alphaUltRef.current = 0;
+            floatingTextsRef.current.push({
+              x: alphaBaseX + 8 * p,
+              y: warriorBaseY - 22 * p,
+              text: "ULTIMATE!",
+              color: GOLD_COLOR,
+              life: 55,
+              maxLife: 55,
+              scale: 2.1,
+            });
+            spawnParticles(alphaBaseX + 8 * p, warriorBaseY + 4 * p, 20, "star", GOLD_COLOR);
+            triggerFlash(GOLD_COLOR, 0.4, 10);
+          } else {
+            alphaUltConsumedRef.current = false;
+          }
         }
         if (alphaState === "hit") {
           const dmg = Math.round(prevAlphaHPRef.current - alphaHP);
@@ -456,6 +507,8 @@ export default function PixelBattle({
           // Atmosphere reactions — lightning flash on crit, crowd hop on any hit.
           if (isCrit) triggerFlash("#ffffff", 0.45, 8);
           reactCrowd("hop");
+          // Opposite side (Omega) gains ultimate for landing this hit.
+          omegaUltRef.current = Math.min(100, omegaUltRef.current + dmg * 2.4);
         }
         if (alphaState === "victory") {
           // Victory star burst — more particles for celebration
@@ -511,6 +564,23 @@ export default function PixelBattle({
           setTimeout(() => {
             spawnParticles(omegaBaseX - 35 * p, warriorBaseY + 6 * p, 12, "spark", OMEGA_COLOR);
           }, 200);
+          if (omegaUltRef.current >= 100) {
+            omegaUltConsumedRef.current = true;
+            omegaUltRef.current = 0;
+            floatingTextsRef.current.push({
+              x: omegaBaseX - 8 * p,
+              y: warriorBaseY - 22 * p,
+              text: "ULTIMATE!",
+              color: GOLD_COLOR,
+              life: 55,
+              maxLife: 55,
+              scale: 2.1,
+            });
+            spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 4 * p, 20, "star", GOLD_COLOR);
+            triggerFlash(GOLD_COLOR, 0.4, 10);
+          } else {
+            omegaUltConsumedRef.current = false;
+          }
         }
         if (omegaState === "hit") {
           const dmg = Math.round(prevOmegaHPRef.current - omegaHP);
@@ -569,6 +639,7 @@ export default function PixelBattle({
 
           if (isCrit) triggerFlash("#ffffff", 0.45, 8);
           reactCrowd("hop");
+          alphaUltRef.current = Math.min(100, alphaUltRef.current + dmg * 2.4);
         }
         if (omegaState === "victory") {
           spawnParticles(omegaBaseX - 8 * p, warriorBaseY - 10 * p, 25, "star", GOLD_COLOR);
@@ -791,6 +862,23 @@ export default function PixelBattle({
         omegaSweatRef.current = frame;
       }
 
+      /* ---- Prediction side flare (soft edge glow for the predicted winner) ---- */
+      if (predictionSide === "alpha" || predictionSide === "omega") {
+        const flareColor = predictionSide === "alpha" ? ALPHA_COLOR : OMEGA_COLOR;
+        const [fr, fg, fb] = hexToRgb(flareColor);
+        const pulseF = 0.14 + Math.sin(frame * 0.08) * 0.05;
+        const flareGrad = ctx.createLinearGradient(
+          predictionSide === "alpha" ? 0 : width,
+          0,
+          predictionSide === "alpha" ? width * 0.3 : width * 0.7,
+          0,
+        );
+        flareGrad.addColorStop(0, `rgba(${fr},${fg},${fb},${pulseF})`);
+        flareGrad.addColorStop(1, `rgba(${fr},${fg},${fb},0)`);
+        ctx.fillStyle = flareGrad;
+        ctx.fillRect(0, 0, width, height);
+      }
+
       /* ---- Draw HP Bars ---- */
       const hpBarWidth = 120;
       const hpBarHeight = 8;
@@ -821,6 +909,99 @@ export default function PixelBattle({
         OMEGA_COLOR,
         p,
       );
+
+      /* ---- Ultimate gauges (thin bar under each HP bar) ---- */
+      drawUltimateGauge(
+        ctx,
+        alphaHPx,
+        hpBarY + hpBarHeight + 3,
+        hpBarWidth,
+        alphaUltRef.current,
+        ALPHA_COLOR,
+        frame,
+      );
+      drawUltimateGauge(
+        ctx,
+        omegaHPx,
+        hpBarY + hpBarHeight + 3,
+        hpBarWidth,
+        omegaUltRef.current,
+        OMEGA_COLOR,
+        frame,
+      );
+
+      /* ---- Mini portraits under HP bars — react to current state ---- */
+      drawPortrait(
+        ctx,
+        alphaHPx + hpBarWidth + 6,
+        hpBarY - 3,
+        ALPHA_COLOR,
+        "right",
+        alphaState,
+        alphaHP,
+        frame,
+      );
+      drawPortrait(
+        ctx,
+        omegaHPx - 22,
+        hpBarY - 3,
+        OMEGA_COLOR,
+        "left",
+        omegaState,
+        omegaHP,
+        frame,
+      );
+
+      /* ---- Round timer hourglass (top-center, between HP bars) ---- */
+      if (typeof roundTimerPct === "number") {
+        drawHourglass(
+          ctx,
+          width / 2 - 6,
+          hpBarY - 2,
+          Math.max(0, Math.min(1, roundTimerPct)),
+          frame,
+        );
+      }
+
+      /* ---- Spectator emoji projectiles (spawn + render) ---- */
+      if (Array.isArray(spectatorEmojis) && spectatorEmojis.length > emojiConsumedCountRef.current) {
+        const fresh = spectatorEmojis.slice(emojiConsumedCountRef.current);
+        for (const emo of fresh) {
+          // Launch from a random edge; cross the arena behind the warriors.
+          const fromLeft = Math.random() < 0.5;
+          emojiProjectilesRef.current.push({
+            x: fromLeft ? -12 : width + 12,
+            y: 40 + Math.random() * (height - 120),
+            vx: fromLeft ? 1.1 + Math.random() * 0.5 : -(1.1 + Math.random() * 0.5),
+            vy: -0.1 + Math.random() * 0.2,
+            emoji: emo,
+            age: 0,
+            maxAge: 320,
+          });
+        }
+        emojiConsumedCountRef.current = spectatorEmojis.length;
+        // Cap projectiles to avoid runaway memory
+        while (emojiProjectilesRef.current.length > 14) {
+          emojiProjectilesRef.current.shift();
+        }
+      }
+      const aliveEmojis: typeof emojiProjectilesRef.current = [];
+      for (const e of emojiProjectilesRef.current) {
+        e.age++;
+        e.x += e.vx;
+        e.y += e.vy + Math.sin(e.age * 0.06) * 0.3;
+        if (e.age < e.maxAge && e.x > -20 && e.x < width + 20) {
+          const alpha = e.age < 20 ? e.age / 20 : e.age > e.maxAge - 40 ? (e.maxAge - e.age) / 40 : 1;
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, Math.min(1, alpha)) * 0.8;
+          ctx.font = "16px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(e.emoji, e.x, e.y);
+          ctx.restore();
+          aliveEmojis.push(e);
+        }
+      }
+      emojiProjectilesRef.current = aliveEmojis;
 
       /* ---- Walk-on intro: both sprites slide in from the edges over INTRO_DURATION frames ---- */
       introFrameRef.current = Math.min(INTRO_DURATION, introFrameRef.current + 1);
@@ -1013,6 +1194,9 @@ export default function PixelBattle({
       reactCrowd,
       alphaCategory,
       omegaCategory,
+      roundTimerPct,
+      predictionSide,
+      spectatorEmojis,
     ],
   );
 
@@ -1811,5 +1995,210 @@ function drawCrowd(ctx: CanvasRenderingContext2D, heads: CrowdHead[], frame: num
       ctx.fillRect(hx - 1, hy - 2, 1, 3);
       ctx.fillRect(hx + head.size, hy - 2, 1, 3);
     }
+  }
+}
+
+/* ================================================================== */
+/*  HUD: ultimate gauge, mini portrait, round timer hourglass          */
+/* ================================================================== */
+
+/**
+ * Thin glowing bar beneath the HP bar. Fills 0-100. When full, shimmers
+ * gold + pulses to telegraph readiness.
+ */
+function drawUltimateGauge(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  ult: number,
+  color: string,
+  frame: number,
+) {
+  const h = 3;
+  // Background track
+  ctx.fillStyle = "#14142a";
+  ctx.fillRect(x, y, w, h);
+  const fillW = Math.max(0, Math.min(1, ult / 100)) * (w - 2);
+  const ready = ult >= 100;
+  if (ready) {
+    // Shimmer — alternate gold + agent color every 8 frames
+    const shimmer = Math.floor(frame / 6) % 2 === 0;
+    ctx.fillStyle = shimmer ? "#FFE342" : color;
+    ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+    // Tiny "ULT" marker glyphs
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(x + w - 12, y - 3, 10, 2);
+    ctx.fillStyle = "#FFE342";
+    ctx.font = "bold 7px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("ULT", x + w - 11, y - 1);
+  } else {
+    ctx.fillStyle = color;
+    ctx.fillRect(x + 1, y + 1, fillW, h - 2);
+  }
+  // Border
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - 0.5, y - 0.5, w + 1, h + 1);
+}
+
+/**
+ * Small pixel face below the HP bar — squared-off 22x18 portrait whose
+ * expression changes with state. Quick at-a-glance reaction feedback.
+ */
+function drawPortrait(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  color: string,
+  facing: "left" | "right",
+  state: WarriorState,
+  hp: number,
+  frame: number,
+) {
+  const w = 18;
+  const h = 16;
+  // Background
+  ctx.fillStyle = "#0e0e22";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "rgba(255,255,255,0.3)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
+  // Face
+  const dark = darken(color, 35);
+  const faceX = x + 3;
+  const faceY = y + 3;
+  // Head block
+  ctx.fillStyle = color;
+  ctx.fillRect(faceX, faceY, 12, 10);
+  ctx.fillStyle = dark;
+  ctx.fillRect(faceX, faceY + 9, 12, 2);
+
+  // Eyes — state-driven
+  const eyeY = faceY + 3;
+  const eyeLX = faceX + 3;
+  const eyeRX = faceX + 8;
+  let eyeShape: "normal" | "angry" | "closed" | "spiral" | "wide" | "squint" = "normal";
+  if (state === "attack") eyeShape = "angry";
+  else if (state === "hit") eyeShape = "squint";
+  else if (state === "defeat") eyeShape = "spiral";
+  else if (state === "victory") eyeShape = "wide";
+  else if (state === "dodge") eyeShape = "wide";
+  else if (hp < 20 && hp > 0 && Math.floor(frame / 30) % 2 === 0) eyeShape = "closed";
+
+  function drawEye(ex: number) {
+    ctx.fillStyle = "#ffffff";
+    if (eyeShape === "normal") {
+      ctx.fillRect(ex, eyeY, 2, 2);
+    } else if (eyeShape === "angry") {
+      // / \ diagonals
+      ctx.fillRect(ex, eyeY + 1, 2, 1);
+      ctx.fillStyle = dark;
+      ctx.fillRect(ex, eyeY, 1, 1);
+    } else if (eyeShape === "closed" || eyeShape === "squint") {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(ex, eyeY + 1, 2, 1);
+    } else if (eyeShape === "spiral") {
+      // X marks the spot
+      ctx.fillStyle = "#000";
+      ctx.fillRect(ex, eyeY, 1, 1);
+      ctx.fillRect(ex + 1, eyeY + 1, 1, 1);
+      ctx.fillRect(ex, eyeY + 2, 1, 1);
+    } else if (eyeShape === "wide") {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(ex - 1, eyeY, 3, 3);
+      ctx.fillStyle = "#000";
+      ctx.fillRect(ex, eyeY + 1, 1, 1);
+    }
+  }
+  drawEye(eyeLX);
+  drawEye(eyeRX);
+
+  // Mouth — state-driven
+  const mouthY = faceY + 7;
+  const mouthX = faceX + 4;
+  ctx.fillStyle = "#000";
+  if (state === "attack" || state === "victory") {
+    // Open mouth (battle cry / shout)
+    ctx.fillRect(mouthX, mouthY, 4, 2);
+  } else if (state === "hit" || state === "defeat") {
+    // Flat line
+    ctx.fillRect(mouthX, mouthY + 1, 4, 1);
+  } else if (state === "dodge") {
+    // Smirk — right side up
+    ctx.fillRect(mouthX + 2, mouthY, 2, 1);
+    ctx.fillRect(mouthX, mouthY + 1, 2, 1);
+  } else if (hp < 20 && hp > 0) {
+    // Frown
+    ctx.fillRect(mouthX, mouthY, 4, 1);
+  } else {
+    // Neutral line
+    ctx.fillRect(mouthX, mouthY + 1, 3, 1);
+  }
+
+  // Facing arrow above portrait
+  ctx.fillStyle = color;
+  if (facing === "right") {
+    ctx.fillRect(x + w - 4, y - 3, 3, 1);
+    ctx.fillRect(x + w - 3, y - 2, 2, 1);
+    ctx.fillRect(x + w - 2, y - 1, 1, 1);
+  } else {
+    ctx.fillRect(x + 1, y - 3, 3, 1);
+    ctx.fillRect(x + 1, y - 2, 2, 1);
+    ctx.fillRect(x + 1, y - 1, 1, 1);
+  }
+}
+
+/** Pixel hourglass that empties as pct → 1. Small top-center HUD element. */
+function drawHourglass(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  pct: number,
+  frame: number,
+) {
+  const w = 12;
+  const h = 16;
+  const remaining = 1 - pct;
+
+  // Frame (two horizontal bars + vertical edges)
+  ctx.fillStyle = "#FFE342";
+  ctx.fillRect(x, y, w, 1);
+  ctx.fillRect(x, y + h - 1, w, 1);
+  ctx.fillRect(x, y, 1, h);
+  ctx.fillRect(x + w - 1, y, 1, h);
+
+  // Internal triangles (inverted top, point-up bottom)
+  ctx.fillStyle = "#1a1a2e";
+  for (let i = 0; i < h / 2; i++) {
+    const inset = i;
+    ctx.fillRect(x + 1 + inset, y + 1 + i, w - 2 - inset * 2, 1);
+  }
+  for (let i = 0; i < h / 2; i++) {
+    const inset = (h / 2 - 1) - i;
+    ctx.fillRect(x + 1 + inset, y + h / 2 + i, w - 2 - inset * 2, 1);
+  }
+
+  // Sand in top triangle — shrinks as time passes
+  const topSandHeight = Math.round((h / 2 - 2) * remaining);
+  ctx.fillStyle = "#FFD060";
+  for (let i = 0; i < topSandHeight; i++) {
+    const inset = i + 1;
+    ctx.fillRect(x + 1 + inset, y + 1 + i, w - 2 - inset * 2, 1);
+  }
+  // Sand in bottom triangle — grows as time passes
+  const botSandHeight = Math.round((h / 2 - 2) * pct);
+  for (let i = 0; i < botSandHeight; i++) {
+    const row = h - 3 - i;
+    const inset = i;
+    ctx.fillRect(x + 1 + inset, y + row, w - 2 - inset * 2, 1);
+  }
+
+  // Falling sand pixel mid-hourglass
+  if (pct > 0 && pct < 1 && frame % 4 !== 0) {
+    ctx.fillStyle = "#FFD060";
+    ctx.fillRect(x + w / 2, y + h / 2 - 1 + ((frame % 3)), 1, 1);
   }
 }
