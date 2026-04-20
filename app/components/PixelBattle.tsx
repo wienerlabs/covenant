@@ -286,10 +286,6 @@ export default function PixelBattle({
   const alphaUltRef = useRef(0);
   const omegaUltRef = useRef(0);
 
-  // Track whether each side has consumed their ultimate on the current attack.
-  const alphaUltConsumedRef = useRef(false);
-  const omegaUltConsumedRef = useRef(false);
-
   // Spectator emoji projectiles drifting across the arena.
   const emojiProjectilesRef = useRef<Array<{
     x: number;
@@ -446,7 +442,6 @@ export default function PixelBattle({
           }, 200);
           // Ultimate consumption — if gauge is full, unleash upgraded attack.
           if (alphaUltRef.current >= 100) {
-            alphaUltConsumedRef.current = true;
             alphaUltRef.current = 0;
             floatingTextsRef.current.push({
               x: alphaBaseX + 8 * p,
@@ -459,8 +454,6 @@ export default function PixelBattle({
             });
             spawnParticles(alphaBaseX + 8 * p, warriorBaseY + 4 * p, 20, "star", GOLD_COLOR);
             triggerFlash(GOLD_COLOR, 0.4, 10);
-          } else {
-            alphaUltConsumedRef.current = false;
           }
         }
         if (alphaState === "hit") {
@@ -585,7 +578,6 @@ export default function PixelBattle({
             spawnParticles(omegaBaseX - 35 * p, warriorBaseY + 6 * p, 12, "spark", OMEGA_COLOR);
           }, 200);
           if (omegaUltRef.current >= 100) {
-            omegaUltConsumedRef.current = true;
             omegaUltRef.current = 0;
             floatingTextsRef.current.push({
               x: omegaBaseX - 8 * p,
@@ -598,8 +590,6 @@ export default function PixelBattle({
             });
             spawnParticles(omegaBaseX - 8 * p, warriorBaseY + 4 * p, 20, "star", GOLD_COLOR);
             triggerFlash(GOLD_COLOR, 0.4, 10);
-          } else {
-            omegaUltConsumedRef.current = false;
           }
         }
         if (omegaState === "hit") {
@@ -1564,7 +1554,6 @@ function drawWarrior(
   // Colors
   const mainColor = isFlashing ? "#FF2222" : isDesaturated ? desaturate(color, 70) : color;
   const accentColor = isFlashing ? "#CC0000" : isDesaturated ? desaturate(dark, 70) : dark;
-  const eyeColor = isFlashing ? "#FFAAAA" : "#ffffff";
 
   const bx = baseX + offsetX;
   const by = baseY + offsetY;
