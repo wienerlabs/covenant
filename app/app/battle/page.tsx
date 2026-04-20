@@ -2494,36 +2494,114 @@ export default function BattlePage() {
             <div style={{
               maxWidth: "700px",
               margin: "0 auto 28px auto",
-              padding: "24px",
-              border: useCustomAgents ? "1px solid rgba(255,254,178,0.15)" : "1px solid rgba(255,255,255,0.08)",
+              padding: useCustomAgents ? "24px" : "2px",
               borderRadius: "16px",
-              backgroundColor: "rgba(0,0,0,0.3)",
-              backdropFilter: "blur(12px)",
-              transition: "border-color 0.3s ease",
+              transition: "all 0.3s ease",
+              // When OFF: glowing gradient border that begs to be clicked.
+              // When ON: quieter container since the options are revealed.
+              background: useCustomAgents
+                ? "rgba(0,0,0,0.35)"
+                : "linear-gradient(120deg, #fffeb2 0%, #FFB84D 40%, #FF425E 80%, #fffeb2 100%)",
+              backgroundSize: useCustomAgents ? "100% 100%" : "300% 100%",
+              animation: useCustomAgents ? undefined : "pick-gradient 6s linear infinite",
+              border: useCustomAgents ? "1px solid rgba(255,254,178,0.25)" : "none",
+              backdropFilter: useCustomAgents ? "blur(12px)" : undefined,
+              boxShadow: useCustomAgents ? undefined : "0 0 30px rgba(255,254,178,0.2)",
             }}>
               <button
                 onClick={() => setUseCustomAgents(!useCustomAgents)}
                 style={{
-                  fontFamily: "inherit", fontSize: "15px", fontWeight: 700,
-                  display: "flex", alignItems: "center", gap: "12px", width: "100%",
-                  padding: "4px 0", background: "none", border: "none",
-                  color: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.5)",
-                  cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em",
+                  width: "100%",
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  background: useCustomAgents ? "none" : "rgba(10,10,10,0.9)",
+                  border: "none",
+                  borderRadius: useCustomAgents ? 0 : "14px",
+                  padding: useCustomAgents ? "4px 0" : "18px 24px",
+                  color: useCustomAgents ? "#fffeb2" : "#fff",
+                  textAlign: "left",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "16px",
+                  transition: "all 0.2s ease",
                 }}
               >
+                {/* Accent dot + toggle combo on the left */}
                 <div style={{
-                  width: "40px", height: "22px", borderRadius: "11px",
-                  backgroundColor: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.12)",
-                  position: "relative", transition: "all 0.2s ease", flexShrink: 0,
+                  width: "44px",
+                  height: "24px",
+                  borderRadius: "12px",
+                  backgroundColor: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.15)",
+                  position: "relative",
+                  transition: "all 0.2s ease",
+                  flexShrink: 0,
+                  boxShadow: useCustomAgents ? "0 0 12px rgba(255,254,178,0.4)" : "none",
                 }}>
                   <div style={{
-                    width: "18px", height: "18px", borderRadius: "50%",
-                    backgroundColor: useCustomAgents ? "#000" : "rgba(255,255,255,0.4)",
-                    position: "absolute", top: "2px",
-                    left: useCustomAgents ? "20px" : "2px", transition: "all 0.2s ease",
+                    width: "20px",
+                    height: "20px",
+                    borderRadius: "50%",
+                    backgroundColor: useCustomAgents ? "#000" : "rgba(255,255,255,0.5)",
+                    position: "absolute",
+                    top: "2px",
+                    left: useCustomAgents ? "22px" : "2px",
+                    transition: "all 0.2s ease",
                   }} />
                 </div>
-                Pick Your Agents
+
+                {/* Text block */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    flexWrap: "wrap",
+                  }}>
+                    <span style={{
+                      fontSize: "16px",
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      color: useCustomAgents ? "#fffeb2" : "#fff",
+                    }}>
+                      Pick Your Agents
+                    </span>
+                    {!useCustomAgents && (
+                      <span style={{
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        letterSpacing: "0.12em",
+                        padding: "2px 8px",
+                        borderRadius: "4px",
+                        background: "#fffeb2",
+                        color: "#000",
+                      }}>
+                        NEW
+                      </span>
+                    )}
+                  </div>
+                  <div style={{
+                    marginTop: "4px",
+                    fontSize: "12px",
+                    color: useCustomAgents ? "rgba(255,254,178,0.6)" : "rgba(255,255,255,0.55)",
+                    lineHeight: 1.4,
+                  }}>
+                    {useCustomAgents
+                      ? "Custom battle active — pick a challenger and a defender below"
+                      : "Battle with agents you built or any hosted agent in this category"}
+                  </div>
+                </div>
+
+                {/* Right-side chevron when OFF, invisible when ON */}
+                {!useCustomAgents && (
+                  <div style={{
+                    fontSize: "18px",
+                    color: "rgba(255,255,255,0.35)",
+                    flexShrink: 0,
+                  }}>
+                    →
+                  </div>
+                )}
               </button>
               {useCustomAgents && (
                 <div style={{ marginTop: "20px" }}>
