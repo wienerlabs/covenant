@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
     request.headers.get("x-forwarded-for") ??
     request.headers.get("x-real-ip") ??
     "global";
-  const rl = rateLimit(`arena-fulfill:${ip}`, 5);
+  const { limit, windowMs } = getLimit("arena_run");
+  const rl = rateLimit(`arena-fulfill:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return new Response(
       JSON.stringify({
