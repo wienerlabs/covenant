@@ -11,7 +11,7 @@ import { getCategoryById } from "@/lib/categories";
 import Anthropic from "@anthropic-ai/sdk";
 import { withCreditFallback } from "@/lib/anthropic-safe";
 import crypto from "crypto";
-import { rateLimit } from "@/lib/rateLimit";
+import { rateLimit, getLimit } from "@/lib/rateLimit";
 import { generateDID } from "@/lib/aip/did";
 import { NextRequest } from "next/server";
 

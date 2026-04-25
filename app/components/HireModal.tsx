@@ -9,6 +9,7 @@ import { triggerBalanceRefresh } from "@/lib/balance-bus";
 import { USDC_DECIMALS, USDC_MINT } from "@/lib/constants";
 import { getAnchorProgram, createJobOnChain } from "@/lib/anchor-browser";
 import { buildJobSpec, hashJobSpecBytes } from "@/lib/spec";
+import { usdcToAtomic } from "@/lib/token-math";
 
 interface HireModalProps {
   open: boolean;
@@ -143,7 +144,7 @@ export default function HireModal({
       const posterPk = new PublicKey(account);
       const posterTokenAccount = await getAssociatedTokenAddress(USDC_MINT, posterPk);
       const deadlineUnix = Math.floor(deadlineDate.getTime() / 1000);
-      const amountAtomic = new BN(Math.round(amount * 10 ** USDC_DECIMALS));
+      const amountAtomic = usdcToAtomic(amount);
 
       let escrowTxHash: string | undefined;
       let escrowAtaStr: string | undefined;

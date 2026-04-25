@@ -42,31 +42,78 @@ export const IS_DEVNET = CLUSTER === "devnet";
 export const IS_LOCALNET = CLUSTER === "localnet";
 
 /* ------------------------------------------------------------------ */
-/*  RPC endpoints                                                      */
+/*  RPC endpoints — multi-provider failover chain                      */
 /* ------------------------------------------------------------------ */
 
-const DEFAULT_RPC: Record<Cluster, string> = {
-  devnet: "https://api.devnet.solana.com",
-  "mainnet-beta": "https://api.mainnet-beta.solana.com",
-  testnet: "https://api.testnet.solana.com",
-  localnet: "http://127.0.0.1:8899",
+/**
+ * Default fallback RPC chain per cluster. Public Solana RPC is the
+ * absolute last resort because it's heavily rate-limited under
+ * production load.
+ */
+const DEFAULT_RPC_CHAIN: Record<Cluster, string[]> = {
+  devnet: [
+    "https://api.devnet.solana.com",
+  ],
+  "mainnet-beta": [
+    // Public RPCs that don't require an API key. Order matters —
+    // first responsive one wins. Configured providers (Helius /
+    // Triton / QuickNode) take precedence via env vars below.
+    "https://api.mainnet-beta.solana.com",
+    "https://solana-mainnet.g.allthatnode.com",
+    "https://solana-rpc.publicnode.com",
+  ],
+  testnet: ["https://api.testnet.solana.com"],
+  localnet: ["http://127.0.0.1:8899"],
 };
 
 /**
- * Resolve the RPC URL for the active cluster. Prefers a
- * cluster-specific env override (Helius / Triton recommended for
- * mainnet) and falls back to the public Solana RPC.
+ * Build the full RPC chain for the active cluster:
+ *   1. Provider env URLs (Helius / Triton / QuickNode) — highest priority
+ *   2. Cluster-specific override (NEXT_PUBLIC_RPC_URL_*)
+ *   3. Generic override (NEXT_PUBLIC_RPC_URL / SOLANA_RPC_URL)
+ *   4. Default public chain (last resort)
  */
-export function getRpcUrl(): string {
+export function getRpcChain(): string[] {
+  const chain: string[] = [];
+  const seen = new Set<string>();
+  const push = (url: string | undefined) => {
+    if (!url) return;
+    const trimmed = url.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    chain.push(trimmed);
+  };
+
+  // 1. Provider URLs — Helius first because it's most common
+  if (process.env.HELIUS_RPC_URL) push(process.env.HELIUS_RPC_URL);
+  else if (process.env.HELIUS_API_KEY) {
+    const heliusCluster = CLUSTER === "mainnet-beta" ? "mainnet" : CLUSTER;
+    push(`https://${heliusCluster}.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`);
+  }
+  push(process.env.TRITON_RPC_URL);
+  push(process.env.QUICKNODE_RPC_URL);
+
+  // 2. Cluster-specific override (e.g. NEXT_PUBLIC_RPC_URL_MAINNET_BETA)
   const envKey = `NEXT_PUBLIC_RPC_URL_${CLUSTER.toUpperCase().replace("-", "_")}`;
-  const fromEnv =
-    process.env[envKey] ||
-    process.env.NEXT_PUBLIC_RPC_URL ||
-    process.env.SOLANA_RPC_URL;
-  return fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT_RPC[CLUSTER];
+  push(process.env[envKey]);
+
+  // 3. Generic override
+  push(process.env.NEXT_PUBLIC_RPC_URL);
+  push(process.env.SOLANA_RPC_URL);
+
+  // 4. Default chain (always present as last resort)
+  for (const url of DEFAULT_RPC_CHAIN[CLUSTER]) push(url);
+
+  return chain;
+}
+
+/** Primary RPC URL — first entry in the chain. */
+export function getRpcUrl(): string {
+  return getRpcChain()[0];
 }
 
 export const RPC_URL = getRpcUrl();
+export const RPC_CHAIN = getRpcChain();
 
 /* ------------------------------------------------------------------ */
 /*  Program ID                                                         */

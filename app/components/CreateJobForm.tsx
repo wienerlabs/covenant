@@ -16,6 +16,7 @@ import { JOB_CATEGORIES, type CategoryId } from "@/lib/categories";
 import { triggerBalanceRefresh } from "@/lib/balance-bus";
 import { getAnchorProgram, createJobOnChain } from "@/lib/anchor-browser";
 import { buildJobSpec, hashJobSpecBytes } from "@/lib/spec";
+import { usdcToAtomic } from "@/lib/token-math";
 
 interface CreateJobFormProps {
   variant?: "light" | "dark";
@@ -139,9 +140,7 @@ export default function CreateJobForm({ variant = "light", onJobCreated }: Creat
             posterPk,
           );
           const deadlineUnix = Math.floor(new Date(deadline).getTime() / 1000);
-          const amountAtomic = new BN(
-            Math.round(amountUsdc * 10 ** USDC_DECIMALS),
-          );
+          const amountAtomic = usdcToAtomic(amountUsdc);
 
           const result = await createJobOnChain({
             program,

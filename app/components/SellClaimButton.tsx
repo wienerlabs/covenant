@@ -13,10 +13,9 @@
 import { useState } from "react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import { useConnector } from "@solana/connector/react";
-import { BN } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { getAnchorProgram, listClaimOnChain } from "@/lib/anchor-browser";
-import { USDC_DECIMALS } from "@/lib/constants";
+import { usdcToAtomic } from "@/lib/token-math";
 
 interface SellClaimButtonProps {
   jobId: string;
@@ -29,9 +28,8 @@ interface SellClaimButtonProps {
   onListed?: () => void;
 }
 
-function toAtomic(amount: number): BN {
-  return new BN(Math.round(amount * 10 ** USDC_DECIMALS));
-}
+// Re-exported from lib/token-math for compatibility with existing call sites.
+const toAtomic = usdcToAtomic;
 
 export default function SellClaimButton(props: SellClaimButtonProps) {
   const connector = useConnector();

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma, ensureSchema } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
-import { rateLimit } from "@/lib/rateLimit";
+import { rateLimit, getLimit } from "@/lib/rateLimit";
 import { buildJobSpec, hashJobSpec } from "@/lib/spec";
 import type { Prisma } from "@prisma/client";
 import { Keypair, PublicKey } from "@solana/web3.js";
@@ -95,7 +95,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   await ensureSchema().catch(() => { /* non-fatal */ });
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
-  const rl = rateLimit(`jobs:${ip}`, 20);
+  // Cluster-aware: tighter on mainnet (5/min) vs devnet (20/min).
+  const { limit, windowMs } = getLimit("create_job");
+  const rl = rateLimit(`jobs:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Max 20 job creations per minute." },

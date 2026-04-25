@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
-import { rateLimit } from "@/lib/rateLimit";
+import { rateLimit, getLimit } from "@/lib/rateLimit";
 // autonomous/run is a head-less DEMO route. Real settlement uses the
 // on-chain create_job → submit_work → finalize_payment pipeline (see
 // lib/program-server.ts botCreateJob / botFinalizePayment). Custodial
@@ -40,7 +40,8 @@ function delay(ms: number) {
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
-  const rl = rateLimit(`autonomous:${ip}`, 3);
+  const { limit: autoLimit, windowMs: autoWindow } = getLimit("arena_run");
+  const rl = rateLimit(`autonomous:${ip}`, Math.max(1, Math.floor(autoLimit / 3)), autoWindow);
   if (!rl.allowed) {
     return new Response(
       JSON.stringify({ error: "Rate limit exceeded. Max 3 requests per minute." }),

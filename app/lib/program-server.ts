@@ -36,23 +36,16 @@ import {
   USDC_MINT,
   USDC_DECIMALS,
 } from "./constants";
-import { CLUSTER, getRpcUrl } from "./network";
+import { createFailoverConnection } from "./rpc-failover";
 
 // ---------- Connection ----------
 
+/**
+ * Returns a multi-RPC failover connection. Rotates across the chain
+ * configured in lib/network.ts on rate-limit / 5xx / network errors.
+ */
 export function getServerConnection(): Connection {
-  // Helius enhanced RPC first (cluster-aware), then per-cluster public RPC.
-  if (process.env.HELIUS_RPC_URL) {
-    return new Connection(process.env.HELIUS_RPC_URL, "confirmed");
-  }
-  if (process.env.HELIUS_API_KEY) {
-    const heliusCluster = CLUSTER === "mainnet-beta" ? "mainnet" : CLUSTER;
-    return new Connection(
-      `https://${heliusCluster}.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`,
-      "confirmed",
-    );
-  }
-  return new Connection(getRpcUrl(), "confirmed");
+  return createFailoverConnection("confirmed");
 }
 
 // ---------- Keypair loading ----------
@@ -347,7 +340,10 @@ export async function botCreateJob(params: {
     await conn.confirmTransaction(tx, "confirmed");
   }
 
-  const amountAtomic = new BN(Math.round(amount * 10 ** USDC_DECIMALS));
+  // Use precise string-based conversion to avoid float rounding loss
+  // for very small / very large amounts. See lib/token-math.ts.
+  const { usdcToAtomic } = await import("./token-math");
+  const amountAtomic = usdcToAtomic(amount);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sig: string = await (program.methods as any)

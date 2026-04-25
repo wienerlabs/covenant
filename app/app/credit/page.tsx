@@ -271,6 +271,31 @@ export default function CreditMarketplacePage() {
       if (!specHashHex) throw new Error("job missing specHash");
       const specHash = Uint8Array.from(Buffer.from(specHashHex, "hex"));
 
+      // Slippage / front-run guard — re-fetch the on-chain ClaimListing
+      // and verify the price the wallet is about to pay matches the
+      // price shown in the UI within a small tolerance. If the seller
+      // raised the price between page load and click, refuse rather
+      // than silently overpay.
+      try {
+        const listingRes = await fetch(`/api/claims/${claim.id}`);
+        if (listingRes.ok) {
+          const listingNow = await listingRes.json();
+          const livePrice = Number(listingNow.priceUsdc ?? listingNow.price ?? claim.priceUsdc);
+          const uiPrice = Number(claim.priceUsdc);
+          if (Number.isFinite(livePrice) && Math.abs(livePrice - uiPrice) > Math.max(0.01, uiPrice * 0.005)) {
+            throw new Error(
+              `Price changed since you opened this drawer (was $${uiPrice.toFixed(2)}, now $${livePrice.toFixed(2)}). Refresh and try again.`,
+            );
+          }
+        }
+      } catch (slipErr) {
+        // Re-throw guard errors; swallow lookup failures so a momentary
+        // API blip doesn't block a legitimate buy.
+        if (slipErr instanceof Error && slipErr.message.includes("Price changed")) {
+          throw slipErr;
+        }
+      }
+
       const { sig } = await buyClaimOnChain({
         program,
         buyer: buyerPk,

@@ -16,6 +16,7 @@ import { fireConfetti } from "@/lib/confetti";
 import { triggerBalanceRefresh } from "@/lib/balance-bus";
 import { getAnchorProgram, createJobOnChain } from "@/lib/anchor-browser";
 import { buildJobSpec, hashJobSpecBytes } from "@/lib/spec";
+import { usdcToAtomic } from "@/lib/token-math";
 
 interface JobWizardProps {
   onComplete?: (data: Record<string, unknown>) => void;
@@ -204,9 +205,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
             posterPk,
           );
           const deadlineUnix = Math.floor(deadlineDate.getTime() / 1000);
-          const amountAtomic = new BN(
-            Math.round(data.amount * 10 ** USDC_DECIMALS),
-          );
+          const amountAtomic = usdcToAtomic(data.amount);
 
           setEscrowStep("signing");
           const result = await createJobOnChain({

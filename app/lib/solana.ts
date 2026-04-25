@@ -5,31 +5,16 @@ import {
   Transaction,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-import { CLUSTER, getRpcUrl } from "@/lib/network";
-
-/**
- * Resolve the RPC URL. Order of preference:
- *   1. HELIUS_RPC_URL          (full enhanced URL)
- *   2. HELIUS_API_KEY          (built-in URL with cluster prefix)
- *   3. NEXT_PUBLIC_RPC_URL_*   (cluster-specific override, via lib/network)
- *   4. cluster default         (api.{cluster}.solana.com)
- */
-function resolveRpcUrl(): string {
-  if (process.env.HELIUS_RPC_URL) return process.env.HELIUS_RPC_URL;
-  if (process.env.HELIUS_API_KEY) {
-    const heliusCluster =
-      CLUSTER === "mainnet-beta" ? "mainnet" : CLUSTER;
-    return `https://${heliusCluster}.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`;
-  }
-  return getRpcUrl();
-}
+import { createFailoverConnection } from "@/lib/rpc-failover";
 
 let _connection: Connection | null = null;
 let _deployerKeypair: Keypair | null = null;
 
 export function getConnection(): Connection {
   if (!_connection) {
-    _connection = new Connection(resolveRpcUrl(), "confirmed");
+    // Multi-RPC failover — rotates through HELIUS / TRITON /
+    // QUICKNODE / public RPC chain on rate-limit / 5xx / network err.
+    _connection = createFailoverConnection("confirmed");
   }
   return _connection;
 }
