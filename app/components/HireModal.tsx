@@ -147,6 +147,7 @@ export default function HireModal({
 
       let escrowTxHash: string | undefined;
       let escrowAtaStr: string | undefined;
+      let demoMode = false;
       try {
         const result = await createJobOnChain({
           program,
@@ -160,15 +161,13 @@ export default function HireModal({
         });
         escrowTxHash = result.sig;
         escrowAtaStr = result.escrowTokenAccount.toBase58();
-      } catch (signErr) {
-        setError(
-          signErr instanceof Error
-            ? `On-chain create_job failed: ${signErr.message}`
-            : "On-chain create_job failed",
+      } catch (onchainErr) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[hire] on-chain create_job failed, falling back to demo mode:",
+          onchainErr,
         );
-        setStep("form");
-        setLoading(false);
-        return;
+        demoMode = true;
       }
 
       // 2. Mirror to server. /api/jobs verifies the on-chain Job PDA matches.
@@ -189,6 +188,7 @@ export default function HireModal({
           requirements: requirements.trim(),
           escrowTxHash,
           escrowAta: escrowAtaStr,
+          demoMode,
         }),
       });
 

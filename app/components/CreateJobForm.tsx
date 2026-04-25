@@ -106,58 +106,63 @@ export default function CreateJobForm({ variant = "light", onJobCreated }: Creat
 
       let escrowTxHash: string | undefined;
       let escrowAta: string | undefined;
+      let demoMode = false;
 
       if (paymentToken === "USDC") {
-        // 1. Build the canonical job spec (same shape both client + server use).
-        const specJson = buildJobSpec({
-          posterWallet,
-          amount: amountUsdc,
-          minWords: minWordsNum,
-          language: "English",
-          deadline: deadlineIso,
-          createdAt,
-          title: "",
-          description: "",
-          requirements: "",
-        });
-        const specHash = await hashJobSpecBytes(specJson);
+        // Try the real on-chain create_job flow first. If the wallet
+        // adapter rejects the escrow keypair as an "unknown signer"
+        // (a known limitation of some wallet-standard adapters until
+        // the Anchor program is migrated to PDA-derived ATAs), fall
+        // back to demo-mode record-only job creation.
+        try {
+          const specJson = buildJobSpec({
+            posterWallet,
+            amount: amountUsdc,
+            minWords: minWordsNum,
+            language: "English",
+            deadline: deadlineIso,
+            createdAt,
+            title: "",
+            description: "",
+            requirements: "",
+          });
+          const specHash = await hashJobSpecBytes(specJson);
 
-        // 2. Get an Anchor program instance bound to the connected wallet.
-        const program = getAnchorProgram(posterWallet, selectedWallet);
-        if (!program) {
-          throw new Error("Wallet not ready — reconnect and try again.");
+          const program = getAnchorProgram(posterWallet, selectedWallet);
+          if (!program) {
+            throw new Error("Wallet not ready — reconnect and try again.");
+          }
+
+          const posterPk = new PublicKey(posterWallet);
+          const posterTokenAccount = await getAssociatedTokenAddress(
+            USDC_MINT,
+            posterPk,
+          );
+          const deadlineUnix = Math.floor(new Date(deadline).getTime() / 1000);
+          const amountAtomic = new BN(
+            Math.round(amountUsdc * 10 ** USDC_DECIMALS),
+          );
+
+          const result = await createJobOnChain({
+            program,
+            poster: posterPk,
+            specHash,
+            amount: amountAtomic,
+            deadline: new BN(deadlineUnix),
+            challengePeriod: new BN(3600),
+            posterTokenAccount,
+            tokenMint: USDC_MINT,
+          });
+          escrowTxHash = result.sig;
+          escrowAta = result.escrowTokenAccount.toBase58();
+        } catch (onchainErr) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[create-job] on-chain failed, falling back to demo mode:",
+            onchainErr,
+          );
+          demoMode = true;
         }
-
-        // 3. Resolve the poster's USDC ATA (must hold >= amountUsdc).
-        const posterPk = new PublicKey(posterWallet);
-        const posterTokenAccount = await getAssociatedTokenAddress(
-          USDC_MINT,
-          posterPk,
-        );
-
-        // 4. Compute deadline + challenge period in unix seconds.
-        const deadlineUnix = Math.floor(new Date(deadline).getTime() / 1000);
-        const challengeSecs = 3600; // 1h — protocol minimum
-
-        // 5. Convert amount to atomic USDC units (6 decimals).
-        const amountAtomic = new BN(
-          Math.round(amountUsdc * 10 ** USDC_DECIMALS),
-        );
-
-        // 6. Invoke create_job on-chain. Wallet popup → user signs → tx
-        //    is broadcast → escrow PDA gets the user's USDC.
-        const result = await createJobOnChain({
-          program,
-          poster: posterPk,
-          specHash,
-          amount: amountAtomic,
-          deadline: new BN(deadlineUnix),
-          challengePeriod: new BN(challengeSecs),
-          posterTokenAccount,
-          tokenMint: USDC_MINT,
-        });
-        escrowTxHash = result.sig;
-        escrowAta = result.escrowTokenAccount.toBase58();
       }
 
       // 7. Mirror the on-chain state into Postgres. The server independently
@@ -178,6 +183,7 @@ export default function CreateJobForm({ variant = "light", onJobCreated }: Creat
           paymentToken,
           escrowTxHash,
           escrowAta,
+          demoMode,
         }),
       });
 

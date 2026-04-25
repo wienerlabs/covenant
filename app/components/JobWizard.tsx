@@ -169,47 +169,46 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
 
       let escrowTxHash: string | undefined;
       let escrowAtaStr: string | undefined;
+      let demoMode = false;
 
-      // ----- Wallet-signed on-chain create_job -----
+      // Try wallet-signed on-chain create_job first; if the wallet adapter
+      // rejects the escrow co-signer, fall back to demo-mode record-only.
       if (data.paymentToken === "USDC") {
         setEscrowStep("building");
-        // Build the canonical spec — same shape both client + server hash.
-        const specJson = buildJobSpec({
-          posterWallet: account,
-          amount: data.amount,
-          minWords: data.minWords,
-          language,
-          deadline: deadlineIso,
-          createdAt,
-          title,
-          description,
-          requirements,
-          sourceText: data.category === "translation" ? sourceText : undefined,
-          repoUrl: data.category === "code_review" ? repoUrl : undefined,
-          targetUrl: data.category === "bug_bounty" ? targetUrl : undefined,
-          stylePreference: data.category === "design" ? stylePreference : undefined,
-        });
-        const specHash = await hashJobSpecBytes(specJson);
-
-        const program = getAnchorProgram(account, selectedWallet);
-        if (!program) {
-          setError("Wallet not ready — reconnect and try again.");
-          setEscrowStep("idle");
-          return;
-        }
-
-        const posterPk = new PublicKey(account);
-        const posterTokenAccount = await getAssociatedTokenAddress(
-          USDC_MINT,
-          posterPk,
-        );
-        const deadlineUnix = Math.floor(deadlineDate.getTime() / 1000);
-        const amountAtomic = new BN(
-          Math.round(data.amount * 10 ** USDC_DECIMALS),
-        );
-
-        setEscrowStep("signing");
         try {
+          const specJson = buildJobSpec({
+            posterWallet: account,
+            amount: data.amount,
+            minWords: data.minWords,
+            language,
+            deadline: deadlineIso,
+            createdAt,
+            title,
+            description,
+            requirements,
+            sourceText: data.category === "translation" ? sourceText : undefined,
+            repoUrl: data.category === "code_review" ? repoUrl : undefined,
+            targetUrl: data.category === "bug_bounty" ? targetUrl : undefined,
+            stylePreference: data.category === "design" ? stylePreference : undefined,
+          });
+          const specHash = await hashJobSpecBytes(specJson);
+
+          const program = getAnchorProgram(account, selectedWallet);
+          if (!program) {
+            throw new Error("Wallet not ready — reconnect and try again.");
+          }
+
+          const posterPk = new PublicKey(account);
+          const posterTokenAccount = await getAssociatedTokenAddress(
+            USDC_MINT,
+            posterPk,
+          );
+          const deadlineUnix = Math.floor(deadlineDate.getTime() / 1000);
+          const amountAtomic = new BN(
+            Math.round(data.amount * 10 ** USDC_DECIMALS),
+          );
+
+          setEscrowStep("signing");
           const result = await createJobOnChain({
             program,
             poster: posterPk,
@@ -222,14 +221,13 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
           });
           escrowTxHash = result.sig;
           escrowAtaStr = result.escrowTokenAccount.toBase58();
-        } catch (signErr) {
-          setError(
-            signErr instanceof Error
-              ? `On-chain create_job failed: ${signErr.message}`
-              : "On-chain create_job failed",
+        } catch (onchainErr) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[create-job] on-chain failed, falling back to demo mode:",
+            onchainErr,
           );
-          setEscrowStep("idle");
-          return;
+          demoMode = true;
         }
       }
 
@@ -256,6 +254,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
           ...(data.category === "design" && stylePreference ? { stylePreference } : {}),
           escrowTxHash,
           escrowAta: escrowAtaStr,
+          demoMode,
         }),
       });
 

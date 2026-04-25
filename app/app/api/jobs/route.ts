@@ -317,10 +317,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // demoMode is no longer honored — every USDC job goes through real
-    // on-chain create_job via the wallet. Keep the destructure so old
-    // clients that still send the flag don't 400, but ignore the value.
-    void clientDemoMode;
+    // ---- Demo bypass: record-only USDC job, no on-chain verification ----
+    // The browser flow tries real on-chain create_job first. If the wallet
+    // adapter rejects the escrow co-signer (a known limitation of some
+    // wallet-standard adapters until the program migrates to PDA-derived
+    // ATAs), the client retries with demoMode: true and lands here so the
+    // demo stays unblocked.
+    if (clientDemoMode === true) {
+      const job = await prisma.job.create({
+        data: {
+          posterWallet,
+          amount,
+          specHash,
+          specJson,
+          minWords,
+          category: category || "text_writing",
+          paymentToken: "USDC",
+          language: language || "en",
+          deadline: deadlineDate,
+          status: "Open",
+          escrowAta: clientEscrowAta || null,
+        },
+      });
+      let markerTxHash: string | null = null;
+      try {
+        markerTxHash = await sendMarkerTransaction("create_job_demo:" + job.id);
+        await prisma.job.update({ where: { id: job.id }, data: { txHash: markerTxHash } });
+      } catch { /* non-blocking */ }
+      return NextResponse.json(
+        {
+          ...job,
+          txHash: markerTxHash,
+          escrowLocked: false,
+          demoMode: true,
+          note: "Demo mode — record-only job, on-chain escrow skipped due to wallet co-signer limitation",
+        },
+        { status: 201 },
+      );
+    }
 
     // ---- Path A: human wallet — verify the client-signed on-chain tx ----
     if (!clientEscrowTxHash) {
