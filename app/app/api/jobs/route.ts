@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma, ensureSchema } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { rateLimit } from "@/lib/rateLimit";
-import crypto from "crypto";
+import { buildJobSpec, hashJobSpec } from "@/lib/spec";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
   botCreateJob,
@@ -122,6 +122,11 @@ export async function POST(request: NextRequest) {
       escrowTxHash: clientEscrowTxHash,
       escrowAta: clientEscrowAta,
       demoMode: clientDemoMode,
+      // Client-supplied ISO timestamp used in spec building. The browser
+      // computes specHash against the same `createdAt`, so the client
+      // and server agree on the PDA. If absent (legacy bot path), the
+      // server picks a fresh timestamp.
+      createdAt: clientCreatedAt,
     } = body;
 
     if (!posterWallet || typeof posterWallet !== "string") {
@@ -157,26 +162,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const specJson = {
+    // The createdAt timestamp must be stable between client and server —
+    // both compute the same spec hash and the on-chain Job PDA is derived
+    // from it. The client provides createdAt for human-wallet flows; if
+    // missing (bot/server flows), we synthesize one server-side.
+    const effectiveCreatedAt =
+      typeof clientCreatedAt === "string" && clientCreatedAt.length > 0
+        ? clientCreatedAt
+        : new Date().toISOString();
+
+    const specJson = buildJobSpec({
       posterWallet,
       amount,
       minWords,
       language: language || "English",
       deadline: deadlineDate.toISOString(),
-      createdAt: new Date().toISOString(),
+      createdAt: effectiveCreatedAt,
       title: title || "",
       description: description || "",
       requirements: requirements || "",
-      ...(sourceText ? { sourceText } : {}),
-      ...(repoUrl ? { repoUrl } : {}),
-      ...(targetUrl ? { targetUrl } : {}),
-      ...(stylePreference ? { stylePreference } : {}),
-    };
+      sourceText,
+      repoUrl,
+      targetUrl,
+      stylePreference,
+    });
 
-    const specHash = crypto
-      .createHash("sha256")
-      .update(JSON.stringify(specJson))
-      .digest("hex");
+    const specHash = await hashJobSpec(specJson);
 
     // ---- On-chain settlement ----
     //
@@ -300,41 +311,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ---- Demo bypass: record-only USDC job, no on-chain verification ----
-    // Used by the live demo flow where /api/escrow/build returns
-    // { demoMode: true } so the client never produces an escrowTxHash.
-    if (clientDemoMode === true) {
-      const job = await prisma.job.create({
-        data: {
-          posterWallet,
-          amount,
-          specHash,
-          specJson,
-          minWords,
-          category: category || "text_writing",
-          paymentToken: "USDC",
-          language: language || "en",
-          deadline: deadlineDate,
-          status: "Open",
-          escrowAta: clientEscrowAta || null,
-        },
-      });
-      let markerTxHash: string | null = null;
-      try {
-        markerTxHash = await sendMarkerTransaction("create_job_demo:" + job.id);
-        await prisma.job.update({ where: { id: job.id }, data: { txHash: markerTxHash } });
-      } catch { /* non-blocking */ }
-      return NextResponse.json(
-        {
-          ...job,
-          txHash: markerTxHash,
-          escrowLocked: false,
-          demoMode: true,
-          note: "Demo mode — record-only job, no on-chain escrow",
-        },
-        { status: 201 },
-      );
-    }
+    // demoMode is no longer honored — every USDC job goes through real
+    // on-chain create_job via the wallet. Keep the destructure so old
+    // clients that still send the flag don't 400, but ignore the value.
+    void clientDemoMode;
 
     // ---- Path A: human wallet — verify the client-signed on-chain tx ----
     if (!clientEscrowTxHash) {

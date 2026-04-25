@@ -2,11 +2,20 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useConnector } from "@solana/connector/react";
+import { BN } from "@coral-xyz/anchor";
+import { PublicKey } from "@solana/web3.js";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { JOB_CATEGORIES, type CategoryId } from "@/lib/categories";
-import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
+import {
+  USDC_LOGO_URL,
+  SOL_LOGO_URL,
+  USDC_DECIMALS,
+  USDC_MINT,
+} from "@/lib/constants";
 import { fireConfetti } from "@/lib/confetti";
 import { triggerBalanceRefresh } from "@/lib/balance-bus";
-import { signAndSendTransaction, deserializeTx } from "@/lib/wallet-sign";
+import { getAnchorProgram, createJobOnChain } from "@/lib/anchor-browser";
+import { buildJobSpec, hashJobSpecBytes } from "@/lib/spec";
 
 interface JobWizardProps {
   onComplete?: (data: Record<string, unknown>) => void;
@@ -155,92 +164,98 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
       const deadlineDate = data.deadline
         ? new Date(data.deadline)
         : new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-      const jobData = {
-        category: data.category,
-        paymentToken: data.paymentToken,
-        minWords: data.minWords,
-        language,
-        deadline: deadlineDate.toISOString(),
-        title,
-        description,
-        requirements,
-        ...(data.category === "translation" && sourceText ? { sourceText } : {}),
-        ...(data.category === "code_review" && repoUrl ? { repoUrl } : {}),
-        ...(data.category === "bug_bounty" && targetUrl ? { targetUrl } : {}),
-        ...(data.category === "design" && stylePreference ? { stylePreference } : {}),
-      };
+      const deadlineIso = deadlineDate.toISOString();
+      const createdAt = new Date().toISOString();
 
       let escrowTxHash: string | undefined;
       let escrowAtaStr: string | undefined;
-      let demoMode = false;
 
-      // ----- Wallet-signed escrow lock (USDC) -----
-      // Uses a simple SPL transfer from the poster's ATA to the escrow
-      // wallet. The Anchor program is deployed on chain but its
-      // create_job instruction requires a co-signer (escrow token account
-      // keypair) which wallet-standard adapters reject as "unknown signer".
-      // Until the program uses PDA-derived token accounts, we lock via
-      // direct transfer and let the server mirror state to the DB.
+      // ----- Wallet-signed on-chain create_job -----
       if (data.paymentToken === "USDC") {
         setEscrowStep("building");
-        const buildRes = await fetch("/api/escrow/build", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            posterWallet: account,
-            amount: data.amount,
-          }),
+        // Build the canonical spec — same shape both client + server hash.
+        const specJson = buildJobSpec({
+          posterWallet: account,
+          amount: data.amount,
+          minWords: data.minWords,
+          language,
+          deadline: deadlineIso,
+          createdAt,
+          title,
+          description,
+          requirements,
+          sourceText: data.category === "translation" ? sourceText : undefined,
+          repoUrl: data.category === "code_review" ? repoUrl : undefined,
+          targetUrl: data.category === "bug_bounty" ? targetUrl : undefined,
+          stylePreference: data.category === "design" ? stylePreference : undefined,
         });
-        if (!buildRes.ok) {
-          const d = await buildRes.json().catch(() => ({}));
-          setError(d.error || "Failed to build escrow transaction");
+        const specHash = await hashJobSpecBytes(specJson);
+
+        const program = getAnchorProgram(account, selectedWallet);
+        if (!program) {
+          setError("Wallet not ready — reconnect and try again.");
           setEscrowStep("idle");
           return;
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const build = (await buildRes.json()) as any;
-        if (build?.demoMode === true) {
-          // Demo bypass — record-only job, no wallet popup, no on-chain tx.
-          demoMode = true;
-          escrowAtaStr = build.escrowAta ?? undefined;
-        } else if (build?.transaction) {
-          escrowAtaStr = build.escrowAta;
-          setEscrowStep("signing");
-          try {
-            const tx = deserializeTx(build.transaction);
-            escrowTxHash = await signAndSendTransaction(
-              selectedWallet,
-              account,
-              tx,
-            );
-          } catch (signErr) {
-            setError(
-              signErr instanceof Error
-                ? `Wallet signing failed: ${signErr.message}`
-                : "Wallet signing failed",
-            );
-            setEscrowStep("idle");
-            return;
-          }
+
+        const posterPk = new PublicKey(account);
+        const posterTokenAccount = await getAssociatedTokenAddress(
+          USDC_MINT,
+          posterPk,
+        );
+        const deadlineUnix = Math.floor(deadlineDate.getTime() / 1000);
+        const amountAtomic = new BN(
+          Math.round(data.amount * 10 ** USDC_DECIMALS),
+        );
+
+        setEscrowStep("signing");
+        try {
+          const result = await createJobOnChain({
+            program,
+            poster: posterPk,
+            specHash,
+            amount: amountAtomic,
+            deadline: new BN(deadlineUnix),
+            challengePeriod: new BN(3600),
+            posterTokenAccount,
+            tokenMint: USDC_MINT,
+          });
+          escrowTxHash = result.sig;
+          escrowAtaStr = result.escrowTokenAccount.toBase58();
+        } catch (signErr) {
+          setError(
+            signErr instanceof Error
+              ? `On-chain create_job failed: ${signErr.message}`
+              : "On-chain create_job failed",
+          );
+          setEscrowStep("idle");
+          return;
         }
       }
 
       // ----- Record on the server (DB mirror) -----
-      // The on-chain state is now the source of truth. The server
-      // records a DB row so the frontend can query jobs efficiently
-      // without hitting the RPC for every list view.
       setEscrowStep("creating");
-      const res = await fetch("/api/escrow/confirm", {
+      const res = await fetch("/api/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           posterWallet: account,
           amount: data.amount,
-          jobData,
+          minWords: data.minWords,
+          language: "en",
+          deadline: deadlineIso,
+          createdAt,
+          category: data.category,
+          paymentToken: data.paymentToken,
+          title,
+          description,
+          requirements,
+          ...(data.category === "translation" && sourceText ? { sourceText } : {}),
+          ...(data.category === "code_review" && repoUrl ? { repoUrl } : {}),
+          ...(data.category === "bug_bounty" && targetUrl ? { targetUrl } : {}),
+          ...(data.category === "design" && stylePreference ? { stylePreference } : {}),
           escrowTxHash,
           escrowAta: escrowAtaStr,
-          demoMode,
         }),
       });
 
