@@ -60,7 +60,7 @@ export default function FaucetPage() {
           color: "#ffffff",
         }}
       >
-        <NavBar />
+        <NavBar activeTab="onchain" variant="dark" />
         <main
           style={{
             maxWidth: 640,
