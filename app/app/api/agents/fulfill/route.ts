@@ -87,7 +87,8 @@ export async function POST(req: NextRequest) {
     if (!deliverableText) {
       try {
         const Anthropic = (await import("@anthropic-ai/sdk")).default;
-        const client = new Anthropic();
+        const { withCreditFallback } = await import("@/lib/anthropic-safe");
+        const client = withCreditFallback(new Anthropic());
         const aiResponse = await client.messages.create({
           model: "claude-haiku-4-5-20251001",
           max_tokens: 2048,

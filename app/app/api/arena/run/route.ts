@@ -19,6 +19,7 @@ import {
   DEVNET_USDC_MINT,
 } from "@/lib/anchor-client";
 import Anthropic from "@anthropic-ai/sdk";
+import { withCreditFallback } from "@/lib/anthropic-safe";
 import crypto from "crypto";
 import { executeCircuit } from "@/lib/work-metrics";
 import { generateDID } from "@/lib/aip/did";
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const client = new Anthropic();
+        const client = withCreditFallback(new Anthropic());
 
         // Ensure agent profiles exist
         await ensureAgentProfiles();

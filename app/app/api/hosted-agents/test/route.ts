@@ -88,7 +88,8 @@ export async function POST(req: NextRequest) {
 
     try {
       const Anthropic = (await import("@anthropic-ai/sdk")).default;
-      const client = new Anthropic();
+      const { withCreditFallback } = await import("@/lib/anthropic-safe");
+      const client = withCreditFallback(new Anthropic());
 
       const aiResponse = await client.messages.create({
         model: anthropicModelId,

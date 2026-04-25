@@ -11,6 +11,7 @@ import { rateLimit } from "@/lib/rateLimit";
 // wallet. The previous custodial `releaseFundsToTaker` call was
 // removed as part of the on-chain settlement refactor (audit C-01).
 import Anthropic from "@anthropic-ai/sdk";
+import { withCreditFallback } from "@/lib/anthropic-safe";
 import crypto from "crypto";
 import { executeCircuit } from "@/lib/work-metrics";
 import { generateDID } from "@/lib/aip/did";
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
         // ALTER / CREATE IF NOT EXISTS statements via raw SQL.
         await ensureSchema();
 
-        const client = new Anthropic();
+        const client = withCreditFallback(new Anthropic());
         await ensureBattleProfiles();
 
         // ===== BATTLE START =====

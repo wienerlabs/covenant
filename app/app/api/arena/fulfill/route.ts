@@ -9,6 +9,7 @@ import { sendMarkerTransaction } from "@/lib/solana";
 // move USDC.
 import { getCategoryById } from "@/lib/categories";
 import Anthropic from "@anthropic-ai/sdk";
+import { withCreditFallback } from "@/lib/anthropic-safe";
 import crypto from "crypto";
 import { rateLimit } from "@/lib/rateLimit";
 import { generateDID } from "@/lib/aip/did";
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
           "Agent Omega generating deliverable with Haiku..."
         );
 
-        const client = new Anthropic();
+        const client = withCreditFallback(new Anthropic());
         const jobTitle = (job.specJson as Record<string, unknown>)?.title as string || "a professional article";
         const jobDesc = (job.specJson as Record<string, unknown>)?.description as string || "";
         const jobReqs = (job.specJson as Record<string, unknown>)?.requirements as string || "";

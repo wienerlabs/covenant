@@ -9,6 +9,7 @@ import { rateLimit } from "@/lib/rateLimit";
 // `releaseFundsToTaker` was removed in the on-chain refactor (audit
 // C-01). Demo runs no longer move USDC.
 import Anthropic from "@anthropic-ai/sdk";
+import { withCreditFallback } from "@/lib/anthropic-safe";
 import crypto from "crypto";
 import { executeCircuit } from "@/lib/work-metrics";
 import { NextRequest } from "next/server";
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const client = new Anthropic();
+        const client = withCreditFallback(new Anthropic());
 
         // Ensure agent profiles
         await prisma.profile.upsert({
