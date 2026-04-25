@@ -194,50 +194,40 @@ export async function createJobOnChain(params: {
 
   const [jobPda] = deriveJobPda(poster, specHash);
   const [configPda] = deriveConfigPda();
-  const escrowTokenAccount = Keypair.generate();
+  // Escrow token account is now a PDA derived from the JobEscrow PDA.
+  // No Keypair generation, no co-signer — the wallet only signs as the
+  // poster. The program signs the PDA via seeds at instruction time.
+  const [escrowTokenPda] = deriveEscrowTokenPda(jobPda);
 
-  // Build the transaction without sending — we handle signing manually
-  // because Anchor's `.rpc()` signer matching can conflict with
-  // wallet-standard adapters that reject unknown co-signers.
-  const tx = await (program.methods as any)
+  // Use Anchor's `.rpc()` happy path now that the wallet only needs to
+  // sign one slot (poster). Wallet-standard adapters accept this cleanly.
+  const sig = await (program.methods as any)
     .createJob(amount, Array.from(specHash), deadline, challengePeriod)
     .accounts({
       poster,
       config: configPda,
       jobEscrow: jobPda,
-      escrowTokenAccount: escrowTokenAccount.publicKey,
+      escrowTokenAccount: escrowTokenPda,
       posterTokenAccount,
       tokenMint,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       rent: SYSVAR_RENT_PUBKEY,
     })
-    .transaction();
+    .rpc({ commitment: "confirmed", skipPreflight: false });
 
-  // Set recent blockhash + fee payer
-  const connection = program.provider.connection;
-  const { blockhash, lastValidBlockHeight } =
-    await connection.getLatestBlockhash("confirmed");
-  tx.recentBlockhash = blockhash;
-  tx.lastValidBlockHeight = lastValidBlockHeight;
-  tx.feePayer = poster;
+  return { sig, jobPda, escrowTokenAccount: escrowTokenPda };
+}
 
-  // Sign with the escrow token account keypair first (co-signer)
-  tx.partialSign(escrowTokenAccount);
-
-  // Sign with the user's wallet (poster) via the provider
-  const signedTx = await ((program.provider as any).wallet as any).signTransaction(tx);
-
-  // Send the fully-signed transaction
-  const sig = await connection.sendRawTransaction(signedTx.serialize(), {
-    skipPreflight: false,
-  });
-  await connection.confirmTransaction(
-    { signature: sig, blockhash, lastValidBlockHeight },
-    "confirmed",
+/**
+ * Derive the PDA for the escrow token account of a given job.
+ * Mirrors the on-chain seeds in `programs/covenant/src/instructions/create_job.rs`.
+ */
+export function deriveEscrowTokenPda(jobPda: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("escrow_token"), jobPda.toBuffer()],
+    PROGRAM_ID,
   );
-
-  return { sig, jobPda, escrowTokenAccount: escrowTokenAccount.publicKey };
 }
 
 /**

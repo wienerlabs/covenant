@@ -322,7 +322,8 @@ export async function botCreateJob(params: {
 
   const [jobPda] = deriveJobPda(botKeypair.publicKey, specHash);
   const [configPda] = deriveConfigPda();
-  const escrowKp = Keypair.generate();
+  // Escrow token account is now PDA-derived — no Keypair needed.
+  const [escrowTokenPda] = deriveEscrowTokenPda(jobPda);
   const posterAta = await getAssociatedTokenAddress(USDC_MINT, botKeypair.publicKey);
 
   // Make sure the bot's own ATA exists (bot funds must already be there).
@@ -360,17 +361,28 @@ export async function botCreateJob(params: {
       poster: botKeypair.publicKey,
       config: configPda,
       jobEscrow: jobPda,
-      escrowTokenAccount: escrowKp.publicKey,
+      escrowTokenAccount: escrowTokenPda,
       posterTokenAccount: posterAta,
       tokenMint: USDC_MINT,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       rent: SYSVAR_RENT_PUBKEY,
     })
-    .signers([escrowKp])
     .rpc();
 
-  return { sig, jobPda, escrowTokenAccount: escrowKp.publicKey };
+  return { sig, jobPda, escrowTokenAccount: escrowTokenPda };
+}
+
+/**
+ * Derive the PDA for the escrow token account of a given job.
+ * Mirrors `deriveEscrowTokenPda` in `lib/anchor-browser.ts` so client +
+ * server agree on the address.
+ */
+export function deriveEscrowTokenPda(jobPda: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("escrow_token"), jobPda.toBuffer()],
+    PROGRAM_ID,
+  );
 }
 
 /**
