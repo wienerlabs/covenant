@@ -1,28 +1,28 @@
 import { NextResponse } from "next/server";
 
 /**
- * @deprecated POST /api/escrow/build
+ * POST /api/escrow/build
  *
- * Built an SPL transfer tx that moved user USDC into a single shared
- * deployer-controlled wallet. Removed in the on-chain settlement
- * refactor (audit C-01 / H-02).
+ * Historically built an SPL transfer tx into a deployer-controlled escrow.
+ * Removed in the on-chain settlement refactor (audit C-01 / H-02), then
+ * temporarily re-enabled in **demo mode** for live presentations: returns
+ * a `demoMode` flag instructing the client to skip the signing step and
+ * post a record-only job to /api/jobs. /api/jobs honors `demoMode: true`
+ * by mirroring the row to Postgres without on-chain verification.
  *
- * Replacement: invoke the on-chain `create_job` instruction directly
- * from the user's wallet via `createJobOnChain` in
- * `lib/anchor-browser.ts`. The instruction creates a per-job PDA
- * escrow owned by the program — no shared deployer wallet involved.
+ * For real on-chain settlement, callers should invoke `createJobOnChain`
+ * (see lib/anchor-browser.ts) and post the resulting signature directly
+ * as `escrowTxHash`.
  */
-
-const MIGRATION_NOTE = {
-  error: "Endpoint deprecated",
-  detail:
-    "POST /api/escrow/build was removed in the on-chain settlement refactor. " +
-    "Build the on-chain create_job instruction directly in the browser via " +
-    "createJobOnChain (see lib/anchor-browser.ts) and POST the resulting tx " +
-    "signature to /api/jobs as `escrowTxHash`.",
-  see: "/api/jobs",
-};
-
 export async function POST() {
-  return NextResponse.json(MIGRATION_NOTE, { status: 410 });
+  return NextResponse.json(
+    {
+      demoMode: true,
+      escrowAta: null,
+      note:
+        "Demo mode: client should skip signing and post job with demoMode=true. " +
+        "Real on-chain escrow uses createJobOnChain (lib/anchor-browser.ts).",
+    },
+    { status: 200 },
+  );
 }

@@ -173,6 +173,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
 
       let escrowTxHash: string | undefined;
       let escrowAtaStr: string | undefined;
+      let demoMode = false;
 
       // ----- Wallet-signed escrow lock (USDC) -----
       // Uses a simple SPL transfer from the poster's ATA to the escrow
@@ -197,28 +198,31 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
           setEscrowStep("idle");
           return;
         }
-        const build = (await buildRes.json()) as {
-          transaction: string;
-          escrowAta: string;
-        };
-        escrowAtaStr = build.escrowAta;
-
-        setEscrowStep("signing");
-        try {
-          const tx = deserializeTx(build.transaction);
-          escrowTxHash = await signAndSendTransaction(
-            selectedWallet,
-            account,
-            tx,
-          );
-        } catch (signErr) {
-          setError(
-            signErr instanceof Error
-              ? `Wallet signing failed: ${signErr.message}`
-              : "Wallet signing failed",
-          );
-          setEscrowStep("idle");
-          return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const build = (await buildRes.json()) as any;
+        if (build?.demoMode === true) {
+          // Demo bypass — record-only job, no wallet popup, no on-chain tx.
+          demoMode = true;
+          escrowAtaStr = build.escrowAta ?? undefined;
+        } else if (build?.transaction) {
+          escrowAtaStr = build.escrowAta;
+          setEscrowStep("signing");
+          try {
+            const tx = deserializeTx(build.transaction);
+            escrowTxHash = await signAndSendTransaction(
+              selectedWallet,
+              account,
+              tx,
+            );
+          } catch (signErr) {
+            setError(
+              signErr instanceof Error
+                ? `Wallet signing failed: ${signErr.message}`
+                : "Wallet signing failed",
+            );
+            setEscrowStep("idle");
+            return;
+          }
         }
       }
 
@@ -236,6 +240,7 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
           jobData,
           escrowTxHash,
           escrowAta: escrowAtaStr,
+          demoMode,
         }),
       });
 

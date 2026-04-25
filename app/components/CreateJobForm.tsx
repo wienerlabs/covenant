@@ -92,10 +92,13 @@ export default function CreateJobForm({ variant = "light", onJobCreated }: Creat
       let escrowTxHash: string | undefined;
       let escrowAta: string | undefined;
 
+      let demoMode = false;
       if (paymentToken === "USDC") {
-        // 1. Ask the server to build an unsigned escrow-lock transaction.
-        //    The server never signs -- it just stitches the SPL transfer
-        //    instruction with a recent blockhash and feePayer = posterWallet.
+        // Ask the server how to build the escrow tx. In demo mode the
+        // endpoint returns { demoMode: true } and we skip signing — the
+        // job is recorded in Postgres without on-chain backing so the
+        // demo flow stays unblocked while the real on-chain escrow
+        // refactor (createJobOnChain) is wired up.
         const buildRes = await fetch("/api/escrow/build", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -105,21 +108,20 @@ export default function CreateJobForm({ variant = "light", onJobCreated }: Creat
           const data = await buildRes.json().catch(() => ({}));
           throw new Error(data.error || "Failed to build escrow transaction");
         }
-        const build = (await buildRes.json()) as {
-          transaction: string;
-          escrowAta: string;
-        };
-        escrowAta = build.escrowAta;
-
-        // 2. Deserialize + prompt the user's wallet to sign & broadcast.
-        //    This is the step that makes the wallet popup appear and
-        //    debits the user's actual USDC balance.
-        const tx = deserializeTx(build.transaction);
-        escrowTxHash = await signAndSendTransaction(
-          selectedWallet,
-          posterWallet,
-          tx,
-        );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const build = (await buildRes.json()) as any;
+        if (build?.demoMode === true) {
+          demoMode = true;
+          escrowAta = build.escrowAta ?? undefined;
+        } else {
+          escrowAta = build.escrowAta;
+          const tx = deserializeTx(build.transaction);
+          escrowTxHash = await signAndSendTransaction(
+            selectedWallet,
+            posterWallet,
+            tx,
+          );
+        }
       }
 
       // 3. Record the job in the DB. The server verifies escrowTxHash
@@ -137,6 +139,7 @@ export default function CreateJobForm({ variant = "light", onJobCreated }: Creat
           paymentToken,
           escrowTxHash,
           escrowAta,
+          demoMode,
         }),
       });
 

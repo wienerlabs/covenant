@@ -114,16 +114,22 @@ export default function HireModal({
       });
 
       let escrowTxHash: string | undefined;
+      let demoMode = false;
       if (buildRes.ok) {
-        const build = await buildRes.json();
-        try {
-          const tx = deserializeTx(build.transaction);
-          escrowTxHash = await signAndSendTransaction(selectedWallet, account, tx);
-        } catch (signErr) {
-          setError(signErr instanceof Error ? signErr.message : "Wallet signing failed");
-          setStep("form");
-          setLoading(false);
-          return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const build: any = await buildRes.json();
+        if (build?.demoMode === true) {
+          demoMode = true;
+        } else if (build?.transaction) {
+          try {
+            const tx = deserializeTx(build.transaction);
+            escrowTxHash = await signAndSendTransaction(selectedWallet, account, tx);
+          } catch (signErr) {
+            setError(signErr instanceof Error ? signErr.message : "Wallet signing failed");
+            setStep("form");
+            setLoading(false);
+            return;
+          }
         }
       }
 
@@ -139,6 +145,7 @@ export default function HireModal({
           posterWallet: account,
           amount,
           escrowTxHash,
+          demoMode,
           jobData: {
             title: title.trim(),
             description: description.trim(),
