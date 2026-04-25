@@ -3,6 +3,7 @@ import { prisma, ensureSchema } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { rateLimit } from "@/lib/rateLimit";
 import { buildJobSpec, hashJobSpec } from "@/lib/spec";
+import type { Prisma } from "@prisma/client";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
   botCreateJob,
@@ -171,7 +172,7 @@ export async function POST(request: NextRequest) {
         ? clientCreatedAt
         : new Date().toISOString();
 
-    const specJson = buildJobSpec({
+    const specJsonRaw = buildJobSpec({
       posterWallet,
       amount,
       minWords,
@@ -187,7 +188,12 @@ export async function POST(request: NextRequest) {
       stylePreference,
     });
 
-    const specHash = await hashJobSpec(specJson);
+    const specHash = await hashJobSpec(specJsonRaw);
+    // Prisma's InputJsonValue is stricter than `Record<string, unknown>`
+    // (no readonly arrays, no symbols). The shape is JSON-safe, but the
+    // structural type doesn't match exactly — cast once here so all three
+    // prisma.job.create call sites can pass it through cleanly.
+    const specJson = specJsonRaw as unknown as Prisma.InputJsonValue;
 
     // ---- On-chain settlement ----
     //
