@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useConnector } from "@solana/connector/react";
+import { CLUSTER, IS_MAINNET, getClusterLabel } from "@/lib/network";
 import useProfile from "@/hooks/useProfile";
 import WalletButton from "./WalletButton";
 import WalletBalance from "./WalletBalance";
@@ -211,6 +212,29 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
           }}
         >
           Covenant
+        </span>
+        {/* Cluster badge — gives users a clear at-a-glance signal of which
+            Solana network the app is talking to. Green for mainnet, amber
+            for devnet/testnet, both readable on dark + light NavBar. */}
+        <span
+          title={`Cluster: ${CLUSTER}`}
+          style={{
+            fontSize: "9px",
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            padding: "3px 7px",
+            borderRadius: 4,
+            marginLeft: 4,
+            color: IS_MAINNET ? "#00d670" : "#ffc940",
+            background: IS_MAINNET
+              ? "rgba(0, 214, 112, 0.12)"
+              : "rgba(255, 201, 64, 0.14)",
+            border: `1px solid ${IS_MAINNET ? "rgba(0,214,112,0.35)" : "rgba(255,201,64,0.35)"}`,
+            flexShrink: 0,
+          }}
+        >
+          {getClusterLabel()}
         </span>
       </Link>
 

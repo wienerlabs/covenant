@@ -5,19 +5,23 @@ import {
   Transaction,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-
-const DEVNET_RPC = "https://api.devnet.solana.com";
+import { CLUSTER, getRpcUrl } from "@/lib/network";
 
 /**
- * Resolve the RPC URL: prefer Helius (enhanced RPC, higher rate limits,
- * better latency) when configured, fall back to public devnet otherwise.
+ * Resolve the RPC URL. Order of preference:
+ *   1. HELIUS_RPC_URL          (full enhanced URL)
+ *   2. HELIUS_API_KEY          (built-in URL with cluster prefix)
+ *   3. NEXT_PUBLIC_RPC_URL_*   (cluster-specific override, via lib/network)
+ *   4. cluster default         (api.{cluster}.solana.com)
  */
 function resolveRpcUrl(): string {
   if (process.env.HELIUS_RPC_URL) return process.env.HELIUS_RPC_URL;
   if (process.env.HELIUS_API_KEY) {
-    return `https://devnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`;
+    const heliusCluster =
+      CLUSTER === "mainnet-beta" ? "mainnet" : CLUSTER;
+    return `https://${heliusCluster}.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`;
   }
-  return process.env.NEXT_PUBLIC_RPC_URL || DEVNET_RPC;
+  return getRpcUrl();
 }
 
 let _connection: Connection | null = null;

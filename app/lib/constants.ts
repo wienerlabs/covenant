@@ -1,22 +1,39 @@
+/**
+ * Public constants for the Covenant frontend + API. Cluster-specific
+ * values (PROGRAM_ID, USDC_MINT, RPC_URL) are resolved through
+ * `lib/network.ts` so swapping clusters is a single env-var change.
+ *
+ * Switch clusters via `NEXT_PUBLIC_SOLANA_CLUSTER`:
+ *   "devnet" (default) | "mainnet-beta" | "testnet" | "localnet"
+ *
+ * For mainnet you also MUST set:
+ *   NEXT_PUBLIC_PROGRAM_ID_MAINNET   = <deployed Covenant program ID>
+ *   NEXT_PUBLIC_RPC_URL_MAINNET      = <Helius / Triton URL>
+ *   (NEXT_PUBLIC_USDC_MINT_MAINNET defaults to Circle USDC, override only for forks)
+ */
+
 import { PublicKey } from "@solana/web3.js";
 
-export const PROGRAM_ID = new PublicKey(
-  "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT"
-);
+// Re-exports — keep the existing import surface stable for the rest of
+// the codebase. Anything importing from "@/lib/constants" still works.
+export {
+  PROGRAM_ID,
+  USDC_MINT,
+  USDC_DECIMALS,
+  RPC_URL,
+  CLUSTER,
+  IS_MAINNET,
+  IS_DEVNET,
+  IS_LOCALNET,
+  FAUCET_ENABLED,
+  getRpcUrl,
+  explorerTxUrl,
+  explorerAccountUrl,
+  getClusterLabel,
+} from "@/lib/network";
 
+/** @deprecated Use RPC_URL — kept for any direct callers expecting devnet. */
 export const DEVNET_ENDPOINT = "https://api.devnet.solana.com";
-
-export const USDC_DECIMALS = 6;
-
-/**
- * Test USDC mint used across every Covenant flow on devnet. The /faucet
- * page mints this exact token, so every balance check, transfer and
- * escrow lock references the same pubkey. Do not change without also
- * updating the faucet and the agent wallets' ATAs.
- */
-export const USDC_MINT = new PublicKey(
-  "F7RYRqCy8uWYxjxrXVhU3iUCRwa9bKBUTkGKktpyYueQ"
-);
 
 /**
  * @deprecated Shared escrow wallet — no longer in use after the

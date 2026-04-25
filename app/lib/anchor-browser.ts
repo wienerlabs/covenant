@@ -20,7 +20,8 @@ import {
   SYSVAR_RENT_PUBKEY,
 } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { PROGRAM_ID, DEVNET_ENDPOINT, USDC_MINT } from "./constants";
+import { PROGRAM_ID, USDC_MINT } from "./constants";
+import { getRpcUrl } from "./network";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import idlJson from "./covenant-idl.json";
 
@@ -106,7 +107,7 @@ export function getAnchorProgram(
   if (!walletPubkey || !selectedWallet) return null;
 
   const connection = new Connection(
-    rpcUrl || DEVNET_ENDPOINT,
+    rpcUrl || getRpcUrl(),
     "confirmed",
   );
   const pubkey = new PublicKey(walletPubkey);

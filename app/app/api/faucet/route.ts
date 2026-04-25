@@ -2,8 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mintTestUSDC, getTokenBalance } from "@/lib/escrow";
 import { rateLimit } from "@/lib/rateLimit";
+import { FAUCET_ENABLED, getClusterLabel } from "@/lib/network";
 
 export async function POST(request: NextRequest) {
+  // Faucet is only meaningful on devnet — refuse to mint on mainnet so
+  // production deploys can't be tricked into invoking the test mint.
+  if (!FAUCET_ENABLED) {
+    return NextResponse.json(
+      {
+        error: `Faucet disabled on ${getClusterLabel()}. Use real USDC on mainnet, or switch to devnet.`,
+      },
+      { status: 403 },
+    );
+  }
+
   try {
     const body = await request.json();
     const { walletAddress } = body;

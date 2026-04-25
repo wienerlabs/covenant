@@ -35,17 +35,24 @@ import {
   PROGRAM_ID,
   USDC_MINT,
   USDC_DECIMALS,
-  DEVNET_ENDPOINT,
 } from "./constants";
+import { CLUSTER, getRpcUrl } from "./network";
 
 // ---------- Connection ----------
 
 export function getServerConnection(): Connection {
-  const rpc =
-    process.env.HELIUS_RPC_URL ||
-    process.env.NEXT_PUBLIC_RPC_URL ||
-    DEVNET_ENDPOINT;
-  return new Connection(rpc, "confirmed");
+  // Helius enhanced RPC first (cluster-aware), then per-cluster public RPC.
+  if (process.env.HELIUS_RPC_URL) {
+    return new Connection(process.env.HELIUS_RPC_URL, "confirmed");
+  }
+  if (process.env.HELIUS_API_KEY) {
+    const heliusCluster = CLUSTER === "mainnet-beta" ? "mainnet" : CLUSTER;
+    return new Connection(
+      `https://${heliusCluster}.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`,
+      "confirmed",
+    );
+  }
+  return new Connection(getRpcUrl(), "confirmed");
 }
 
 // ---------- Keypair loading ----------
