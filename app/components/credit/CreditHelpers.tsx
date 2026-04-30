@@ -78,7 +78,7 @@ export function SolscanLink({
   value: string;
   kind?: "address" | "tx";
   label?: string;
-  cluster?: "devnet" | "mainnet" | "testnet";
+  cluster?: "devnet";
 }) {
   const base = "https://solscan.io";
   const path = kind === "tx" ? "tx" : "account";

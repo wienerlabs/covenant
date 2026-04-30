@@ -1,16 +1,13 @@
 #!/usr/bin/env node
 /**
- * Covenant — fund bot wallets with SOL + USDC.
+ * Covenant — fund bot wallets with SOL + test USDC on Devnet.
  *
- * After mainnet program deploy + init_config, the autonomous /
- * arena / battle agents need:
+ * The autonomous / arena / battle agents need:
  *   - SOL for transaction fees
  *   - USDC to post jobs (in autonomous + arena modes)
  *
- * On devnet the on-page faucet handles this for the user. On
- * mainnet the bots run with real funds and must be topped up by
- * an operator. This script transfers from a SOURCE keypair to
- * each configured bot wallet.
+ * The on-page faucet handles user-facing minting; this script is for
+ * operators topping up bot wallets in bulk from a SOURCE keypair.
  *
  * Usage:
  *   SOURCE_KEYPAIR=$(cat ~/.config/solana/id.json | jq -c .) \
@@ -19,7 +16,6 @@
  *   DEPLOYER_WALLET=<pubkey> \
  *   SOL_PER_BOT=0.05 \
  *   USDC_PER_BOT=10 \
- *   NEXT_PUBLIC_SOLANA_CLUSTER=mainnet-beta \
  *   node scripts/fund-bots.mjs
  *
  * Set DRY_RUN=1 to see the plan without sending.
@@ -38,25 +34,17 @@ import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
   createTransferCheckedInstruction,
-  TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 
-const CLUSTER = (process.env.NEXT_PUBLIC_SOLANA_CLUSTER || "devnet").toLowerCase();
-const IS_MAINNET = CLUSTER === "mainnet-beta";
 const DRY_RUN = process.env.DRY_RUN === "1";
 
 const RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL ||
   process.env.HELIUS_RPC_URL ||
-  (IS_MAINNET
-    ? "https://api.mainnet-beta.solana.com"
-    : "https://api.devnet.solana.com");
+  "https://api.devnet.solana.com";
 
-const USDC_MINT = new PublicKey(
-  IS_MAINNET
-    ? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-    : "F7RYRqCy8uWYxjxrXVhU3iUCRwa9bKBUTkGKktpyYueQ",
-);
+// Devnet test USDC mint (the same one the on-page /faucet mints).
+const USDC_MINT = new PublicKey("F7RYRqCy8uWYxjxrXVhU3iUCRwa9bKBUTkGKktpyYueQ");
 
 const SOL_PER_BOT = Number(process.env.SOL_PER_BOT ?? 0.02);
 const USDC_PER_BOT = Number(process.env.USDC_PER_BOT ?? 5);
@@ -101,7 +89,7 @@ async function ensureAta(conn, src, ownerPk) {
 }
 
 async function main() {
-  console.log(`▶ Cluster: ${CLUSTER}${DRY_RUN ? "  [DRY RUN]" : ""}`);
+  console.log(`▶ Cluster: devnet${DRY_RUN ? "  [DRY RUN]" : ""}`);
   console.log(`▶ RPC:     ${RPC_URL}`);
   console.log(`▶ USDC:    ${USDC_MINT.toBase58()}`);
 
@@ -117,11 +105,6 @@ async function main() {
   const totalUsdc = USDC_PER_BOT * targets.length;
   console.log(`\n▶ Plan: ${SOL_PER_BOT} SOL + ${USDC_PER_BOT} USDC per bot × ${targets.length} bots`);
   console.log(`        = ${totalSol} SOL + ${totalUsdc} USDC total\n`);
-
-  if (IS_MAINNET && !DRY_RUN) {
-    console.log("⚠ MAINNET — sending real funds. Press Ctrl+C within 5s to abort.");
-    await new Promise((r) => setTimeout(r, 5000));
-  }
 
   // Source's USDC ATA must exist + hold enough USDC
   const srcAta = await getAssociatedTokenAddress(USDC_MINT, src.publicKey);

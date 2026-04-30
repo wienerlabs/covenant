@@ -9,8 +9,8 @@
  *   Math.round(123.456789 * 1e6) = 123456789   ✓
  *   Math.round(0.01234567 * 1e6) = 12346    ← lost a digit + rounded up
  *
- * For mainnet money handling we want explicit string-based parsing
- * so partial-cent amounts round predictably and very-small or
+ * Even on devnet test USDC we want explicit string-based parsing so
+ * partial-cent amounts round predictably and very-small or
  * very-large amounts don't lose precision via Number coercion.
  *
  * BN-based output keeps the value safe for Anchor BN math and for

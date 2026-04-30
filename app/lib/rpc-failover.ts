@@ -3,8 +3,8 @@
  *
  * Solana web3.js's `Connection` is bound to a single endpoint. When
  * that endpoint rate-limits or 5xx's mid-flow, the whole call fails.
- * For mainnet reliability we want automatic retry against a chain of
- * fallback URLs.
+ * For demo reliability we want automatic retry against a chain of
+ * fallback RPC URLs.
  *
  * `createFailoverConnection()` returns a Proxy around `Connection`
  * that intercepts every method call. On a thrown error matching

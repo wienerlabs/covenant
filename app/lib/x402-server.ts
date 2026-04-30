@@ -1,8 +1,9 @@
 /**
- * x402 HTTP 402 Payment Protocol — Covenant Implementation
+ * x402 HTTP 402 Payment Protocol — Covenant Implementation.
  *
- * Devnet: Self-verification via Solana RPC (no external facilitator dependency)
- * Mainnet: Will use x402.org facilitator with real USDC
+ * Devnet-only: self-verification via Solana RPC, no external
+ * facilitator dependency. Test USDC handled the same way real USDC
+ * would be on a production cluster.
  */
 
 // Devnet USDC mint

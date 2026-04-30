@@ -201,7 +201,8 @@ export async function POST(
       }
     }
 
-    // Calculate protocol fee (recorded only — on-chain deduction comes at mainnet).
+    // Protocol fee, recorded only. Devnet escrow does not deduct it
+    // on chain; the field exists so analytics + audits can track it.
     const feeAmount = (job.amount * PROTOCOL_FEE_BPS) / 10000;
     const takerPayout = job.amount - feeAmount;
     console.log(`[finalize] fee=${feeAmount} takerPayout=${takerPayout} job=${id}`);

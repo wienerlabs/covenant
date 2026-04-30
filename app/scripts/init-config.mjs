@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
- * Covenant — protocol config initializer.
+ * Covenant — protocol config initializer (devnet).
  *
- * After deploying the Anchor program to a fresh cluster (mainnet,
- * a fresh devnet program ID, or localnet) the on-chain
- * ProtocolConfig PDA must be initialized exactly once via the
- * `init_config` instruction. Without this:
+ * After deploying the Anchor program to a fresh devnet program ID,
+ * the on-chain ProtocolConfig PDA must be initialized exactly once
+ * via the `init_config` instruction. Without this:
  *   - create_job rejects every call (challenge_period bounds unset)
  *   - raise_dispute can't validate bond amounts
  *   - resolve_dispute can't form the arbitrator multisig
@@ -14,22 +13,14 @@
  * the config PDA already exists.
  *
  * Usage:
- *   # Devnet
- *   node scripts/init-config.mjs
- *
- *   # Mainnet (set env vars first)
- *   NEXT_PUBLIC_SOLANA_CLUSTER=mainnet-beta \
- *   NEXT_PUBLIC_PROGRAM_ID_MAINNET=<deployed mainnet ID> \
  *   ARBITRATOR_1=<pubkey> ARBITRATOR_2=<pubkey> ARBITRATOR_3=<pubkey> \
- *   ARBITRATOR_THRESHOLD=2 \
  *   node scripts/init-config.mjs
  *
  * Required env:
  *   DEPLOYER_KEYPAIR    JSON array of 64 secret-key bytes (the program
  *                       upgrade authority — typically the same wallet
  *                       used to `solana program deploy`).
- *   ARBITRATOR_1/2/3    Three public keys forming the dispute multisig.
- *                       On mainnet use real founder + 2 trusted parties.
+ *   ARBITRATOR_1/2/3    Three pubkeys forming the dispute multisig.
  *
  * Optional env:
  *   ARBITRATOR_THRESHOLD             default 2 (2-of-3)
@@ -48,11 +39,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ---- env ----
-const CLUSTER = (process.env.NEXT_PUBLIC_SOLANA_CLUSTER || "devnet").toLowerCase();
-const IS_MAINNET = CLUSTER === "mainnet-beta";
-
 const PROGRAM_ID_STR =
-  (IS_MAINNET && process.env.NEXT_PUBLIC_PROGRAM_ID_MAINNET) ||
   process.env.NEXT_PUBLIC_PROGRAM_ID_DEVNET ||
   process.env.NEXT_PUBLIC_PROGRAM_ID ||
   "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT";
@@ -61,9 +48,7 @@ const PROGRAM_ID = new PublicKey(PROGRAM_ID_STR);
 const RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL ||
   process.env.HELIUS_RPC_URL ||
-  (IS_MAINNET
-    ? "https://api.mainnet-beta.solana.com"
-    : "https://api.devnet.solana.com");
+  "https://api.devnet.solana.com";
 
 const ARBS = [process.env.ARBITRATOR_1, process.env.ARBITRATOR_2, process.env.ARBITRATOR_3];
 const THRESHOLD = Number(process.env.ARBITRATOR_THRESHOLD ?? 2);
@@ -80,7 +65,7 @@ const fail = (msg) => {
 
 if (!process.env.DEPLOYER_KEYPAIR) fail("DEPLOYER_KEYPAIR env var is required.");
 ARBS.forEach((a, i) => {
-  if (!a) fail(`ARBITRATOR_${i + 1} env var is required (mainnet — use real wallets).`);
+  if (!a) fail(`ARBITRATOR_${i + 1} env var is required.`);
   try {
     new PublicKey(a);
   } catch {
@@ -92,7 +77,7 @@ if (MAX_CHAL <= MIN_CHAL) fail("MAX_CHALLENGE_PERIOD must exceed MIN_CHALLENGE_P
 
 // ---- run ----
 async function main() {
-  console.log(`▶ Cluster: ${CLUSTER}`);
+  console.log(`▶ Cluster: devnet`);
   console.log(`▶ Program: ${PROGRAM_ID.toBase58()}`);
   console.log(`▶ RPC:     ${RPC_URL}`);
 
@@ -136,12 +121,6 @@ async function main() {
   console.log(`    min/max challenge period: ${MIN_CHAL}s / ${MAX_CHAL}s`);
   console.log(`    min bond:    ${MIN_BOND_BPS} bps + ${MIN_BOND_ABS_USDC} USDC absolute`);
 
-  if (IS_MAINNET) {
-    console.log("\n⚠ MAINNET — this is a one-time setup. Confirm before continuing.");
-    console.log("  Press Ctrl+C within 5s to abort.");
-    await new Promise((r) => setTimeout(r, 5000));
-  }
-
   const sig = await program.methods
     .initConfig(
       arbPubkeys,
@@ -158,9 +137,8 @@ async function main() {
     })
     .rpc({ commitment: "confirmed" });
 
-  const explorerCluster = IS_MAINNET ? "" : `?cluster=${CLUSTER}`;
   console.log(`\n✓ ProtocolConfig initialized. Tx:`);
-  console.log(`  https://explorer.solana.com/tx/${sig}${explorerCluster}`);
+  console.log(`  https://explorer.solana.com/tx/${sig}?cluster=devnet`);
 }
 
 main().catch((err) => {
