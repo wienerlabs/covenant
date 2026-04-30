@@ -56,13 +56,14 @@ function tunedDatabaseUrl(): string | undefined {
 
 function makeClient(): PrismaClient {
   const url = tunedDatabaseUrl();
+  // `as const` so Prisma's LogLevel[] type accepts the literal tuple
+  // under strict mode. Without this, some TS configs widen the inner
+  // strings to plain `string[]` which fails the constructor signature.
+  const log = ["error", "warn"] as const;
   return new PrismaClient(
     url
-      ? {
-          datasources: { db: { url } },
-          log: ["error", "warn"],
-        }
-      : { log: ["error", "warn"] },
+      ? { datasources: { db: { url } }, log: [...log] }
+      : { log: [...log] },
   );
 }
 
