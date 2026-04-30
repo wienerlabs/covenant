@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useConnector } from "@solana/connector/react";
-import { FAUCET_ENABLED } from "@/lib/network";
 
 export default function FaucetWidget() {
   const { isConnected, account } = useConnector();
@@ -58,8 +57,6 @@ export default function FaucetWidget() {
   }
 
   if (!isConnected || !account) return null;
-  // Hide the faucet pill entirely on mainnet — there is no test USDC to mint.
-  if (!FAUCET_ENABLED) return null;
 
   return (
     <div

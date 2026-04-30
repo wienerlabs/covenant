@@ -1,5 +1,3 @@
-import { IS_MAINNET } from "@/lib/network";
-
 interface RateLimitEntry {
   count: number;
   resetAt: number;
@@ -8,39 +6,29 @@ interface RateLimitEntry {
 const store = new Map<string, RateLimitEntry>();
 
 /**
- * Production-tuned limits per logical operation. Mainnet values
- * are tighter (real money at stake → Sybil attempts cost more).
- *
- * Use `getLimit("create_job")` instead of hardcoding limits at the
- * call site so cluster switching automatically tightens the gate.
+ * Devnet-tuned per-operation rate limits. Use `getLimit("create_job")`
+ * instead of hardcoding numbers at the call site so the table stays
+ * the single source of truth.
  */
-const LIMIT_TABLE: Record<string, { devnet: number; mainnet: number; windowMs: number }> = {
-  create_job:    { devnet: 20, mainnet: 5,  windowMs: 60_000 },
-  accept_job:    { devnet: 30, mainnet: 10, windowMs: 60_000 },
-  submit_work:   { devnet: 30, mainnet: 10, windowMs: 60_000 },
-  finalize:      { devnet: 30, mainnet: 10, windowMs: 60_000 },
-  cancel:        { devnet: 30, mainnet: 10, windowMs: 60_000 },
-  raise_dispute: { devnet: 10, mainnet: 3,  windowMs: 60_000 },
-  list_claim:    { devnet: 30, mainnet: 10, windowMs: 60_000 },
-  buy_claim:     { devnet: 30, mainnet: 10, windowMs: 60_000 },
-  faucet:        { devnet: 1,  mainnet: 0,  windowMs: 60 * 60_000 }, // 0 = disabled on mainnet
-  arena_run:     { devnet: 60, mainnet: 20, windowMs: 60_000 },
-  battle_run:    { devnet: 60, mainnet: 20, windowMs: 60_000 },
-  agent_hire:    { devnet: 30, mainnet: 10, windowMs: 60_000 },
-  spectator_chat: { devnet: 30, mainnet: 30, windowMs: 60_000 },
+const LIMIT_TABLE: Record<string, { limit: number; windowMs: number }> = {
+  create_job:    { limit: 20, windowMs: 60_000 },
+  accept_job:    { limit: 30, windowMs: 60_000 },
+  submit_work:   { limit: 30, windowMs: 60_000 },
+  finalize:      { limit: 30, windowMs: 60_000 },
+  cancel:        { limit: 30, windowMs: 60_000 },
+  raise_dispute: { limit: 10, windowMs: 60_000 },
+  list_claim:    { limit: 30, windowMs: 60_000 },
+  buy_claim:     { limit: 30, windowMs: 60_000 },
+  faucet:        { limit: 1,  windowMs: 60 * 60_000 },
+  arena_run:     { limit: 60, windowMs: 60_000 },
+  battle_run:    { limit: 60, windowMs: 60_000 },
+  agent_hire:    { limit: 30, windowMs: 60_000 },
+  spectator_chat: { limit: 30, windowMs: 60_000 },
 };
 
-/**
- * Returns the cluster-appropriate (limit, windowMs) for a named op.
- * Falls back to the dev limit if the op isn't known.
- */
+/** Returns the (limit, windowMs) for a named op. Falls back to a sane default. */
 export function getLimit(op: keyof typeof LIMIT_TABLE | string): { limit: number; windowMs: number } {
-  const cfg = LIMIT_TABLE[op as keyof typeof LIMIT_TABLE];
-  if (!cfg) return { limit: 30, windowMs: 60_000 };
-  return {
-    limit: IS_MAINNET ? cfg.mainnet : cfg.devnet,
-    windowMs: cfg.windowMs,
-  };
+  return LIMIT_TABLE[op as keyof typeof LIMIT_TABLE] ?? { limit: 30, windowMs: 60_000 };
 }
 
 /**

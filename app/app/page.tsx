@@ -308,6 +308,7 @@ export default function LandingPage() {
               { name: "Helius", logo: "https://github.com/helius-labs.png" },
               { name: "Colosseum", logo: "/logos/colosseum.png" },
               { name: "Coinbase", logo: "/logos/coinbase.png" },
+              { name: "OKX", logo: "/logos/okx.png" },
               { name: "Dialect", logo: "/logos/dialect.png" },
               { name: "QuickNode", logo: "https://github.com/quiknode-labs.png" },
               { name: "Anthropic", logo: "/logos/anthropic.png" },

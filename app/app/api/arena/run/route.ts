@@ -69,7 +69,7 @@ async function ensureAgentProfiles() {
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
-  // Cluster-aware: tighter on mainnet (20/min) vs devnet (60/min).
+  // Devnet rate limit (per-table in lib/rateLimit.ts).
   const { limit, windowMs } = getLimit("arena_run");
   const rl = rateLimit(`arena:${ip}`, limit, windowMs);
   if (!rl.allowed) {

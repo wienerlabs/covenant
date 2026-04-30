@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   await ensureSchema().catch(() => { /* non-fatal */ });
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
-  // Cluster-aware: tighter on mainnet (5/min) vs devnet (20/min).
+  // Devnet rate limit (per-table in lib/rateLimit.ts).
   const { limit, windowMs } = getLimit("create_job");
   const rl = rateLimit(`jobs:${ip}`, limit, windowMs);
   if (!rl.allowed) {

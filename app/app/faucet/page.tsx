@@ -3,7 +3,6 @@
 import { useState } from "react";
 import NavBar from "@/components/NavBar";
 import { USDC_LOGO_URL } from "@/lib/constants";
-import { FAUCET_ENABLED, getClusterLabel } from "@/lib/network";
 
 export default function FaucetPage() {
   const [wallet, setWallet] = useState("");
@@ -47,72 +46,7 @@ export default function FaucetPage() {
     padding: "32px",
   };
 
-  // Mainnet — render an explanatory banner instead of the mint UI.
-  if (!FAUCET_ENABLED) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          fontFamily: "inherit",
-          position: "relative",
-          background:
-            "linear-gradient(180deg, #0a0a14 0%, #08080d 100%)",
-          color: "#ffffff",
-        }}
-      >
-        <NavBar activeTab="onchain" variant="dark" />
-        <main
-          style={{
-            maxWidth: 640,
-            margin: "0 auto",
-            padding: "80px 24px 64px",
-            textAlign: "center",
-          }}
-        >
-          <div style={glassCard}>
-            <div
-              style={{
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: "0.16em",
-                color: "rgba(255,255,255,0.4)",
-                marginBottom: 14,
-              }}
-            >
-              Faucet · {getClusterLabel()}
-            </div>
-            <h1
-              style={{
-                fontSize: 28,
-                fontWeight: 800,
-                marginBottom: 16,
-                letterSpacing: "0.04em",
-              }}
-            >
-              No test USDC on Mainnet
-            </h1>
-            <p
-              style={{
-                fontSize: 14,
-                lineHeight: 1.6,
-                color: "rgba(255,255,255,0.7)",
-                marginBottom: 16,
-              }}
-            >
-              The Covenant faucet only mints test USDC on Devnet. On
-              Mainnet you transact with real Circle USDC — fund your
-              wallet from any exchange or on-ramp, then come back to
-              create or accept jobs.
-            </p>
-            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
-              Want to test? Switch <code>NEXT_PUBLIC_SOLANA_CLUSTER</code> to{" "}
-              <code>devnet</code> and the faucet re-enables automatically.
-            </p>
-          </div>
-        </main>
-      </div>
-    );
-  }
+  // Devnet-only deployment — the faucet is always enabled.
 
   return (
     <div style={{ minHeight: "100vh", fontFamily: "inherit", position: "relative" }}>

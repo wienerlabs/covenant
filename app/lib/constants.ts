@@ -1,21 +1,14 @@
 /**
- * Public constants for the Covenant frontend + API. Cluster-specific
- * values (PROGRAM_ID, USDC_MINT, RPC_URL) are resolved through
- * `lib/network.ts` so swapping clusters is a single env-var change.
+ * Public constants for the Covenant frontend + API.
  *
- * Switch clusters via `NEXT_PUBLIC_SOLANA_CLUSTER`:
- *   "devnet" (default) | "mainnet-beta" | "testnet" | "localnet"
- *
- * For mainnet you also MUST set:
- *   NEXT_PUBLIC_PROGRAM_ID_MAINNET   = <deployed Covenant program ID>
- *   NEXT_PUBLIC_RPC_URL_MAINNET      = <Helius / Triton URL>
- *   (NEXT_PUBLIC_USDC_MINT_MAINNET defaults to Circle USDC, override only for forks)
+ * Covenant is currently demo-locked to **Solana Devnet**. All
+ * cluster-specific values (PROGRAM_ID, USDC_MINT, RPC_URL) are
+ * hardcoded for devnet via `lib/network.ts`.
  */
 
 import { PublicKey } from "@solana/web3.js";
 
-// Re-exports — keep the existing import surface stable for the rest of
-// the codebase. Anything importing from "@/lib/constants" still works.
+// Re-exports — keep the existing import surface stable.
 export {
   PROGRAM_ID,
   USDC_MINT,
@@ -32,27 +25,21 @@ export {
   getClusterLabel,
 } from "@/lib/network";
 
-/** @deprecated Use RPC_URL — kept for any direct callers expecting devnet. */
+/** @deprecated Use RPC_URL — kept for any direct callers. */
 export const DEVNET_ENDPOINT = "https://api.devnet.solana.com";
 
 /**
  * @deprecated Shared escrow wallet — no longer in use after the
  * on-chain settlement refactor (audit C-01 / H-02). Funds now live
  * in per-job PDA escrows owned by the Covenant Anchor program.
- *
- * Kept exported only so any forgotten reference still compiles. New
- * code should never import this — derive the per-job PDA via
- * `deriveJobPda(poster, specHash)` from `lib/program-server.ts` (or
- * `lib/anchor-browser.ts` on the client) instead.
  */
 export const ESCROW_WALLET = new PublicKey(
   "Gy5cU3bNH1DKsff6rp91H1BmtEfwspziR52WfmMVfbPZ"
 );
 
 /**
- * Memo program address — used by SubmitWorkModal to attach a signed
- * delivery-commitment memo to the taker's transaction without moving
- * any tokens.
+ * Memo program — used by SubmitWorkModal to attach a signed delivery
+ * commitment memo to the taker's transaction without moving tokens.
  */
 export const MEMO_PROGRAM_ID = new PublicKey(
   "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
