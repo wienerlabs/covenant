@@ -33,8 +33,12 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("GET /api/transactions error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch transactions" },
-      { status: 500 }
+      {
+        transactions: [],
+        dbHealthy: false,
+        error: error instanceof Error ? error.message : "Failed to fetch transactions",
+      },
+      { status: 200 },
     );
   }
 }

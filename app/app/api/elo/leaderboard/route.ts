@@ -15,7 +15,16 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   await ensureSchema().catch(() => { /* non-fatal */ });
-  const leaderboard = await getEloLeaderboard(50);
+
+  // Wrap the whole flow so DB outages return [] (200) instead of 500.
+  // The leaderboard page renders an empty state rather than crashing.
+  let leaderboard: Awaited<ReturnType<typeof getEloLeaderboard>> = [];
+  try {
+    leaderboard = await getEloLeaderboard(50);
+  } catch (err) {
+    console.error("[elo/leaderboard] getEloLeaderboard failed:", err);
+    return NextResponse.json([]);
+  }
 
   const ALPHA_WALLET =
     process.env.NEXT_PUBLIC_AGENT_ALPHA_WALLET ||

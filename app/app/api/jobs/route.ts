@@ -84,10 +84,21 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ jobs, total, page, limit, totalPages });
   } catch (error) {
+    // Graceful fail — return empty list with dbHealthy:false instead of
+    // 500-ing the whole route. The UI can then render an empty state
+    // without falling apart while we diagnose the DB issue.
     console.error("GET /api/jobs error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch jobs" },
-      { status: 500 }
+      {
+        jobs: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+        totalPages: 0,
+        dbHealthy: false,
+        error: error instanceof Error ? error.message : "Failed to fetch jobs",
+      },
+      { status: 200 },
     );
   }
 }

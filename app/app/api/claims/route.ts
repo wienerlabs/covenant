@@ -163,10 +163,17 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    // Graceful fail — empty payload with dbHealthy flag so the credit
+    // page renders an empty state rather than a 500.
     console.error("GET /api/claims error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch claims" },
-      { status: 500 },
+      {
+        listings: [],
+        totals: { listed: 0, activeTvl: 0, boughtCount: 0, settledCount: 0 },
+        dbHealthy: false,
+        error: error instanceof Error ? error.message : "Failed to fetch claims",
+      },
+      { status: 200 },
     );
   }
 }
