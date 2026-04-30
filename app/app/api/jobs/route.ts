@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma, ensureSchema } from "@/lib/prisma";
+import { prisma, ensureSchema, retryable } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { rateLimit, getLimit } from "@/lib/rateLimit";
 import { buildJobSpec, hashJobSpec } from "@/lib/spec";
@@ -60,25 +60,27 @@ export async function GET(request: NextRequest) {
     const validSortFields = ["createdAt", "amount", "status", "deadline"];
     const orderField = validSortFields.includes(sortBy) ? sortBy : "createdAt";
 
-    const [jobs, total] = await Promise.all([
-      prisma.job.findMany({
-        where,
-        orderBy: { [orderField]: sortOrder },
-        include: {
-          submissions: true,
-          delivery: true,
-          dispute: true,
-          claim: true,
-          interests: {
-            where: { status: "working" },
-            select: { takerWallet: true, acceptedAt: true },
+    const [jobs, total] = await retryable(() =>
+      Promise.all([
+        prisma.job.findMany({
+          where,
+          orderBy: { [orderField]: sortOrder },
+          include: {
+            submissions: true,
+            delivery: true,
+            dispute: true,
+            claim: true,
+            interests: {
+              where: { status: "working" },
+              select: { takerWallet: true, acceptedAt: true },
+            },
           },
-        },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.job.count({ where }),
-    ]);
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        prisma.job.count({ where }),
+      ]),
+    );
 
     const totalPages = Math.ceil(total / limit);
 

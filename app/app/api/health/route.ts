@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, retryable } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,14 +33,17 @@ export async function GET() {
   // ---- 1. Database connectivity ----
   try {
     const start = Date.now();
-    await prisma.$queryRaw`SELECT 1`;
+    await retryable(() => prisma.$queryRaw`SELECT 1`);
     const ms = Date.now() - start;
-    result.checks.database = { ok: true, detail: `roundtrip=${ms}ms` };
+    result.checks.database = {
+      ok: true,
+      detail: ms > 1000 ? `roundtrip=${ms}ms (cold start)` : `roundtrip=${ms}ms`,
+    };
   } catch (err) {
     result.ok = false;
     result.checks.database = {
       ok: false,
-      detail: err instanceof Error ? err.message.slice(0, 200) : String(err),
+      detail: err instanceof Error ? err.message.slice(0, 300) : String(err),
     };
   }
 

@@ -1,40 +1,103 @@
 import { PrismaClient } from "@prisma/client";
 
+/**
+ * Prisma client tuned for serverless + Neon Postgres.
+ *
+ * Two failure modes this module is designed around:
+ *
+ * 1. Neon free-tier auto-pause. After ~5 min idle the DB suspends.
+ *    The first connection wakes it, taking 2–5 seconds. Vercel
+ *    serverless functions default to 10s and Prisma's default
+ *    connect_timeout is also short, so the first request after a
+ *    pause often errors with "Can't reach database server" or
+ *    "connection terminated unexpectedly". The retryable() wrapper
+ *    transparently retries those once after a 1.5s wait, by which
+ *    point Neon has woken up.
+ *
+ * 2. Schema drift. Prisma Client is generated from schema.prisma
+ *    at build time, so if production DB is missing columns the
+ *    generated client SELECT *'s blow up. ensureSchema() runs an
+ *    idempotent ALTER TABLE / CREATE TABLE IF NOT EXISTS pass on
+ *    cold start to bring the DB up to the expected shape.
+ */
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
   covenantMigrationsRan: boolean | undefined;
 };
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+/**
+ * Augment DATABASE_URL so the connection has explicit timeouts +
+ * sensible pool sizing. Idempotent — only adds query params that
+ * aren't already present.
+ */
+function tunedDatabaseUrl(): string | undefined {
+  const raw = process.env.DATABASE_URL;
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    if (!url.searchParams.has("connect_timeout")) {
+      url.searchParams.set("connect_timeout", "30");
+    }
+    if (!url.searchParams.has("pool_timeout")) {
+      url.searchParams.set("pool_timeout", "30");
+    }
+    // Pgbouncer pooling on Neon — needed so Prisma uses prepared
+    // statement cache compatibly.
+    if (raw.includes("pooler") && !url.searchParams.has("pgbouncer")) {
+      url.searchParams.set("pgbouncer", "true");
+    }
+    return url.toString();
+  } catch {
+    // If DATABASE_URL is not a valid URL, fall back to raw.
+    return raw;
+  }
+}
+
+function makeClient(): PrismaClient {
+  const url = tunedDatabaseUrl();
+  return new PrismaClient(
+    url
+      ? {
+          datasources: { db: { url } },
+          log: ["error", "warn"],
+        }
+      : { log: ["error", "warn"] },
+  );
+}
+
+export const prisma = globalForPrisma.prisma ?? makeClient();
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
 
 /**
- * Runtime idempotent schema migration.
+ * Wrap a Prisma operation with one cold-start retry.
  *
- * Background: Prisma Client is generated from schema.prisma at build
- * time. If the production DB is behind (missing columns / tables),
- * EVERY query that returns a full model does `SELECT *` including
- * the new columns and fails with "column does not exist".
- *
- * Usually fixed via `prisma db push` or `prisma migrate deploy`,
- * but those need a direct-connection DATABASE_URL (not pgbouncer-
- * pooled) and proper Vercel env wiring. When either is missing the
- * deploy ships with a broken DB/client combination.
- *
- * This function brings the DB up to the required shape using
- * `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` and `CREATE TABLE IF
- * NOT EXISTS`. It runs once per serverless instance (cached on
- * globalThis), uses the same DATABASE_URL everything else uses, and
- * is short-circuitable — failure just logs and retries on the next
- * request.
- *
- * Keep this list in sync with every non-trivial addition to
- * schema.prisma. Older columns (pre-Credit) are assumed to have
- * been pushed already.
+ * Errors that look like a paused-DB cold start get retried after
+ * 1.5 seconds. Other errors propagate immediately so we don't mask
+ * real bugs (auth, schema, etc.) under retries.
  */
+export async function retryable<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const coldStart =
+      /can't reach database|connection terminated|connect ETIMEDOUT|connect ECONNREFUSED|EAI_AGAIN|connection reset|server closed the connection unexpectedly/i.test(
+        msg,
+      );
+    if (!coldStart) throw err;
+    console.warn(
+      "[prisma] cold-start error, retrying after 1.5s:",
+      msg.slice(0, 200),
+    );
+    await new Promise((r) => setTimeout(r, 1500));
+    return await fn();
+  }
+}
+
 const MIGRATION_SQL = [
   // Job new columns (added during Credit Phase 1-3)
   `ALTER TABLE "Job" ADD COLUMN IF NOT EXISTS "escrowAta" TEXT`,
@@ -80,9 +143,8 @@ export async function ensureSchema(): Promise<void> {
   try {
     for (const sql of MIGRATION_SQL) {
       try {
-        await prisma.$executeRawUnsafe(sql);
+        await retryable(() => prisma.$executeRawUnsafe(sql));
       } catch (stepErr) {
-        // Each statement is idempotent — log but keep going.
         console.error(
           "[prisma] migration step failed (non-fatal):",
           sql.slice(0, 60),
@@ -93,7 +155,6 @@ export async function ensureSchema(): Promise<void> {
     console.log("[prisma] runtime schema sync complete");
   } catch (err) {
     console.error("[prisma] runtime schema sync failed:", err);
-    // Reset flag so the next request retries.
     globalForPrisma.covenantMigrationsRan = false;
   }
 }
