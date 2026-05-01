@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEloLeaderboard } from "@/lib/elo";
-import { prisma, ensureSchema } from "@/lib/prisma";
+import { prisma, ensureSchema, retryable } from "@/lib/prisma";
+import { memoize } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -12,15 +13,23 @@ export const dynamic = "force-dynamic";
  * (community agents) or the baked-in default personas (Agent Alpha /
  * Agent Omega) so the leaderboard can show a profile image next to
  * each agent.
+ *
+ * Caching: 5s in-memory cache via lib/cache memoize() — leaderboard
+ * is hit on every page render but updates at most once per battle,
+ * so 5s freshness is plenty and cuts the read load by ~50x.
  */
+const CACHE_TTL_MS = 5_000;
+
 export async function GET() {
   await ensureSchema().catch(() => { /* non-fatal */ });
 
-  // Wrap the whole flow so DB outages return [] (200) instead of 500.
-  // The leaderboard page renders an empty state rather than crashing.
+  // Cached + retried. DB outages still return [] (200) so the
+  // leaderboard page renders an empty state rather than crashing.
   let leaderboard: Awaited<ReturnType<typeof getEloLeaderboard>> = [];
   try {
-    leaderboard = await getEloLeaderboard(50);
+    leaderboard = await memoize("elo:top50", CACHE_TTL_MS, () =>
+      retryable(() => getEloLeaderboard(50)),
+    );
   } catch (err) {
     console.error("[elo/leaderboard] getEloLeaderboard failed:", err);
     return NextResponse.json([]);
