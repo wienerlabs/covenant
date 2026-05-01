@@ -42,6 +42,13 @@ import { fail, failFromError } from "@/lib/api-response";
 import { parseAndValidate, validate } from "@/lib/validate";
 import type { ValidationResult } from "@/lib/validate";
 import { rateLimit, getLimit } from "@/lib/rateLimit";
+import {
+  parseIdempotencyKey,
+  getCachedIdempotent,
+  reserveIdempotent,
+  recordIdempotent,
+  releaseIdempotent,
+} from "@/lib/idempotency";
 
 export interface RouteContext {
   log: Logger;
@@ -127,17 +134,23 @@ export function withRateLimit(
 }
 
 /**
- * Compose validation + rate limit + instrumentation in one call.
- * Reads the rate-limit key from a body field (default `wallet`).
+ * Compose validation + rate limit + idempotency + instrumentation
+ * in one call. Reads the rate-limit key from a body field
+ * (default `wallet`).
+ *
+ * `idempotent: true` makes the handler honor the Idempotency-Key
+ * header — replays inside the 60s window get the cached response.
  */
 export function route<T extends Record<string, unknown>>(args: {
   op: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   schema: Record<string, any>;
   rateLimitKey?: keyof T;
+  idempotent?: boolean;
+  idempotencyTtlMs?: number;
   handler: (req: NextRequest, parsed: T, ctx: RouteContext) => Promise<NextResponse>;
 }) {
-  return withInstrument(async (req, ctx) => {
+  const inner = async (req: NextRequest, ctx: RouteContext): Promise<NextResponse> => {
     const result = await parseAndValidate<T>(req, args.schema);
     if (!result.ok) {
       return fail("invalid_input", "Validation failed.", {
@@ -164,6 +177,90 @@ export function route<T extends Record<string, unknown>>(args: {
     }
 
     return args.handler(req, data, ctx);
+  };
+
+  if (args.idempotent) {
+    return withIdempotency(inner, args.idempotencyTtlMs);
+  }
+  return withInstrument(inner);
+}
+
+/**
+ * Wrap a handler with idempotency-key support. Replays of the same
+ * `Idempotency-Key` header within the TTL window get the cached
+ * response byte-identical to the first one.
+ *
+ * Use on POST endpoints where a double-submit would create real
+ * harm (job creation, claim purchases, finalize calls). Reads
+ * are unaffected.
+ */
+export function withIdempotency(
+  handler: (req: NextRequest, ctx: RouteContext) => Promise<NextResponse>,
+  ttlMs?: number,
+) {
+  return withInstrument(async (req, ctx) => {
+    const key = parseIdempotencyKey(req);
+    if (!key) {
+      // No idempotency key supplied — treat as a normal request.
+      return handler(req, ctx);
+    }
+
+    // Check for an existing cached response (or wait for in-flight).
+    const hit = await getCachedIdempotent(key);
+    if (hit) {
+      ctx.log.info("idempotent replay served", { idempotency_key: key });
+      // Re-wrap the cached Response into a NextResponse for type
+      // consistency. The body stream is replayable on the cloned
+      // record so we read it once.
+      const body = await hit.response.text();
+      const headers: Record<string, string> = {};
+      hit.response.headers.forEach((v, k) => {
+        headers[k] = v;
+      });
+      return new NextResponse(body, {
+        status: hit.response.status,
+        headers,
+      });
+    }
+
+    // Reserve the slot so concurrent replays wait on us.
+    const reserved = reserveIdempotent(key, ttlMs);
+    if (!reserved) {
+      // Another caller raced us — fall back to waiting for their result.
+      const second = await getCachedIdempotent(key);
+      if (second) {
+        const body = await second.response.text();
+        const headers: Record<string, string> = {};
+        second.response.headers.forEach((v, k) => {
+          headers[k] = v;
+        });
+        return new NextResponse(body, {
+          status: second.response.status,
+          headers,
+        });
+      }
+      // Couldn't reserve and couldn't read — release and fall
+      // through, accepting the rare double-execution risk.
+      releaseIdempotent(key);
+    }
+
+    let res: NextResponse;
+    try {
+      res = await handler(req, ctx);
+    } catch (err) {
+      releaseIdempotent(key);
+      throw err;
+    }
+
+    // Cache the final response for replays. We do this even on
+    // 4xx/5xx so a retry doesn't blindly re-attempt a known-bad
+    // request — saves on rate limits and confused users.
+    try {
+      await recordIdempotent(key, res, ttlMs);
+    } catch {
+      releaseIdempotent(key);
+    }
+    return res;
   });
 }
 
