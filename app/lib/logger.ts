@@ -77,7 +77,7 @@ interface BaseLogger {
   fatal(msg: string, err?: unknown, fields?: LogFields): void;
 }
 
-interface Logger extends BaseLogger {
+export interface Logger extends BaseLogger {
   /** Bind fields to a child logger that inherits + adds context. */
   child(fields: LogFields): Logger;
   /** Bind a Next.js request — extracts route, method, request_id. */
