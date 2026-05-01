@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma, retryable } from "@/lib/prisma";
+import { log } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,16 +18,27 @@ export const runtime = "nodejs";
  * Always returns HTTP 200 so monitoring tools see the JSON body
  * rather than a generic error page. The `ok` field summarizes.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const reqLog = log.forRequest(request);
+  const startedAt = Date.now();
+
   const result: {
     ok: boolean;
     timestamp: string;
     cluster: string;
+    duration_ms: number;
+    commit: string | null;
+    region: string | null;
     checks: Record<string, { ok: boolean; detail?: string }>;
   } = {
     ok: true,
     timestamp: new Date().toISOString(),
     cluster: "devnet",
+    duration_ms: 0,
+    // Surface the deployed commit + region so support requests can
+    // be correlated to a specific Vercel deployment.
+    commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+    region: process.env.VERCEL_REGION ?? null,
     checks: {},
   };
 
@@ -80,6 +92,15 @@ export async function GET() {
     detail: missing.length === 0 ? "all set" : `missing: ${missing.join(", ")}`,
   };
   if (missing.length > 0) result.ok = false;
+
+  result.duration_ms = Date.now() - startedAt;
+  reqLog.info("health check", {
+    ok: result.ok,
+    duration_ms: result.duration_ms,
+    db_ok: result.checks.database?.ok,
+    schema_ok: result.checks.schema?.ok,
+    commit: result.commit,
+  });
 
   return NextResponse.json(result, { status: 200 });
 }

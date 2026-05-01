@@ -34,6 +34,7 @@
  */
 
 import type { NextRequest } from "next/server";
+import { recordError } from "@/lib/error-buffer";
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "fatal";
 
@@ -111,6 +112,17 @@ function emit(level: LogLevel, msg: string, fields: LogFields): void {
         warning: "log fields contained non-serializable values",
       }),
     );
+  }
+
+  // Mirror error/fatal lines into the in-memory ring buffer so
+  // /api/admin/error-buffer can show the most recent failures
+  // without operator access to Vercel Logs.
+  if (level === "error" || level === "fatal") {
+    try {
+      recordError(line as Parameters<typeof recordError>[0]);
+    } catch {
+      /* swallow */
+    }
   }
 }
 
