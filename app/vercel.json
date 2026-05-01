@@ -2,11 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "buildCommand": "prisma generate && next build",
-  "outputDirectory": ".next",
-  "crons": [
-    {
-      "path": "/api/cron/keep-alive",
-      "schedule": "*/4 * * * *"
-    }
-  ]
+  "outputDirectory": ".next"
 }
