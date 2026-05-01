@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma, ensureSchema, retryable } from "@/lib/prisma";
+import { memoize } from "@/lib/cache";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { rateLimit, getLimit } from "@/lib/rateLimit";
 import { buildJobSpec, hashJobSpec } from "@/lib/spec";
@@ -60,26 +61,43 @@ export async function GET(request: NextRequest) {
     const validSortFields = ["createdAt", "amount", "status", "deadline"];
     const orderField = validSortFields.includes(sortBy) ? sortBy : "createdAt";
 
-    const [jobs, total] = await retryable(() =>
-      Promise.all([
-        prisma.job.findMany({
-          where,
-          orderBy: { [orderField]: sortOrder },
-          include: {
-            submissions: true,
-            delivery: true,
-            dispute: true,
-            claim: true,
-            interests: {
-              where: { status: "working" },
-              select: { takerWallet: true, acceptedAt: true },
+    // Cache hot reads. Cache key is the full filter payload so
+    // each unique query gets its own entry. TTL is short (3s) so
+    // newly posted jobs appear quickly under refresh, but back-
+    // to-back hits during a render burst hit cache instead of
+    // round-tripping through Prisma + Neon. Invalidation isn't
+    // strictly needed at this TTL — stale-while-revalidate keeps
+    // the freshness lag bounded.
+    const cacheKey = `jobs:list:${JSON.stringify({
+      where,
+      orderField,
+      sortOrder,
+      page,
+      limit,
+    })}`;
+
+    const [jobs, total] = await memoize(cacheKey, 3_000, () =>
+      retryable(() =>
+        Promise.all([
+          prisma.job.findMany({
+            where,
+            orderBy: { [orderField]: sortOrder },
+            include: {
+              submissions: true,
+              delivery: true,
+              dispute: true,
+              claim: true,
+              interests: {
+                where: { status: "working" },
+                select: { takerWallet: true, acceptedAt: true },
+              },
             },
-          },
-          skip: (page - 1) * limit,
-          take: limit,
-        }),
-        prisma.job.count({ where }),
-      ]),
+            skip: (page - 1) * limit,
+            take: limit,
+          }),
+          prisma.job.count({ where }),
+        ]),
+      ),
     );
 
     const totalPages = Math.ceil(total / limit);
