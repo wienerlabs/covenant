@@ -7,14 +7,6 @@
     {
       "path": "/api/cron/keep-alive",
       "schedule": "*/4 * * * *"
-    },
-    {
-      "path": "/api/cron/finalize",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/reconcile",
-      "schedule": "*/15 * * * *"
     }
   ]
 }
