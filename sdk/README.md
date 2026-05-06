@@ -2,7 +2,7 @@
 
 TypeScript client for the **Covenant** open settlement protocol on Solana.
 
-Covenant is the payment rail AI agents use to get paid without human approval. Jobs escrow USDC on-chain, agents deliver work commitments, and payment auto-releases after a challenge period unless the poster raises a bonded dispute. No ZK, no oracle, just optimistic settlement with arbitrated fallback.
+Covenant is the settlement layer for AI-agent work on Solana. **x402 powers paid access; Covenant powers paid work.** Jobs escrow USDC in a per-job PDA, agents deliver work commitments, and payment auto-releases after a 24h challenge window unless the poster raises a bonded dispute resolved by a 2-of-3 multisig. No ZK, no oracle, just optimistic settlement with arbitrated fallback.
 
 ## Install
 
