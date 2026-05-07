@@ -78,13 +78,13 @@ const COMPONENTS: ArchComponent[] = [
     expandedInfo: "Anchor framework smart contract deployed at 5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT. Manages escrow creation, acceptance, submission verification, and fund release.",
   },
   {
-    id: "zkvm",
-    icon: "**",
-    name: "SP1 zkVM",
-    detail: "237K cycles",
+    id: "escrow",
+    icon: "$$",
+    name: "PDA Escrow",
+    detail: "per-job, USDC-locked",
     row: 2,
     col: 2,
-    expandedInfo: "Succinct SP1 zkVM circuit for word-count verification. Proves text meets minimum word count without revealing content. 237,583 cycles for typical verification.",
+    expandedInfo: 'Each job locks USDC into a deterministic Program Derived Address derived from [b"job", poster, sha256(spec)]. Authority is the JobEscrow PDA itself — no shared deployer wallet. Funds auto-release to the taker after the 24h optimistic challenge window expires with no dispute, or get split per multisig resolution if disputed.',
   },
 ];
 
@@ -95,19 +95,63 @@ const DETAIL_CARDS = [
   },
   {
     label: "Database",
-    value: "Neon PostgreSQL (5 tables)",
+    value: "Neon PostgreSQL (Prisma 6)",
   },
   {
-    label: "ZK Circuit",
-    value: "SP1 word-count (237K cycles)",
+    label: "Settlement",
+    value: "Optimistic 24h challenge window",
+  },
+  {
+    label: "Dispute Resolution",
+    value: "Bonded 2-of-3 multisig",
   },
   {
     label: "Frontend",
-    value: "Next.js 14 + TypeScript + Tailwind",
+    value: "Next.js 14 + TypeScript",
   },
   {
     label: "Wallet",
-    value: "ConnectorKit (Phantom, Solflare)",
+    value: "ConnectorKit (Phantom, OKX, Solflare)",
+  },
+];
+
+interface SettlementPhase {
+  state: string;
+  trigger: string;
+  description: string;
+  outcome: string;
+}
+
+const SETTLEMENT_LIFECYCLE: SettlementPhase[] = [
+  {
+    state: "Open",
+    trigger: "create_job",
+    description: "Poster locks USDC into a per-job PDA escrow. Job goes live in the marketplace.",
+    outcome: "Funds frozen on-chain. Anyone can accept.",
+  },
+  {
+    state: "Accepted",
+    trigger: "accept_job",
+    description: "Taker (an agent or human) claims the job. Escrow remains locked.",
+    outcome: "Taker is now the only party that can submit work.",
+  },
+  {
+    state: "Delivered",
+    trigger: "submit_work",
+    description: "Taker commits a work_hash + delivery URI on-chain. The 24h challenge window opens.",
+    outcome: "Optimistic clock starts. Poster has 24h to dispute.",
+  },
+  {
+    state: "Finalized",
+    trigger: "finalize_payment (after 24h)",
+    description: "If no dispute is raised, anyone (including a cron crank) can release the escrow.",
+    outcome: "Taker receives the full payment. Job is closed.",
+  },
+  {
+    state: "Disputed → Resolved",
+    trigger: "raise_dispute → resolve_dispute",
+    description: "Poster posts a bond + reason hash within the challenge window. Two of three arbitrators must agree on the outcome.",
+    outcome: "Funds split per resolution: FavorTaker / FavorPoster / Split(bps).",
   },
 ];
 
@@ -269,12 +313,41 @@ export default function ArchitecturePage() {
               color: "#ffffff",
               textTransform: "uppercase",
               letterSpacing: "-0.01em",
-              margin: "0 0 40px 0",
+              margin: "0 0 12px 0",
               textAlign: "center",
             }}
           >
             System Architecture
           </h1>
+
+          <p
+            style={{
+              fontSize: "13px",
+              color: "rgba(255,255,255,0.6)",
+              textAlign: "center",
+              maxWidth: "640px",
+              margin: "0 auto 8px auto",
+              lineHeight: 1.6,
+            }}
+          >
+            The settlement layer for AI-agent work on Solana.{" "}
+            <span style={{ color: "#fffeb2", fontWeight: 600 }}>
+              Optimistic by default, arbitrated when contested.
+            </span>{" "}
+            Three layers, one on-chain primitive.
+          </p>
+
+          <p
+            style={{
+              fontSize: "11px",
+              color: "rgba(255,255,255,0.4)",
+              textAlign: "center",
+              margin: "0 0 40px 0",
+              fontStyle: "italic",
+            }}
+          >
+            x402 powers paid access. Covenant powers paid work.
+          </p>
 
           {/* Diagram */}
           <div
@@ -367,6 +440,152 @@ export default function ArchitecturePage() {
               </div>
             </div>
           )}
+
+          {/* Optimistic Settlement Lifecycle */}
+          <div style={{ marginTop: "48px", marginBottom: "32px" }}>
+            <h2
+              style={{
+                fontSize: "20px",
+                fontWeight: 700,
+                color: "#ffffff",
+                textTransform: "uppercase",
+                letterSpacing: "0.02em",
+                margin: "0 0 8px 0",
+                textAlign: "center",
+              }}
+            >
+              Optimistic Settlement
+            </h2>
+            <p
+              style={{
+                fontSize: "12px",
+                color: "rgba(255,255,255,0.55)",
+                textAlign: "center",
+                maxWidth: "560px",
+                margin: "0 auto 24px auto",
+                lineHeight: 1.6,
+              }}
+            >
+              The default path is fast: lock funds, deliver, wait, release. Disputes
+              are the exception. The 24-hour challenge window means the protocol
+              works at network speed when both parties cooperate, and falls back
+              to bonded arbitration only when they don&apos;t.
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+              }}
+            >
+              {SETTLEMENT_LIFECYCLE.map((phase, idx) => (
+                <div
+                  key={phase.state}
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    backdropFilter: "blur(12px)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: "10px",
+                    padding: "14px 16px",
+                    display: "grid",
+                    gridTemplateColumns: "32px 1fr",
+                    gap: "16px",
+                    alignItems: "start",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "20px",
+                      fontWeight: 700,
+                      color: "rgba(255,254,178,0.7)",
+                      lineHeight: 1,
+                      paddingTop: "2px",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {idx + 1}
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: "12px",
+                        marginBottom: "6px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 700,
+                          color: "#ffffff",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        {phase.state}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontFamily: "monospace",
+                          color: "rgba(255,254,178,0.7)",
+                          background: "rgba(255,254,178,0.08)",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          border: "1px solid rgba(255,254,178,0.18)",
+                        }}
+                      >
+                        {phase.trigger}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: "rgba(255,255,255,0.7)",
+                        lineHeight: 1.55,
+                        marginBottom: "4px",
+                      }}
+                    >
+                      {phase.description}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "rgba(255,255,255,0.4)",
+                        lineHeight: 1.5,
+                        fontStyle: "italic",
+                      }}
+                    >
+                      → {phase.outcome}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                marginTop: "20px",
+                padding: "14px 16px",
+                background: "rgba(255,254,178,0.06)",
+                border: "1px solid rgba(255,254,178,0.18)",
+                borderRadius: "8px",
+                fontSize: "11px",
+                color: "rgba(255,255,255,0.7)",
+                lineHeight: 1.6,
+              }}
+            >
+              <strong style={{ color: "#fffeb2" }}>Why optimistic?</strong>{" "}
+              Fast and cheap when both parties cooperate (no per-job arbitrator
+              vote, no oracle gas, no ZK proof), trustless under contention
+              (bond cost punishes frivolous disputes, multisig prevents single-
+              party drain). Same playbook Optimism Rollups use to settle billions
+              of dollars on Ethereum L2.
+            </div>
+          </div>
 
           {/* Detail cards */}
           <div
