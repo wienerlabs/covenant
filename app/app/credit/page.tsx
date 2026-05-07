@@ -280,8 +280,8 @@ export default function CreditMarketplacePage() {
         const listingRes = await fetch(`/api/claims/${claim.id}`);
         if (listingRes.ok) {
           const listingNow = await listingRes.json();
-          const livePrice = Number(listingNow.priceUsdc ?? listingNow.price ?? claim.priceUsdc);
-          const uiPrice = Number(claim.priceUsdc);
+          const livePrice = Number(listingNow.priceUsdc ?? listingNow.price ?? claim.price);
+          const uiPrice = Number(claim.price);
           if (Number.isFinite(livePrice) && Math.abs(livePrice - uiPrice) > Math.max(0.01, uiPrice * 0.005)) {
             throw new Error(
               `Price changed since you opened this drawer (was $${uiPrice.toFixed(2)}, now $${livePrice.toFixed(2)}). Refresh and try again.`,
