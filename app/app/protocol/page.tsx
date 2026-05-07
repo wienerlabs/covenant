@@ -7,11 +7,11 @@ import { generateDID, resolveDID, verifyDID } from "@/lib/aip/did";
 const FLOW_STEPS = [
   { label: "AIP Agent", detail: "task/create request" },
   { label: "COVENANT", detail: "Receives A2A JSON-RPC" },
-  { label: "Agent accepts job", detail: "Taker locks escrow" },
-  { label: "Agent produces work", detail: "Deliverable generated" },
-  { label: "SP1 Circuit executes", detail: "SHA-256 + word count" },
-  { label: "ZK Proof verified", detail: "Cryptographic guarantee" },
-  { label: "Escrow auto-releases", detail: "Smart contract payout" },
+  { label: "Job posted", detail: "Poster locks USDC into PDA" },
+  { label: "Agent accepts", detail: "Taker bound to job" },
+  { label: "Work delivered", detail: "Deliverable hash on-chain" },
+  { label: "Challenge window", detail: "24h optimistic review" },
+  { label: "Escrow auto-releases", detail: "No challenge -> payout" },
   { label: "Payment sent", detail: "Taker wallet (on-chain)" },
 ];
 
@@ -25,7 +25,7 @@ export default function ProtocolPage() {
         method: "task/create",
         params: {
           capability: "text.write",
-          input: { topic: "Zero-knowledge proofs in Web3", minWords: 200 },
+          input: { topic: "Solana wallet risk analysis", minWords: 200 },
         },
         id: "demo-001",
       },
@@ -150,7 +150,7 @@ export default function ProtocolPage() {
                 lineHeight: 1.2,
               }}
             >
-              AIP COMPATIBLE + ZK VERIFIED
+              AIP COMPATIBLE + ESCROW SETTLED
             </h1>
             <p
               style={{
@@ -159,10 +159,23 @@ export default function ProtocolPage() {
                 maxWidth: "600px",
                 margin: "0 auto",
                 lineHeight: 1.7,
+                marginBottom: "16px",
               }}
             >
               COVENANT implements the Agent Internet Protocol standard and extends it
-              with zero-knowledge proof verification
+              with on-chain escrow and optimistic settlement on Solana.
+            </p>
+            <p
+              style={{
+                fontSize: "13px",
+                color: "rgba(255, 254, 178, 0.7)",
+                maxWidth: "600px",
+                margin: "0 auto",
+                lineHeight: 1.6,
+                fontStyle: "italic",
+              }}
+            >
+              x402 powers paid access. Covenant powers paid work.
             </p>
           </div>
 
@@ -183,9 +196,9 @@ export default function ProtocolPage() {
                   { label: "Agent Discovery", ok: true },
                   { label: "DID Identity", ok: true },
                   { label: "A2A JSON-RPC", ok: true },
-                  { label: "Escrow Payment", ok: true },
-                  { label: "Trust Required", value: "YES", warn: true },
-                  { label: "Verification", value: "NONE", warn: true },
+                  { label: "Payment Hint", ok: true },
+                  { label: "On-chain Escrow", value: "NONE", warn: true },
+                  { label: "Dispute Path", value: "OFF-CHAIN", warn: true },
                 ].map((item) => (
                   <div
                     key={item.label}
@@ -245,9 +258,9 @@ export default function ProtocolPage() {
                   { label: "Agent Discovery", ok: true },
                   { label: "DID Identity", ok: true },
                   { label: "A2A JSON-RPC", ok: true },
-                  { label: "Escrow Payment", ok: true },
-                  { label: "Trust Required", value: "NO", good: true },
-                  { label: "Verification", value: "ZK PROOF (SP1)", good: true },
+                  { label: "Payment Hint", ok: true },
+                  { label: "On-chain Escrow", value: "PDA / USDC", good: true },
+                  { label: "Dispute Path", value: "OPTIMISTIC + 2/3", good: true },
                 ].map((item) => (
                   <div
                     key={item.label}
@@ -528,9 +541,21 @@ export default function ProtocolPage() {
             )}
           </div>
 
-          {/* ZK Proof Flow */}
+          {/* Settlement Lifecycle */}
           <div style={{ ...glassCard, marginBottom: "48px" }}>
-            <div style={sectionTitle}>ZK Proof Flow</div>
+            <div style={sectionTitle}>Settlement Lifecycle</div>
+            <p
+              style={{
+                fontSize: "12px",
+                color: "rgba(255,255,255,0.5)",
+                marginBottom: "20px",
+                lineHeight: 1.6,
+              }}
+            >
+              From AIP discovery to on-chain payout. The 24h challenge window
+              is the optimistic primitive: if no one disputes, escrow auto-releases.
+              If someone disputes, a 2-of-3 multisig committee resolves it.
+            </p>
             <div
               style={{
                 display: "flex",
