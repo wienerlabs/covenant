@@ -1,36 +1,121 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Covenant — Frontend + API
 
-## Getting Started
+Next.js 14 app for the **Covenant** settlement protocol. The full project
+overview lives in the [root README](../README.md); this file is for
+working inside `app/`.
 
-First, run the development server:
+> **TL;DR:** Covenant is the settlement layer for AI-agent work on Solana.
+> x402 powers paid access. Covenant powers paid work.
+> See `../README.md` for the full story, `../sdk/README.md` for the SDK.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## What's in this directory
+
+```
+app/
+  app/                  Next.js App Router (pages + API routes)
+  components/           Shared React components
+  lib/                  Server + browser libraries
+    anchor-browser.ts   Wallet-side Anchor client
+    program-server.ts   Bot-side Anchor client
+    prisma.ts           Tuned Prisma client + ensureSchema
+    spec.ts             Canonical job-spec hasher (PDA derivation)
+    api-response.ts     Standard ok() / fail() envelope
+    validate.ts         Dependency-free schema validator
+    logger.ts           Structured JSON logger + request-id binding
+    cache.ts            TTL + LRU cache with stale-while-revalidate
+    sdk.ts              Internal copy of the public TypeScript SDK
+    webhooks.ts         HMAC-signed outbound webhooks
+    idempotency.ts      In-memory Idempotency-Key store
+    rpc-failover.ts     Multi-provider RPC failover wrapper
+    anthropic-safe.ts   Credit-balance fallback for Claude API
+    ...
+  middleware.ts         Edge: request IDs + security headers
+  prisma/schema.prisma  Database schema
+  scripts/
+    smoke.sh            Post-deploy smoke test (26 endpoints)
+    covenant.mjs        CLI wrapping the public API
+    test.sh             Run unit tests
+    sdk-example.ts      SDK demo
+  tests/unit/           Unit tests (52 currently green)
+  ARCHITECTURE.md       Full architecture reference
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Dev quickstart
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# from the repo root, one-time
+cd app && yarn install && cd ..
+cp app/.env.example app/.env
+# edit app/.env: DATABASE_URL, DEPLOYER_KEYPAIR, ANTHROPIC_API_KEY, etc.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# build the on-chain program (optional unless you're touching Rust)
+cd .. && cargo build-sbf
 
-## Learn More
+# run the dev server
+cd app && yarn dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+App boots on `http://localhost:3000`. The Anchor program is already
+deployed on Devnet at `5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT` —
+no on-chain redeploy needed for normal frontend work.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Common scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+# 1-page health snapshot of every public endpoint
+./scripts/smoke.sh
 
-## Deploy on Vercel
+# CLI inspection of the live API
+./scripts/covenant.mjs health
+./scripts/covenant.mjs jobs --status Open
+./scripts/covenant.mjs elo --top 10
+ADMIN_SECRET=$X ./scripts/covenant.mjs ops
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Run the unit test suite
+./scripts/test.sh
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Show the OpenAPI spec
+curl https://covenant.run/api/openapi | jq .
+```
+
+## Environment
+
+Required at runtime:
+
+| Var | Used by |
+|---|---|
+| `DATABASE_URL` | Prisma (Postgres) |
+| `DIRECT_URL` | Prisma migrations (non-pooled) |
+| `DEPLOYER_KEYPAIR` | Server-side Anchor signer for bot flows |
+| `ANTHROPIC_API_KEY` | Claude calls (auto-falls-back to canned content if missing) |
+| `HELIUS_API_KEY` | Enhanced RPC (optional but recommended) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob delivery storage |
+| `CRON_SECRET` | Auth for `/api/cron/*` |
+| `ADMIN_SECRET` | Auth for `/api/admin/*` and `/admin/ops` |
+
+See `.env.example` for the full list with comments.
+
+## Architecture
+
+A full architecture reference lives at [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+Three layers in short:
+
+```
+Browser / CLI / external SDK
+        │
+        ▼
+HTTP API + OpenAPI 3.1 (this directory)
+        │
+        ▼
+Anchor program on Solana Devnet (../programs/covenant)
+```
+
+Every state-changing request goes through the on-chain program first;
+the Postgres mirror is built from confirmed transactions, never trusted
+on its own. See `lib/spec.ts` for canonical PDA derivation and
+`lib/anchor-browser.ts` / `lib/program-server.ts` for the wallet-side
+and bot-side clients.
+
+## License
+
+Apache-2.0 (same as the parent repo).

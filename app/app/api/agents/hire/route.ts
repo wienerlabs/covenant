@@ -1,7 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
-import { lockFundsInEscrow, releaseFundsToTaker } from "@/lib/escrow";
-import { rateLimit } from "@/lib/rateLimit";
+// agents/hire is a head-less DEMO route. Real settlement runs through
+// the on-chain create_job → submit_work → finalize_payment pipeline
+// (see lib/program-server.ts for the bot-signed equivalent). The
+// previous custodial calls were removed in the on-chain refactor
+// (audit C-01); demo runs no longer move USDC.
+import { rateLimit, getLimit } from "@/lib/rateLimit";
 import { executeCircuit } from "@/lib/work-metrics";
 import crypto from "crypto";
 import { NextRequest } from "next/server";
@@ -86,7 +90,8 @@ function sseEvent(step: string, message: string, data: unknown = null): string {
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
-  const rl = rateLimit(`agents-hire:${ip}`, 10);
+  const { limit, windowMs } = getLimit("agent_hire");
+  const rl = rateLimit(`agents-hire:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return new Response(
       JSON.stringify({ error: "Rate limit exceeded. Max 10 hires per minute." }),
@@ -171,17 +176,11 @@ export async function POST(request: NextRequest) {
 
         send("created", `Job created: ${job.id.slice(0, 8)}...`, { jobId: job.id, txHash: createTxHash });
 
-        // SPL Token Escrow: Lock funds
-        try {
-          send("escrow_lock", `Locking ${config.amount} USDC in escrow...`);
-          const lockResult = await lockFundsInEscrow("DEPLOYER_KEYPAIR", config.amount);
-          send("escrow_locked", "Funds locked in escrow", { txHash: lockResult.txHash, amount: config.amount });
-          await prisma.transaction.create({
-            data: { txHash: lockResult.txHash, type: "escrow_lock", jobId: job.id, wallet: posterWallet, amount: config.amount, status: "confirmed" },
-          });
-        } catch (err) {
-          console.error("[escrow] Lock failed:", err);
-        }
+        // SPL Token Escrow (demo): no-op lock
+        send("escrow_locked", `Demo: ${config.amount} USDC notional (no real lock)`, {
+          amount: config.amount,
+          note: "demo-mode: use /api/jobs pipeline for real on-chain escrow",
+        });
 
         // Step 2: Accept job
         send("accepting", "Agent accepting job...");
@@ -233,7 +232,8 @@ export async function POST(request: NextRequest) {
         if (!deliverableText) {
           try {
             const Anthropic = (await import("@anthropic-ai/sdk")).default;
-            const client = new Anthropic();
+            const { withCreditFallback } = await import("@/lib/anthropic-safe");
+            const client = withCreditFallback(new Anthropic());
             const aiResponse = await client.messages.create({
               model: "claude-haiku-4-5-20251001",
               max_tokens: 1024,
@@ -315,17 +315,11 @@ export async function POST(request: NextRequest) {
           // non-blocking
         }
 
-        // SPL Token Escrow: Release funds to agent
-        try {
-          send("escrow_release", `Releasing ${config.amount} USDC to agent...`);
-          const releaseResult = await releaseFundsToTaker(takerWallet, config.amount);
-          send("escrow_released", "Payment released", { txHash: releaseResult.txHash, amount: config.amount });
-          await prisma.transaction.create({
-            data: { txHash: releaseResult.txHash, type: "escrow_release", jobId: job.id, wallet: takerWallet, amount: config.amount, status: "confirmed" },
-          });
-        } catch (err) {
-          console.error("[escrow] Release failed:", err);
-        }
+        // SPL Token Escrow (demo): no-op release
+        send("escrow_released", `Demo: ${config.amount} USDC notional payout`, {
+          amount: config.amount,
+          note: "demo-mode: no on-chain release in agents/hire",
+        });
 
         // Update reputation
         try {

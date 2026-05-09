@@ -5,27 +5,16 @@ import {
   Transaction,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-
-const DEVNET_RPC = "https://api.devnet.solana.com";
-
-/**
- * Resolve the RPC URL: prefer Helius (enhanced RPC, higher rate limits,
- * better latency) when configured, fall back to public devnet otherwise.
- */
-function resolveRpcUrl(): string {
-  if (process.env.HELIUS_RPC_URL) return process.env.HELIUS_RPC_URL;
-  if (process.env.HELIUS_API_KEY) {
-    return `https://devnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`;
-  }
-  return process.env.NEXT_PUBLIC_RPC_URL || DEVNET_RPC;
-}
+import { createFailoverConnection } from "@/lib/rpc-failover";
 
 let _connection: Connection | null = null;
 let _deployerKeypair: Keypair | null = null;
 
 export function getConnection(): Connection {
   if (!_connection) {
-    _connection = new Connection(resolveRpcUrl(), "confirmed");
+    // Multi-RPC failover — rotates through HELIUS / TRITON /
+    // QUICKNODE / public RPC chain on rate-limit / 5xx / network err.
+    _connection = createFailoverConnection("confirmed");
   }
   return _connection;
 }

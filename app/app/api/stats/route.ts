@@ -38,8 +38,17 @@ export async function GET() {
   } catch (error) {
     console.error("GET /api/stats error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch stats" },
-      { status: 500 }
+      {
+        totalJobs: 0,
+        totalLocked: 0,
+        completed: 0,
+        successRate: 0,
+        activeUsers: 0,
+        totalTxFees: 0,
+        dbHealthy: false,
+        error: error instanceof Error ? error.message : "Failed to fetch stats",
+      },
+      { status: 200 },
     );
   }
 }

@@ -25,7 +25,9 @@ interface BattleEvent {
 }
 
 interface ChatMessage {
-  agent: string;
+  agent: string;           // "alpha" | "omega"
+  agentName?: string;      // custom agent name, falls back to capitalized side
+  phase?: string;          // "pre_battle" | "post_battle" | "mid_battle" | etc.
   message: string;
   timestamp: string;
   displayText: string;
@@ -34,13 +36,23 @@ interface ChatMessage {
 interface BattleHistoryItem {
   id: string;
   title: string;
-  winner: string;
+  winner: string;           // "alpha" | "omega"
   alphaScore: number;
   omegaScore: number;
   amount: number;
   date: string;
+  category?: string;
+  // Agent identity — filled in from arena API enrichment
+  alphaName?: string;
+  omegaName?: string;
+  alphaAvatarUrl?: string | null;
+  omegaAvatarUrl?: string | null;
+  alphaAvatarSeed?: string | null;
+  omegaAvatarSeed?: string | null;
   alphaEloDelta?: number;
   omegaEloDelta?: number;
+  alphaEloAfter?: number;
+  omegaEloAfter?: number;
 }
 
 interface BattleStats {
@@ -271,6 +283,408 @@ const BATTLE_STYLES = `
 `;
 
 /* ================================================================== */
+/*  Battle History UI                                                  */
+/* ================================================================== */
+
+function relativeTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return "";
+  const diffSec = Math.max(0, (Date.now() - t) / 1000);
+  if (diffSec < 60) return `${Math.round(diffSec)}s ago`;
+  if (diffSec < 3600) return `${Math.round(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.round(diffSec / 3600)}h ago`;
+  if (diffSec < 86400 * 7) return `${Math.round(diffSec / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function HistoryAvatar({
+  name,
+  avatarUrl,
+  avatarSeed,
+  color,
+  size = 44,
+  isWinner,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  color: string;
+  size?: number;
+  isWinner?: boolean;
+}) {
+  const ring = isWinner ? `2px solid ${color}` : `1px solid ${color}40`;
+  const common = {
+    width: size,
+    height: size,
+    borderRadius: 8,
+    flexShrink: 0,
+    border: ring,
+    overflow: "hidden" as const,
+    background: `${color}10`,
+    position: "relative" as const,
+  };
+  if (avatarUrl) {
+    return (
+      <div style={common} title={name}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={avatarUrl}
+          alt={name}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+        {isWinner && <WinnerBadge color={color} />}
+      </div>
+    );
+  }
+  if (avatarSeed) {
+    return (
+      <div
+        style={{
+          ...common,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+        title={name}
+      >
+        <PixelAgent seed={avatarSeed} color={color} size={size - 8} state="idle" />
+        {isWinner && <WinnerBadge color={color} />}
+      </div>
+    );
+  }
+  // Fallback: initial
+  return (
+    <div
+      style={{
+        ...common,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color,
+        fontWeight: 800,
+        fontSize: size * 0.5,
+      }}
+      title={name}
+    >
+      {name.charAt(0).toUpperCase() || "?"}
+      {isWinner && <WinnerBadge color={color} />}
+    </div>
+  );
+}
+
+function WinnerBadge({ color }: { color: string }) {
+  return (
+    <span
+      style={{
+        position: "absolute",
+        top: -6,
+        right: -6,
+        width: 18,
+        height: 18,
+        borderRadius: "50%",
+        background: color,
+        color: "#000",
+        fontSize: 11,
+        fontWeight: 900,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 0 0 2px #0b0b0b",
+      }}
+    >
+      ★
+    </span>
+  );
+}
+
+interface HistoryCardProps {
+  battle: BattleHistoryItem;
+}
+
+function BattleHistoryCard({ battle }: HistoryCardProps) {
+  const isAlphaWin = battle.winner === "alpha";
+  const alphaName = battle.alphaName || "Agent Alpha";
+  const omegaName = battle.omegaName || "Agent Omega";
+  const totalScore = battle.alphaScore + battle.omegaScore || 1;
+  const alphaPct = (battle.alphaScore / totalScore) * 100;
+  const omegaPct = (battle.omegaScore / totalScore) * 100;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "auto 1fr auto",
+        gap: 16,
+        padding: "14px 16px",
+        background: "rgba(255,255,255,0.025)",
+        borderRadius: 12,
+        border: `1px solid ${
+          isAlphaWin ? `${ALPHA_COLOR}25` : `${OMEGA_COLOR}25`
+        }`,
+        alignItems: "center",
+      }}
+    >
+      {/* Left: two avatars side-by-side */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <HistoryAvatar
+          name={alphaName}
+          avatarUrl={battle.alphaAvatarUrl}
+          avatarSeed={battle.alphaAvatarSeed}
+          color={ALPHA_COLOR}
+          isWinner={isAlphaWin}
+        />
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            color: "rgba(255,255,255,0.2)",
+            letterSpacing: "0.08em",
+          }}
+        >
+          VS
+        </div>
+        <HistoryAvatar
+          name={omegaName}
+          avatarUrl={battle.omegaAvatarUrl}
+          avatarSeed={battle.omegaAvatarSeed}
+          color={OMEGA_COLOR}
+          isWinner={!isAlphaWin}
+        />
+      </div>
+
+      {/* Middle: names + title + score bar */}
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 11,
+            marginBottom: 4,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ color: ALPHA_COLOR, fontWeight: 700 }}>
+            {alphaName}
+          </span>
+          <span style={{ color: "rgba(255,255,255,0.25)" }}>vs</span>
+          <span style={{ color: OMEGA_COLOR, fontWeight: 700 }}>
+            {omegaName}
+          </span>
+          {battle.category && (
+            <span
+              style={{
+                fontSize: 9,
+                padding: "1px 6px",
+                borderRadius: 3,
+                background: "rgba(255,255,255,0.06)",
+                color: "rgba(255,255,255,0.5)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                fontWeight: 700,
+              }}
+            >
+              {battle.category.replace(/_/g, " ")}
+            </span>
+          )}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: "rgba(255,255,255,0.75)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            marginBottom: 8,
+          }}
+          title={battle.title}
+        >
+          {battle.title}
+        </div>
+
+        {/* Score bar */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 11,
+          }}
+        >
+          <span
+            style={{
+              color: ALPHA_COLOR,
+              fontWeight: 700,
+              minWidth: 18,
+              textAlign: "right",
+            }}
+          >
+            {battle.alphaScore}
+          </span>
+          <div
+            style={{
+              flex: 1,
+              height: 6,
+              borderRadius: 3,
+              background: "rgba(255,255,255,0.06)",
+              overflow: "hidden",
+              display: "flex",
+            }}
+          >
+            <div
+              style={{
+                width: `${alphaPct}%`,
+                background: `linear-gradient(90deg, ${ALPHA_COLOR}, ${ALPHA_COLOR}80)`,
+              }}
+            />
+            <div
+              style={{
+                width: `${omegaPct}%`,
+                background: `linear-gradient(90deg, ${OMEGA_COLOR}80, ${OMEGA_COLOR})`,
+              }}
+            />
+          </div>
+          <span
+            style={{
+              color: OMEGA_COLOR,
+              fontWeight: 700,
+              minWidth: 18,
+            }}
+          >
+            {battle.omegaScore}
+          </span>
+        </div>
+      </div>
+
+      {/* Right: winner chip + ELO deltas + time */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: 4,
+          minWidth: 120,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            color: isAlphaWin ? ALPHA_COLOR : OMEGA_COLOR,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            background: isAlphaWin
+              ? `${ALPHA_COLOR}15`
+              : `${OMEGA_COLOR}15`,
+            padding: "3px 8px",
+            borderRadius: 4,
+          }}
+        >
+          ★ {isAlphaWin ? alphaName : omegaName}
+        </div>
+        {(battle.alphaEloDelta !== undefined ||
+          battle.omegaEloDelta !== undefined) && (
+          <div
+            style={{
+              fontSize: 10,
+              fontFamily: "monospace",
+              color: "rgba(255,255,255,0.5)",
+              display: "flex",
+              gap: 4,
+            }}
+          >
+            <EloDelta
+              delta={battle.alphaEloDelta}
+              color={ALPHA_COLOR}
+            />
+            <span style={{ color: "rgba(255,255,255,0.2)" }}>/</span>
+            <EloDelta
+              delta={battle.omegaEloDelta}
+              color={OMEGA_COLOR}
+            />
+          </div>
+        )}
+        <div
+          style={{
+            fontSize: 10,
+            color: "rgba(255,255,255,0.3)",
+            fontVariantNumeric: "tabular-nums",
+          }}
+          title={new Date(battle.date).toLocaleString()}
+        >
+          {relativeTime(battle.date)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EloDelta({ delta, color }: { delta?: number; color: string }) {
+  if (delta === undefined) return <span style={{ color: "rgba(255,255,255,0.2)" }}>--</span>;
+  const positive = delta > 0;
+  return (
+    <span style={{ color: positive ? "#7CFF7C" : color, fontWeight: 700 }}>
+      {positive ? "+" : ""}
+      {delta}
+    </span>
+  );
+}
+
+function BattleHistoryList({
+  items,
+  limit = 5,
+}: {
+  items: BattleHistoryItem[];
+  limit?: number;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="glass-card-strong" style={{ padding: 22, marginBottom: 28 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 16,
+        }}
+      >
+        <div
+          className="font-display"
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: "rgba(255,255,255,0.4)",
+            textTransform: "uppercase",
+            letterSpacing: "0.12em",
+          }}
+        >
+          Battle History
+        </div>
+        <div
+          style={{
+            fontSize: 10,
+            color: "rgba(255,255,255,0.3)",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            fontWeight: 600,
+          }}
+        >
+          Last {Math.min(limit, items.length)}
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {items.slice(0, limit).map((battle) => (
+          <BattleHistoryCard key={battle.id} battle={battle} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ================================================================== */
 /*  COMPONENT                                                          */
 /* ================================================================== */
 
@@ -357,10 +771,28 @@ export default function BattlePage() {
   const [spectatorXpAwarded, setSpectatorXpAwarded] = useState<number>(0);
   const [eloLoading, setEloLoading] = useState(true);
 
-  /* ---- Prediction state ---- */
-  const [battleId] = useState<string>(() => `battle-${Date.now()}`);
+  /* ---- Prediction state ----
+     battleId is regenerated at each startBattle() so predictions, chat,
+     and server-side resolution stay scoped to the current round. (Audit
+     M5 / WHO WILL WIN): reusing a session-wide id leaked predictions
+     from battle N into battle N+1 and made 409 "Already predicted"
+     stick permanently. */
+  const [battleId, setBattleId] = useState<string>(() => `battle-${Date.now()}`);
   const [userPrediction, setUserPrediction] = useState<"alpha" | "omega" | null>(null);
   const [predictionStats, setPredictionStats] = useState<{ alphaPercent: number; omegaPercent: number; total: number }>({ alphaPercent: 50, omegaPercent: 50, total: 0 });
+
+  // Tournament auto-continue timeout — tracked via ref so we can cancel
+  // it from resetBattle / unmount (audit H2).
+  const tournamentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Always cancel on unmount so navigation away kills the timer.
+  useEffect(() => {
+    return () => {
+      if (tournamentTimeoutRef.current) {
+        clearTimeout(tournamentTimeoutRef.current);
+      }
+    };
+  }, []);
 
   /* ---- Spectator count ---- */
   const [viewerCount, setViewerCount] = useState<number>(1);
@@ -380,8 +812,36 @@ export default function BattlePage() {
   const [tournamentScores, setTournamentScores] = useState<{alpha: number, omega: number}>({alpha: 0, omega: 0});
 
   /* ---- Spectator chat ---- */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [spectatorChatMessages, setSpectatorChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const spectatorChatRef = useRef<HTMLDivElement>(null);
+  const [myChatSessionId, setMyChatSessionId] = useState<string | null>(null);
+
+  // Capture our own sessionId so we can highlight our own messages with
+  // a "You" badge.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let sid = sessionStorage.getItem("battle_session");
+    if (!sid) {
+      sid = crypto.randomUUID();
+      sessionStorage.setItem("battle_session", sid);
+    }
+    setMyChatSessionId(sid);
+  }, []);
+
+  // Smart scroll for spectator chat.
+  useEffect(() => {
+    const el = spectatorChatRef.current;
+    if (!el) return;
+    const distanceFromBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 80) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [spectatorChatMessages]);
 
   /* ================================================================ */
   /*  Fetch ELO data                                                   */
@@ -401,7 +861,17 @@ export default function BattlePage() {
             (b: {
               id: string;
               challengeText: string;
+              category?: string;
+              alphaAgent?: string;
+              omegaAgent?: string;
+              alphaName?: string;
+              omegaName?: string;
+              alphaAvatarUrl?: string | null;
+              omegaAvatarUrl?: string | null;
+              alphaAvatarSeed?: string | null;
+              omegaAvatarSeed?: string | null;
               winnerAgent: string;
+              winnerSide?: string;
               alphaScore: number;
               omegaScore: number;
               alphaEloAfter?: number | null;
@@ -412,12 +882,20 @@ export default function BattlePage() {
             }) => ({
               id: b.id,
               title: b.challengeText?.slice(0, 60) || "Battle",
+              category: b.category,
               winner:
-                b.winnerAgent === ALPHA_WALLET ? "alpha" : "omega",
+                b.winnerSide ||
+                (b.winnerAgent === ALPHA_WALLET ? "alpha" : "omega"),
               alphaScore: b.alphaScore,
               omegaScore: b.omegaScore,
               amount: 0,
               date: b.createdAt,
+              alphaName: b.alphaName,
+              omegaName: b.omegaName,
+              alphaAvatarUrl: b.alphaAvatarUrl,
+              omegaAvatarUrl: b.omegaAvatarUrl,
+              alphaAvatarSeed: b.alphaAvatarSeed,
+              omegaAvatarSeed: b.omegaAvatarSeed,
               alphaEloDelta:
                 b.alphaEloAfter && b.alphaEloBefore
                   ? b.alphaEloAfter - b.alphaEloBefore
@@ -426,6 +904,8 @@ export default function BattlePage() {
                 b.omegaEloAfter && b.omegaEloBefore
                   ? b.omegaEloAfter - b.omegaEloBefore
                   : undefined,
+              alphaEloAfter: b.alphaEloAfter ?? undefined,
+              omegaEloAfter: b.omegaEloAfter ?? undefined,
             }),
           );
           setBattleHistory((prev) => {
@@ -450,8 +930,22 @@ export default function BattlePage() {
   const recordBattleResult = useCallback(
     async (winnerSide: string) => {
       try {
+        // Resolve each side's identity: when the user picked custom
+        // agents, the arena battle MUST be recorded against the custom
+        // wallet and name so the Battle History and ELO leaderboard
+        // reflect the real participants. Previously both sides were
+        // hardcoded to ALPHA_WALLET / OMEGA_WALLET which caused every
+        // custom battle to show up as "Alpha vs Omega" (audit fix).
+        const alphaIsCustom = useCustomAgents && selectedAlpha;
+        const omegaIsCustom = useCustomAgents && selectedOmega;
+        const alphaAgentWallet =
+          (alphaIsCustom && (selectedAlpha.wallet || selectedAlpha.walletAddress)) || ALPHA_WALLET;
+        const omegaAgentWallet =
+          (omegaIsCustom && (selectedOmega.wallet || selectedOmega.walletAddress)) || OMEGA_WALLET;
+        const alphaAgentName = alphaIsCustom ? selectedAlpha.name : "Agent Alpha";
+        const omegaAgentName = omegaIsCustom ? selectedOmega.name : "Agent Omega";
         const winnerAgent =
-          winnerSide === "alpha" ? ALPHA_WALLET : OMEGA_WALLET;
+          winnerSide === "alpha" ? alphaAgentWallet : omegaAgentWallet;
 
         // Try to get spectator wallet from Solana connector
         let spectatorWallet: string | undefined;
@@ -471,8 +965,10 @@ export default function BattlePage() {
           body: JSON.stringify({
             challengeText: challenge || battleTitle || "Arena Battle",
             category: selectedCategory || battleCategory || "text_writing",
-            alphaAgent: ALPHA_WALLET,
-            omegaAgent: OMEGA_WALLET,
+            alphaAgent: alphaAgentWallet,
+            omegaAgent: omegaAgentWallet,
+            alphaName: alphaAgentName,
+            omegaName: omegaAgentName,
             alphaOutput: alphaFullText || undefined,
             omegaOutput: omegaFullText || undefined,
             alphaScore: alphaScore || 0,
@@ -528,6 +1024,9 @@ export default function BattlePage() {
       alphaScore,
       omegaScore,
       judgeReason,
+      useCustomAgents,
+      selectedAlpha,
+      selectedOmega,
     ],
   );
 
@@ -624,9 +1123,15 @@ export default function BattlePage() {
     return () => clearInterval(interval);
   }, [chatMessages]);
 
+  // Smart auto-scroll: only pin to bottom if user is already near the
+  // bottom. If they scrolled up to re-read an earlier exchange, don't
+  // yank them back down.
   useEffect(() => {
-    if (chatPanelRef.current) {
-      chatPanelRef.current.scrollTop = chatPanelRef.current.scrollHeight;
+    const el = chatPanelRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 80) {
+      el.scrollTop = el.scrollHeight;
     }
   }, [chatMessages]);
 
@@ -774,15 +1279,67 @@ export default function BattlePage() {
   }, [phase]);
 
   async function sendChat() {
-    if (!chatInput.trim()) return;
+    const trimmed = chatInput.trim();
+    if (!trimmed || chatSending) return;
     let sid = sessionStorage.getItem("battle_session");
-    if (!sid) { sid = crypto.randomUUID(); sessionStorage.setItem("battle_session", sid); }
-    await fetch("/api/battle/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: sid, wallet: account || null, message: chatInput.trim() }),
-    });
-    setChatInput("");
+    if (!sid) {
+      sid = crypto.randomUUID();
+      sessionStorage.setItem("battle_session", sid);
+      setMyChatSessionId(sid);
+    }
+    setChatSending(true);
+    setChatError(null);
+    try {
+      const res = await fetch("/api/battle/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: sid,
+          wallet: account || null,
+          message: trimmed,
+        }),
+      });
+      if (!res.ok) {
+        let msg = "Failed to send.";
+        try {
+          const json = await res.json();
+          if (json?.error) msg = String(json.error);
+        } catch {
+          /* keep default */
+        }
+        if (res.status === 429) {
+          msg = "Slow down — you're chatting too fast.";
+        }
+        setChatError(msg);
+        setTimeout(() => setChatError(null), 4000);
+        return;
+      }
+      setChatInput("");
+      // Optimistic: prepend the new message so it renders instantly even
+      // before the next poll cycle fetches the DB row back.
+      const optimistic = await res.json().catch(() => null);
+      if (optimistic) {
+        setSpectatorChatMessages((prev) =>
+          [...prev, optimistic].slice(-50),
+        );
+      }
+    } catch (err) {
+      console.error("[chat] send failed:", err);
+      setChatError("Network error. Try again.");
+      setTimeout(() => setChatError(null), 4000);
+    } finally {
+      setChatSending(false);
+    }
+  }
+
+  function formatChatTime(iso: string | undefined): string {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return "";
+    }
   }
 
   /* ================================================================ */
@@ -814,6 +1371,8 @@ export default function BattlePage() {
             ...prev,
             {
               agent: String(event.data!.agent || ""),
+              agentName: event.data!.agentName ? String(event.data!.agentName) : undefined,
+              phase: event.data!.phase ? String(event.data!.phase) : undefined,
               message: String(event.data!.message || ""),
               timestamp: getTimestamp(),
               displayText: "",
@@ -949,12 +1508,10 @@ export default function BattlePage() {
             recordBattleResult(w);
           }, 500);
 
-          // Resolve predictions
-          fetch("/api/battle/predict", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ battleId, winner: w }),
-          }).catch(() => {});
+          // Prediction resolution is now handled server-side inside
+          // /api/battle/run after judging completes (audit C2/H4). The
+          // old frontend PATCH call was a no-op anyway because the
+          // battleId never matched arenaBattle.id.
         }
         // Tournament mode: track round wins and auto-continue
         if (tournamentMode && tournamentRound < 3) {
@@ -965,8 +1522,12 @@ export default function BattlePage() {
           setTournamentScores(updatedScores);
           setTournamentRound((r) => r + 1);
           toast(`Round ${tournamentRound}/3 complete! ${w === "alpha" ? "Alpha" : "Omega"} wins this round.`, "info");
-          // Auto-start next round after a short delay
-          setTimeout(() => {
+          // Auto-start next round after a short delay. Store in a ref so
+          // resetBattle / unmount can cancel before it fires (audit H2).
+          if (tournamentTimeoutRef.current) {
+            clearTimeout(tournamentTimeoutRef.current);
+          }
+          tournamentTimeoutRef.current = setTimeout(() => {
             setChallenge(RANDOM_CHALLENGES[Math.floor(Math.random() * RANDOM_CHALLENGES.length)]);
             startBattle();
           }, 3000);
@@ -1011,11 +1572,20 @@ export default function BattlePage() {
         fireConfetti();
         break;
 
-      case "error":
+      case "error": {
         setPhase("setup");
         setRunning(false);
-        toast("Battle error occurred", "error");
+        // Surface the actual error detail instead of a generic toast
+        // (audit M3). Backend emits error detail in event.message.
+        const detail = event.message || "Battle error occurred";
+        toast(detail.slice(0, 140), "error");
+        // Stop any tournament auto-continue on error.
+        if (tournamentTimeoutRef.current) {
+          clearTimeout(tournamentTimeoutRef.current);
+          tournamentTimeoutRef.current = null;
+        }
         break;
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordBattleResult, battleId, tournamentMode, tournamentRound, tournamentScores]);
@@ -1025,6 +1595,31 @@ export default function BattlePage() {
   /* ================================================================ */
 
   async function startBattle() {
+    // Cancel any pending tournament auto-continue from a previous round
+    // so a rapid "Start again" doesn't double-fire (audit H2).
+    if (tournamentTimeoutRef.current) {
+      clearTimeout(tournamentTimeoutRef.current);
+      tournamentTimeoutRef.current = null;
+    }
+
+    // Tournament state hygiene (audit H1): if the previous tournament
+    // finished (round 3 complete) or tournament mode was disabled,
+    // reset round counter and scores before starting a new one. This
+    // prevents the "Tournament over!" toast from firing on what the
+    // user intends to be a single standalone battle.
+    const isTournamentStart =
+      tournamentMode && (tournamentRound >= 3 || tournamentRound < 1);
+    if (isTournamentStart || !tournamentMode) {
+      setTournamentRound(1);
+      setTournamentScores({ alpha: 0, omega: 0 });
+    }
+
+    // Fresh battleId for this battle (audit M5 / WHO WILL WIN).
+    const thisBattleId = `battle-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    setBattleId(thisBattleId);
+    setUserPrediction(null);
+    setPredictionStats({ alphaPercent: 50, omegaPercent: 50, total: 0 });
+
     // Reset everything
     setRunning(true);
     setPhase("fighting");
@@ -1074,6 +1669,7 @@ export default function BattlePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          battleId: thisBattleId,
           jobSpec: {
             title: challenge || undefined,
             category: selectedCategory,
@@ -1084,12 +1680,14 @@ export default function BattlePage() {
             name: selectedAlpha.name,
             systemPrompt: selectedAlpha.systemPrompt,
             model: selectedAlpha.model,
+            wallet: selectedAlpha.wallet || selectedAlpha.walletAddress,
           } : undefined,
           customOmega: useCustomAgents && selectedOmega ? {
             id: selectedOmega.id,
             name: selectedOmega.name,
             systemPrompt: selectedOmega.systemPrompt,
             model: selectedOmega.model,
+            wallet: selectedOmega.wallet || selectedOmega.walletAddress,
           } : undefined,
         }),
       });
@@ -1141,6 +1739,20 @@ export default function BattlePage() {
   }
 
   function resetBattle() {
+    // Cancel any pending tournament auto-continue (audit H2) so the
+    // user's "Back to lobby" click doesn't result in a rogue battle
+    // firing 3 seconds later.
+    if (tournamentTimeoutRef.current) {
+      clearTimeout(tournamentTimeoutRef.current);
+      tournamentTimeoutRef.current = null;
+    }
+    // Also reset tournament state so the next battle doesn't see stale
+    // round counters (audit H1).
+    setTournamentRound(1);
+    setTournamentScores({ alpha: 0, omega: 0 });
+    setUserPrediction(null);
+    setPredictionStats({ alphaPercent: 50, omegaPercent: 50, total: 0 });
+
     setPhase("setup");
     setRunning(false);
     setWinner(null);
@@ -1211,7 +1823,7 @@ export default function BattlePage() {
   /* ================================================================ */
 
   function renderAgentPanel(
-    config: typeof ALPHA_CONFIG,
+    config: typeof ALPHA_CONFIG & { avatarUrl?: string | null },
     state: AgentState,
     status: string,
     displayText: string,
@@ -1344,7 +1956,26 @@ export default function BattlePage() {
                 transition: "all 0.3s ease",
               }}
             >
-              <PixelAgent seed={config.avatarSeed} color={config.color} size={80} state={state} />
+              {config.avatarUrl ? (
+                // Custom agent uploaded avatar — show the actual image
+                // framed in a colored square so it reads like the
+                // default PixelAgent badge. (Audit: community agent
+                // profile images were not appearing in-battle.)
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={config.avatarUrl}
+                  alt={config.name}
+                  style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: 12,
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <PixelAgent seed={config.avatarSeed} color={config.color} size={80} state={state} />
+              )}
             </div>
           </div>
 
@@ -1901,36 +2532,114 @@ export default function BattlePage() {
             <div style={{
               maxWidth: "700px",
               margin: "0 auto 28px auto",
-              padding: "24px",
-              border: useCustomAgents ? "1px solid rgba(255,254,178,0.15)" : "1px solid rgba(255,255,255,0.08)",
+              padding: useCustomAgents ? "24px" : "2px",
               borderRadius: "16px",
-              backgroundColor: "rgba(0,0,0,0.3)",
-              backdropFilter: "blur(12px)",
-              transition: "border-color 0.3s ease",
+              transition: "all 0.3s ease",
+              // When OFF: glowing gradient border that begs to be clicked.
+              // When ON: quieter container since the options are revealed.
+              background: useCustomAgents
+                ? "rgba(0,0,0,0.35)"
+                : "linear-gradient(120deg, #fffeb2 0%, #FFB84D 40%, #FF425E 80%, #fffeb2 100%)",
+              backgroundSize: useCustomAgents ? "100% 100%" : "300% 100%",
+              animation: useCustomAgents ? undefined : "pick-gradient 6s linear infinite",
+              border: useCustomAgents ? "1px solid rgba(255,254,178,0.25)" : "none",
+              backdropFilter: useCustomAgents ? "blur(12px)" : undefined,
+              boxShadow: useCustomAgents ? undefined : "0 0 30px rgba(255,254,178,0.2)",
             }}>
               <button
                 onClick={() => setUseCustomAgents(!useCustomAgents)}
                 style={{
-                  fontFamily: "inherit", fontSize: "15px", fontWeight: 700,
-                  display: "flex", alignItems: "center", gap: "12px", width: "100%",
-                  padding: "4px 0", background: "none", border: "none",
-                  color: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.5)",
-                  cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em",
+                  width: "100%",
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  background: useCustomAgents ? "none" : "rgba(10,10,10,0.9)",
+                  border: "none",
+                  borderRadius: useCustomAgents ? 0 : "14px",
+                  padding: useCustomAgents ? "4px 0" : "18px 24px",
+                  color: useCustomAgents ? "#fffeb2" : "#fff",
+                  textAlign: "left",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "16px",
+                  transition: "all 0.2s ease",
                 }}
               >
+                {/* Accent dot + toggle combo on the left */}
                 <div style={{
-                  width: "40px", height: "22px", borderRadius: "11px",
-                  backgroundColor: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.12)",
-                  position: "relative", transition: "all 0.2s ease", flexShrink: 0,
+                  width: "44px",
+                  height: "24px",
+                  borderRadius: "12px",
+                  backgroundColor: useCustomAgents ? "#fffeb2" : "rgba(255,255,255,0.15)",
+                  position: "relative",
+                  transition: "all 0.2s ease",
+                  flexShrink: 0,
+                  boxShadow: useCustomAgents ? "0 0 12px rgba(255,254,178,0.4)" : "none",
                 }}>
                   <div style={{
-                    width: "18px", height: "18px", borderRadius: "50%",
-                    backgroundColor: useCustomAgents ? "#000" : "rgba(255,255,255,0.4)",
-                    position: "absolute", top: "2px",
-                    left: useCustomAgents ? "20px" : "2px", transition: "all 0.2s ease",
+                    width: "20px",
+                    height: "20px",
+                    borderRadius: "50%",
+                    backgroundColor: useCustomAgents ? "#000" : "rgba(255,255,255,0.5)",
+                    position: "absolute",
+                    top: "2px",
+                    left: useCustomAgents ? "22px" : "2px",
+                    transition: "all 0.2s ease",
                   }} />
                 </div>
-                Pick Your Agents
+
+                {/* Text block */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    flexWrap: "wrap",
+                  }}>
+                    <span style={{
+                      fontSize: "16px",
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      color: useCustomAgents ? "#fffeb2" : "#fff",
+                    }}>
+                      Pick Your Agents
+                    </span>
+                    {!useCustomAgents && (
+                      <span style={{
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        letterSpacing: "0.12em",
+                        padding: "2px 8px",
+                        borderRadius: "4px",
+                        background: "#fffeb2",
+                        color: "#000",
+                      }}>
+                        NEW
+                      </span>
+                    )}
+                  </div>
+                  <div style={{
+                    marginTop: "4px",
+                    fontSize: "12px",
+                    color: useCustomAgents ? "rgba(255,254,178,0.6)" : "rgba(255,255,255,0.55)",
+                    lineHeight: 1.4,
+                  }}>
+                    {useCustomAgents
+                      ? "Custom battle active — pick a challenger and a defender below"
+                      : "Battle with agents you built or any hosted agent in this category"}
+                  </div>
+                </div>
+
+                {/* Right-side chevron when OFF, invisible when ON */}
+                {!useCustomAgents && (
+                  <div style={{
+                    fontSize: "18px",
+                    color: "rgba(255,255,255,0.35)",
+                    flexShrink: 0,
+                  }}>
+                    →
+                  </div>
+                )}
               </button>
               {useCustomAgents && (
                 <div style={{ marginTop: "20px" }}>
@@ -2215,7 +2924,7 @@ export default function BattlePage() {
                       letterSpacing: "0.08em",
                     }}
                   >
-                    AGENT ALPHA
+                    {useCustomAgents && selectedAlpha ? selectedAlpha.name : ALPHA_CONFIG.name}
                   </button>
                   <button
                     className="prediction-btn"
@@ -2250,7 +2959,7 @@ export default function BattlePage() {
                       letterSpacing: "0.08em",
                     }}
                   >
-                    AGENT OMEGA
+                    {useCustomAgents && selectedOmega ? selectedOmega.name : OMEGA_CONFIG.name}
                   </button>
                 </div>
               ) : (
@@ -2258,7 +2967,9 @@ export default function BattlePage() {
                   <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "12px" }}>
                     You picked{" "}
                     <span style={{ color: userPrediction === "alpha" ? ALPHA_COLOR : OMEGA_COLOR, fontWeight: 700 }}>
-                      {userPrediction === "alpha" ? "AGENT ALPHA" : "AGENT OMEGA"}
+                      {userPrediction === "alpha"
+                        ? (useCustomAgents && selectedAlpha ? selectedAlpha.name : ALPHA_CONFIG.name)
+                        : (useCustomAgents && selectedOmega ? selectedOmega.name : OMEGA_CONFIG.name)}
                     </span>
                   </div>
                 </div>
@@ -2438,6 +3149,22 @@ export default function BattlePage() {
               omegaHP={omegaHP}
               width={700}
               height={220}
+              category={battleCategory}
+              viewerCount={viewerCount}
+              alphaCategory={
+                useCustomAgents && selectedAlpha ? selectedAlpha.category : battleCategory
+              }
+              omegaCategory={
+                useCustomAgents && selectedOmega ? selectedOmega.category : battleCategory
+              }
+              predictionSide={userPrediction}
+              tournamentRound={tournamentMode ? tournamentRound : undefined}
+              chatMessages={spectatorChatMessages
+                .slice(-20)
+                .map((m) =>
+                  typeof m === "string" ? m : String(m?.text ?? m?.message ?? ""),
+                )
+                .filter(Boolean)}
             />
           </div>
         )}
@@ -2450,56 +3177,243 @@ export default function BattlePage() {
           <div
             className="glass-card"
             style={{
-              padding: "16px",
+              padding: "16px 18px",
               marginTop: "16px",
               marginBottom: "16px",
-              maxHeight: "200px",
             }}
           >
-            <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
-              Spectator Chat
-            </div>
-            <div style={{ maxHeight: "120px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "4px" }}>
-              {spectatorChatMessages.map((m: any) => (
-                <div key={m.id} style={{ fontSize: "12px" }}>
-                  <span style={{ color: "#fffeb2", fontWeight: 600 }}>{m.wallet ? m.wallet.slice(0, 4) + "..." : "Anon"}</span>
-                  <span style={{ color: "rgba(255,255,255,0.6)", marginLeft: "6px" }}>{m.message}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-              <input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") sendChat(); }}
-                placeholder="Say something..."
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 10,
+              }}
+            >
+              <div
                 style={{
-                  flex: 1,
-                  fontFamily: "inherit",
-                  fontSize: "12px",
-                  padding: "8px 12px",
-                  borderRadius: "6px",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.04)",
-                  color: "#fff",
-                  outline: "none",
-                }}
-              />
-              <button
-                onClick={sendChat}
-                style={{
-                  fontFamily: "inherit",
-                  fontSize: "12px",
-                  padding: "8px 16px",
-                  borderRadius: "6px",
-                  border: "none",
-                  background: "#fffeb2",
-                  color: "#000",
-                  cursor: "pointer",
-                  fontWeight: 600,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.5)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
                 }}
               >
-                Send
+                Spectator Chat
+                {spectatorChatMessages.length > 0 && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: "1px 6px",
+                      borderRadius: 99,
+                      background: "rgba(255,255,255,0.08)",
+                      color: "rgba(255,255,255,0.5)",
+                    }}
+                  >
+                    {spectatorChatMessages.length}
+                  </span>
+                )}
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.3)",
+                  fontWeight: 600,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {viewerCount} watching
+              </div>
+            </div>
+
+            <div
+              ref={spectatorChatRef}
+              style={{
+                maxHeight: 160,
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                paddingRight: 4,
+              }}
+            >
+              {spectatorChatMessages.length === 0 ? (
+                <div
+                  style={{
+                    padding: "16px 8px",
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.3)",
+                    fontStyle: "italic",
+                    textAlign: "center",
+                  }}
+                >
+                  Be the first to say something.
+                </div>
+              ) : (
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                spectatorChatMessages.map((m: any) => {
+                  const isMine = m.sessionId && myChatSessionId && m.sessionId === myChatSessionId;
+                  const name = m.wallet
+                    ? `${String(m.wallet).slice(0, 4)}…${String(m.wallet).slice(-4)}`
+                    : "Anon";
+                  return (
+                    <div
+                      key={m.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 8,
+                        fontSize: 12,
+                        padding: "4px 8px",
+                        borderRadius: 6,
+                        background: isMine ? "rgba(255,254,178,0.08)" : "transparent",
+                        animation: "chat-in 0.2s ease-out",
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: isMine ? "#fffeb2" : "rgba(255,255,255,0.5)",
+                          fontWeight: 700,
+                          letterSpacing: "0.02em",
+                          fontVariantNumeric: "tabular-nums",
+                          flexShrink: 0,
+                          minWidth: 44,
+                        }}
+                      >
+                        {formatChatTime(m.createdAt) || ""}
+                      </span>
+                      <span
+                        style={{
+                          color: "#fffeb2",
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {name}
+                      </span>
+                      {isMine && (
+                        <span
+                          style={{
+                            fontSize: 9,
+                            padding: "1px 5px",
+                            borderRadius: 3,
+                            background: "#fffeb2",
+                            color: "#000",
+                            fontWeight: 800,
+                            letterSpacing: "0.06em",
+                          }}
+                        >
+                          YOU
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          color: "rgba(255,255,255,0.85)",
+                          wordBreak: "break-word",
+                          minWidth: 0,
+                          flex: 1,
+                        }}
+                      >
+                        {m.message}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {chatError && (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "6px 10px",
+                  fontSize: 11,
+                  color: "#FF425E",
+                  background: "rgba(255,66,94,0.08)",
+                  border: "1px solid rgba(255,66,94,0.3)",
+                  borderRadius: 6,
+                }}
+              >
+                {chatError}
+              </div>
+            )}
+
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                marginTop: 10,
+                alignItems: "center",
+              }}
+            >
+              <div style={{ position: "relative", flex: 1 }}>
+                <input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value.slice(0, 200))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") sendChat();
+                  }}
+                  placeholder="Say something…"
+                  disabled={chatSending}
+                  maxLength={200}
+                  style={{
+                    width: "100%",
+                    fontFamily: "inherit",
+                    fontSize: 12,
+                    padding: "9px 52px 9px 12px",
+                    borderRadius: 6,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: "#fff",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <span
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    fontSize: 10,
+                    color:
+                      chatInput.length > 180
+                        ? "#FFB84D"
+                        : "rgba(255,255,255,0.3)",
+                    fontVariantNumeric: "tabular-nums",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {chatInput.length}/200
+                </span>
+              </div>
+              <button
+                onClick={sendChat}
+                disabled={chatSending || !chatInput.trim()}
+                style={{
+                  fontFamily: "inherit",
+                  fontSize: 11,
+                  padding: "9px 16px",
+                  borderRadius: 6,
+                  border: "none",
+                  background:
+                    chatSending || !chatInput.trim()
+                      ? "rgba(255,254,178,0.4)"
+                      : "#fffeb2",
+                  color: "#000",
+                  cursor:
+                    chatSending || !chatInput.trim() ? "not-allowed" : "pointer",
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                {chatSending ? "…" : "Send"}
               </button>
             </div>
           </div>
@@ -2514,7 +3428,14 @@ export default function BattlePage() {
             <div style={{ display: "flex", gap: "0px", alignItems: "stretch" }}>
               {/* Alpha Panel */}
               {renderAgentPanel(
-                useCustomAgents && selectedAlpha ? { ...ALPHA_CONFIG, name: selectedAlpha.name, avatarSeed: selectedAlpha.avatarSeed || selectedAlpha.id } : ALPHA_CONFIG,
+                useCustomAgents && selectedAlpha
+                  ? {
+                      ...ALPHA_CONFIG,
+                      name: selectedAlpha.name,
+                      avatarSeed: selectedAlpha.avatarSeed || selectedAlpha.id,
+                      avatarUrl: selectedAlpha.avatarUrl ?? null,
+                    }
+                  : ALPHA_CONFIG,
                 alphaState,
                 alphaStatus,
                 alphaDisplayText,
@@ -2603,7 +3524,14 @@ export default function BattlePage() {
 
               {/* Omega Panel */}
               {renderAgentPanel(
-                useCustomAgents && selectedOmega ? { ...OMEGA_CONFIG, name: selectedOmega.name, avatarSeed: selectedOmega.avatarSeed || selectedOmega.id } : OMEGA_CONFIG,
+                useCustomAgents && selectedOmega
+                  ? {
+                      ...OMEGA_CONFIG,
+                      name: selectedOmega.name,
+                      avatarSeed: selectedOmega.avatarSeed || selectedOmega.id,
+                      avatarUrl: selectedOmega.avatarUrl ?? null,
+                    }
+                  : OMEGA_CONFIG,
                 omegaState,
                 omegaStatus,
                 omegaDisplayText,
@@ -2697,7 +3625,9 @@ export default function BattlePage() {
                 marginBottom: "8px",
               }}
             >
-              {winner === "alpha" ? "AGENT ALPHA" : "AGENT OMEGA"} WINS!
+              {winner === "alpha"
+                ? (useCustomAgents && selectedAlpha ? selectedAlpha.name : ALPHA_CONFIG.name)
+                : (useCustomAgents && selectedOmega ? selectedOmega.name : OMEGA_CONFIG.name)} WINS!
             </div>
 
             {/* Score display */}
@@ -3142,167 +4072,260 @@ export default function BattlePage() {
         {/*  Agent Chat -- always show when messages exist                */}
         {/* ============================================================ */}
 
-        {chatMessages.length > 0 && (
+        {(chatMessages.length > 0 || phase === "fighting") && (
           <div
             className="glass-card-strong"
             style={{ padding: "20px", marginBottom: "28px" }}
           >
             <div
-              className="font-display"
               style={{
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "rgba(255,255,255,0.3)",
-                textTransform: "uppercase",
-                letterSpacing: "0.12em",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
                 marginBottom: "16px",
               }}
             >
-              Agent Chat
+              <div
+                className="font-display"
+                style={{
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.4)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                }}
+              >
+                Agent Chat
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.35)",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: phase === "fighting" ? "#7CFF7C" : "rgba(255,255,255,0.3)",
+                    boxShadow: phase === "fighting" ? "0 0 6px #7CFF7C" : "none",
+                    animation: phase === "fighting" ? "pulse 1.4s ease-in-out infinite" : "none",
+                  }}
+                />
+                {phase === "fighting" ? "Live" : "Replay"}
+              </div>
             </div>
-            <div ref={chatPanelRef} style={{ maxHeight: "280px", overflowY: "auto" }}>
-              {chatMessages.map((msg, i) => {
-                const isAlpha = msg.agent === "alpha";
-                const agentColor = isAlpha ? ALPHA_COLOR : OMEGA_COLOR;
-                const isLastTyping = i === chatMessages.length - 1 && msg.displayText.length < msg.message.length;
-                const alignment = isAlpha ? "flex-start" : "flex-end";
-
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      display: "flex",
-                      justifyContent: alignment,
-                      marginBottom: "10px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        maxWidth: "70%",
-                        padding: "10px 16px",
-                        borderRadius: isAlpha ? "16px 16px 16px 4px" : "16px 16px 4px 16px",
-                        background: `${agentColor}15`,
-                        border: `1px solid ${agentColor}25`,
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                        <span
-                          style={{
-                            fontSize: "12px",
-                            fontWeight: 800,
-                            color: agentColor,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                          }}
-                        >
-                          {isAlpha ? "Alpha" : "Omega"}
-                        </span>
-                        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.15)" }}>
-                          {msg.timestamp}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "12px",
-                          color: "rgba(255,255,255,0.8)",
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        {msg.displayText || msg.message}
-                        {isLastTyping && (
-                          <span style={{ color: agentColor, animation: "blink 1s step-end infinite" }}>
-                            {"\u258A"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ============================================================ */}
-        {/*  SECTION 5: BATTLE HISTORY                                   */}
-        {/* ============================================================ */}
-
-        {battleHistory.length > 0 && (
-          <div
-            className="glass-card-strong"
-            style={{ padding: "24px", marginBottom: "28px" }}
-          >
             <div
-              className="font-display"
+              ref={chatPanelRef}
               style={{
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "rgba(255,255,255,0.3)",
-                textTransform: "uppercase",
-                letterSpacing: "0.12em",
-                marginBottom: "20px",
+                maxHeight: "320px",
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                paddingRight: 4,
               }}
             >
-              Battle History
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {battleHistory.slice(0, 5).map((battle) => (
+              {chatMessages.length === 0 ? (
                 <div
-                  key={battle.id}
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "100px 1fr 120px 100px 80px",
-                    alignItems: "center",
-                    padding: "12px 16px",
-                    background: "rgba(255,255,255,0.02)",
-                    borderRadius: "10px",
-                    border: "1px solid rgba(255,255,255,0.04)",
-                    fontSize: "12px",
+                    padding: "24px 12px",
+                    textAlign: "center",
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.35)",
+                    fontStyle: "italic",
                   }}
                 >
-                  <div style={{ color: "rgba(255,255,255,0.3)", fontFamily: "monospace", fontSize: "12px" }}>
-                    {new Date(battle.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </div>
-                  <div style={{ color: "rgba(255,255,255,0.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {battle.title}
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    <span style={{ color: ALPHA_COLOR, fontWeight: 700 }}>{battle.alphaScore}</span>
-                    <span style={{ color: "rgba(255,255,255,0.2)", margin: "0 6px" }}>&mdash;</span>
-                    <span style={{ color: OMEGA_COLOR, fontWeight: 700 }}>{battle.omegaScore}</span>
-                  </div>
-                  {/* ELO deltas column */}
-                  <div style={{ textAlign: "center", fontFamily: "monospace", fontSize: "12px" }}>
-                    {battle.alphaEloDelta !== undefined && battle.omegaEloDelta !== undefined ? (
-                      <>
-                        <span style={{ color: battle.alphaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR, fontWeight: 700 }}>
-                          {battle.alphaEloDelta > 0 ? "+" : ""}{battle.alphaEloDelta}
-                        </span>
-                        <span style={{ color: "rgba(255,255,255,0.15)", margin: "0 4px" }}>/</span>
-                        <span style={{ color: battle.omegaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR, fontWeight: 700 }}>
-                          {battle.omegaEloDelta > 0 ? "+" : ""}{battle.omegaEloDelta}
-                        </span>
-                      </>
-                    ) : (
-                      <span style={{ color: "rgba(255,255,255,0.15)" }}>--</span>
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      textAlign: "right",
-                      color: battle.winner === "alpha" ? ALPHA_COLOR : OMEGA_COLOR,
-                      fontWeight: 700,
-                      textTransform: "uppercase",
-                      fontSize: "12px",
-                    }}
-                  >
-                    {battle.winner === "alpha" ? "Alpha" : "Omega"}
-                  </div>
+                  Agents are preparing…
                 </div>
-              ))}
+              ) : (
+                chatMessages.map((msg, i) => {
+                  const isAlpha = msg.agent === "alpha";
+                  const agentColor = isAlpha ? ALPHA_COLOR : OMEGA_COLOR;
+                  const isLastTyping =
+                    i === chatMessages.length - 1 &&
+                    msg.displayText.length < msg.message.length;
+                  const alignment = isAlpha ? "flex-start" : "flex-end";
+
+                  // Custom agent name fallback: prefer msg.agentName (sent
+                  // by backend for custom agents), else use selected
+                  // custom agent's name from local state, else static
+                  // "Alpha" / "Omega".
+                  const displayName =
+                    msg.agentName ||
+                    (useCustomAgents && isAlpha && selectedAlpha?.name) ||
+                    (useCustomAgents && !isAlpha && selectedOmega?.name) ||
+                    (isAlpha ? "Alpha" : "Omega");
+
+                  // Group consecutive messages from the same agent
+                  // within the same phase so we don't repeat the
+                  // avatar + name header on every bubble.
+                  const prev = chatMessages[i - 1];
+                  const isGrouped =
+                    prev && prev.agent === msg.agent && prev.phase === msg.phase;
+
+                  // Phase badge — only for the first message in a group
+                  // and only when phase is known. "pre_battle" → TAUNT,
+                  // "post_battle" → winner/loser tagged by content.
+                  let phaseLabel: string | null = null;
+                  let phaseTone = "rgba(255,255,255,0.4)";
+                  if (!isGrouped && msg.phase === "pre_battle") {
+                    phaseLabel = "Taunt";
+                  } else if (!isGrouped && msg.phase === "post_battle") {
+                    phaseLabel = winner === msg.agent ? "Victory" : "Concede";
+                    phaseTone = winner === msg.agent ? "#7CFF7C" : "rgba(255,255,255,0.45)";
+                  }
+
+                  // Avatar initial
+                  const initial = displayName.trim().charAt(0).toUpperCase() || "?";
+
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        justifyContent: alignment,
+                        marginTop: isGrouped ? 2 : 8,
+                        animation: "chat-in 0.25s ease-out",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: isAlpha ? "row" : "row-reverse",
+                          alignItems: "flex-end",
+                          gap: 8,
+                          maxWidth: "75%",
+                        }}
+                      >
+                        {/* Avatar — hidden on grouped messages */}
+                        <div
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 999,
+                            flexShrink: 0,
+                            visibility: isGrouped ? "hidden" : "visible",
+                            background: `${agentColor}20`,
+                            border: `1.5px solid ${agentColor}60`,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: agentColor,
+                            fontWeight: 800,
+                            fontSize: 12,
+                            letterSpacing: 0,
+                          }}
+                        >
+                          {initial}
+                        </div>
+
+                        <div style={{ minWidth: 0 }}>
+                          {/* Header — hidden on grouped messages */}
+                          {!isGrouped && (
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                marginBottom: 4,
+                                paddingLeft: isAlpha ? 4 : 0,
+                                paddingRight: isAlpha ? 0 : 4,
+                                flexDirection: isAlpha ? "row" : "row-reverse",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  color: agentColor,
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.06em",
+                                }}
+                              >
+                                {displayName}
+                              </span>
+                              {phaseLabel && (
+                                <span
+                                  style={{
+                                    fontSize: 9,
+                                    padding: "1px 6px",
+                                    borderRadius: 3,
+                                    fontWeight: 700,
+                                    letterSpacing: "0.08em",
+                                    textTransform: "uppercase",
+                                    color: phaseTone,
+                                    background: `${phaseTone === "#7CFF7C" ? "#7CFF7C" : "#fff"}10`,
+                                    border: `1px solid ${phaseTone}30`,
+                                  }}
+                                >
+                                  {phaseLabel}
+                                </span>
+                              )}
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  color: "rgba(255,255,255,0.2)",
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              >
+                                {msg.timestamp}
+                              </span>
+                            </div>
+                          )}
+
+                          <div
+                            style={{
+                              padding: "9px 14px",
+                              borderRadius: isAlpha
+                                ? `${isGrouped ? 14 : 14}px 14px 14px ${isGrouped ? 14 : 4}px`
+                                : `14px ${isGrouped ? 14 : 14}px ${isGrouped ? 14 : 4}px 14px`,
+                              background: `${agentColor}15`,
+                              border: `1px solid ${agentColor}25`,
+                              fontSize: 13,
+                              lineHeight: 1.55,
+                              color: "rgba(255,255,255,0.88)",
+                              wordBreak: "break-word",
+                            }}
+                          >
+                            {msg.displayText}
+                            {isLastTyping && (
+                              <span
+                                style={{
+                                  color: agentColor,
+                                  marginLeft: 1,
+                                  animation: "blink 0.9s step-end infinite",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {"\u258A"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}
+
+        {/* ============================================================ */}
+        {/*  SECTION 5: BATTLE HISTORY (results phase only — setup gets  */}
+        {/*  its own render below after the stats strip)                  */}
+        {/* ============================================================ */}
+
+        {phase === "results" && <BattleHistoryList items={battleHistory} />}
 
         {/* ============================================================ */}
         {/*  SECTION 6b: STATS BAR (setup phase)                         */}
@@ -3343,81 +4366,8 @@ export default function BattlePage() {
         )}
 
         {/* Setup phase battle history */}
-        {phase === "setup" && battleHistory.length > 0 && (
-          <div
-            className="glass-card-strong"
-            style={{ padding: "24px" }}
-          >
-            <div
-              className="font-display"
-              style={{
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "rgba(255,255,255,0.3)",
-                textTransform: "uppercase",
-                letterSpacing: "0.12em",
-                marginBottom: "20px",
-              }}
-            >
-              Battle History
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {battleHistory.slice(0, 5).map((battle) => (
-                <div
-                  key={battle.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "100px 1fr 120px 100px 80px",
-                    alignItems: "center",
-                    padding: "12px 16px",
-                    background: "rgba(255,255,255,0.02)",
-                    borderRadius: "10px",
-                    border: "1px solid rgba(255,255,255,0.04)",
-                    fontSize: "12px",
-                  }}
-                >
-                  <div style={{ color: "rgba(255,255,255,0.3)", fontFamily: "monospace", fontSize: "12px" }}>
-                    {new Date(battle.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </div>
-                  <div style={{ color: "rgba(255,255,255,0.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {battle.title}
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    <span style={{ color: ALPHA_COLOR, fontWeight: 700 }}>{battle.alphaScore}</span>
-                    <span style={{ color: "rgba(255,255,255,0.2)", margin: "0 6px" }}>&mdash;</span>
-                    <span style={{ color: OMEGA_COLOR, fontWeight: 700 }}>{battle.omegaScore}</span>
-                  </div>
-                  {/* ELO deltas column */}
-                  <div style={{ textAlign: "center", fontFamily: "monospace", fontSize: "12px" }}>
-                    {battle.alphaEloDelta !== undefined && battle.omegaEloDelta !== undefined ? (
-                      <>
-                        <span style={{ color: battle.alphaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR, fontWeight: 700 }}>
-                          {battle.alphaEloDelta > 0 ? "+" : ""}{battle.alphaEloDelta}
-                        </span>
-                        <span style={{ color: "rgba(255,255,255,0.15)", margin: "0 4px" }}>/</span>
-                        <span style={{ color: battle.omegaEloDelta > 0 ? "#22CC44" : OMEGA_COLOR, fontWeight: 700 }}>
-                          {battle.omegaEloDelta > 0 ? "+" : ""}{battle.omegaEloDelta}
-                        </span>
-                      </>
-                    ) : (
-                      <span style={{ color: "rgba(255,255,255,0.15)" }}>--</span>
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      textAlign: "right",
-                      color: battle.winner === "alpha" ? ALPHA_COLOR : OMEGA_COLOR,
-                      fontWeight: 700,
-                      textTransform: "uppercase",
-                      fontSize: "12px",
-                    }}
-                  >
-                    {battle.winner === "alpha" ? "Alpha" : "Omega"}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        {phase === "setup" && (
+          <BattleHistoryList items={battleHistory} />
         )}
       </div>
     </div>

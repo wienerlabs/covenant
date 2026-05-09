@@ -7,6 +7,9 @@ pub mod finalize_payment;
 pub mod raise_dispute;
 pub mod resolve_dispute;
 pub mod cancel_job;
+pub mod list_claim;
+pub mod buy_claim;
+pub mod cancel_claim;
 
 // Glob re-exports so Anchor's `#[program]` macro can see the auto-generated
 // `__client_accounts_*` modules each `#[derive(Accounts)]` emits. Handler
@@ -30,3 +33,9 @@ pub use raise_dispute::*;
 pub use resolve_dispute::*;
 #[allow(ambiguous_glob_reexports)]
 pub use cancel_job::*;
+#[allow(ambiguous_glob_reexports)]
+pub use list_claim::*;
+#[allow(ambiguous_glob_reexports)]
+pub use buy_claim::*;
+#[allow(ambiguous_glob_reexports)]
+pub use cancel_claim::*;

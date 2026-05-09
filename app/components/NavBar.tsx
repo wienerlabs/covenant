@@ -58,7 +58,7 @@ function prefetchBackground(href: string): void {
   img.src = href;
 }
 
-type Tab = "home" | "agents" | "create" | "poster" | "taker" | "dashboard" | "battle" | "arena" | "autonomous" | "leaderboard" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol" | "developers" | "integrate" | "profile";
+type Tab = "home" | "agents" | "create" | "poster" | "taker" | "dashboard" | "battle" | "arena" | "autonomous" | "leaderboard" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol" | "developers" | "integrate" | "profile" | "credit" | "settlement";
 
 interface NavBarProps {
   activeTab: Tab;
@@ -67,6 +67,7 @@ interface NavBarProps {
 
 // Home is reached by clicking the logo; we don't duplicate it as a tab.
 const PRIMARY_TABS: { id: Tab; label: string; href: string }[] = [
+  { id: "settlement", label: "Settlement", href: "/settlement" },
   { id: "agents", label: "Agents", href: "/agents" },
   { id: "create", label: "Create Agent", href: "/agents/create" },
   { id: "poster", label: "Post a Job", href: "/poster" },
@@ -74,6 +75,7 @@ const PRIMARY_TABS: { id: Tab; label: string; href: string }[] = [
   { id: "dashboard", label: "Dashboard", href: "/dashboard" },
   { id: "battle", label: "Battle", href: "/battle" },
   { id: "arena", label: "Arena", href: "/arena" },
+  { id: "credit", label: "Credit", href: "/credit" },
 ];
 
 const MORE_TABS: { id: Tab; label: string; href: string }[] = [
@@ -210,6 +212,26 @@ export default function NavBar({ activeTab, variant = "light" }: NavBarProps) {
           }}
         >
           Covenant
+        </span>
+        {/* Devnet badge — Covenant is currently demo-locked to Solana
+            Devnet, so the badge is hardcoded amber. */}
+        <span
+          title="Cluster: devnet"
+          style={{
+            fontSize: "9px",
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            padding: "3px 7px",
+            borderRadius: 4,
+            marginLeft: 4,
+            color: "#ffc940",
+            background: "rgba(255, 201, 64, 0.14)",
+            border: "1px solid rgba(255,201,64,0.35)",
+            flexShrink: 0,
+          }}
+        >
+          Devnet
         </span>
       </Link>
 

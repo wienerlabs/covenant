@@ -3,8 +3,13 @@ import { sendMarkerTransaction } from "@/lib/solana";
 import { sendX402Payment, getAgentKeypair } from "@/lib/x402";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
-import { rateLimit } from "@/lib/rateLimit";
-import { lockFundsInEscrow, releaseFundsToTaker } from "@/lib/escrow";
+import { rateLimit, getLimit } from "@/lib/rateLimit";
+// arena/run is a head-less DEMO route. Real settlement runs on chain
+// via the standard create_job → submit_work → finalize_payment pipeline
+// (see lib/program-server.ts botCreateJob / botFinalizePayment for the
+// bot-signed equivalent). The previous custodial `lockFundsInEscrow`
+// + `releaseFundsToTaker` calls were removed in the on-chain refactor
+// (audit C-01). Demo runs no longer move USDC.
 import {
   getAnchorProgram,
   keypairFromEnv,
@@ -14,6 +19,7 @@ import {
   DEVNET_USDC_MINT,
 } from "@/lib/anchor-client";
 import Anthropic from "@anthropic-ai/sdk";
+import { withCreditFallback } from "@/lib/anthropic-safe";
 import crypto from "crypto";
 import { executeCircuit } from "@/lib/work-metrics";
 import { generateDID } from "@/lib/aip/did";
@@ -63,7 +69,9 @@ async function ensureAgentProfiles() {
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
-  const rl = rateLimit(`arena:${ip}`, 5);
+  // Devnet rate limit (per-table in lib/rateLimit.ts).
+  const { limit, windowMs } = getLimit("arena_run");
+  const rl = rateLimit(`arena:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return new Response(
       JSON.stringify({ error: "Rate limit exceeded. Max 5 requests per minute." }),
@@ -81,7 +89,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const client = new Anthropic();
+        const client = withCreditFallback(new Anthropic());
 
         // Ensure agent profiles exist
         await ensureAgentProfiles();
@@ -334,25 +342,13 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // ===== SPL TOKEN ESCROW: Lock funds =====
-        try {
-          send("escrow_lock", "Locking " + jobSpec.amount + " USDC in escrow...", null);
-          const lockResult = await lockFundsInEscrow("AGENT_ALPHA_KEYPAIR", jobSpec.amount);
-          send("escrow_locked", "Funds locked in escrow", { txHash: lockResult.txHash, amount: jobSpec.amount, fromAta: lockResult.fromAta, toAta: lockResult.toAta });
-          await prisma.transaction.create({
-            data: {
-              txHash: lockResult.txHash,
-              type: "escrow_lock",
-              jobId: job.id,
-              wallet: AGENT_ALPHA.wallet,
-              amount: jobSpec.amount,
-              status: "confirmed",
-            },
-          });
-        } catch (err) {
-          console.error("[escrow] Failed to lock funds:", err);
-          send("escrow_lock", "Escrow lock attempted (fallback to marker tx)", { error: String(err).slice(0, 200) });
-        }
+        // ===== SPL TOKEN ESCROW (demo): no-op =====
+        // Real escrow goes through the on-chain Anchor program. Arena
+        // demo records notional amounts only.
+        send("escrow_locked", `Demo: ${jobSpec.amount} USDC notional (no real lock)`, {
+          amount: jobSpec.amount,
+          note: "demo-mode: use /api/jobs pipeline for real on-chain escrow",
+        });
 
         // ===== STEP 3: OMEGA THINKS (ACCEPT DECISION) =====
         send("omega_thinking", "Agent Omega evaluating the job...");
@@ -695,25 +691,13 @@ Write a thorough, professional response. Must be at least ${jobSpec.minWords} wo
           });
         }
 
-        // ===== SPL TOKEN ESCROW: Release funds to taker =====
-        try {
-          send("escrow_release", "Releasing " + jobSpec.amount + " USDC to taker...", null);
-          const releaseResult = await releaseFundsToTaker(AGENT_OMEGA.wallet, jobSpec.amount);
-          send("escrow_released", "Payment released to taker", { txHash: releaseResult.txHash, amount: jobSpec.amount, fromAta: releaseResult.fromAta, toAta: releaseResult.toAta });
-          await prisma.transaction.create({
-            data: {
-              txHash: releaseResult.txHash,
-              type: "escrow_release",
-              jobId: job.id,
-              wallet: AGENT_OMEGA.wallet,
-              amount: jobSpec.amount,
-              status: "confirmed",
-            },
-          });
-        } catch (err) {
-          console.error("[escrow] Failed to release funds:", err);
-          send("escrow_release", "Escrow release attempted (fallback to marker tx)", { error: String(err).slice(0, 200) });
-        }
+        // ===== SPL TOKEN ESCROW (demo): no-op release =====
+        // Real settlement runs through on-chain finalize_payment. Arena
+        // demo records the notional payout only.
+        send("escrow_released", `Demo: ${jobSpec.amount} USDC notional payout (no real release)`, {
+          amount: jobSpec.amount,
+          note: "demo-mode: no on-chain release in arena flow",
+        });
 
         const textPreview = deliverableText.slice(0, 200);
 

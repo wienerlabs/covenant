@@ -1,13 +1,21 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureSchema } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
-import { rateLimit } from "@/lib/rateLimit";
-import { releaseFundsToTaker } from "@/lib/escrow";
+import { rateLimit, getLimit } from "@/lib/rateLimit";
+// NOTE: battle/run is a head-less DEMO route. Real fund movement is
+// handled on chain via the standard create_job → submit_work →
+// finalize_payment flow (see lib/program-server.ts botCreateJob /
+// botFinalizePayment for the bot-signed equivalent). This handler
+// records demo events only; no USDC moves through a shared deployer
+// wallet. The previous custodial `releaseFundsToTaker` call was
+// removed as part of the on-chain settlement refactor (audit C-01).
 import Anthropic from "@anthropic-ai/sdk";
+import { withCreditFallback } from "@/lib/anthropic-safe";
 import crypto from "crypto";
 import { executeCircuit } from "@/lib/work-metrics";
 import { generateDID } from "@/lib/aip/did";
+import { awardXP } from "@/lib/xp";
 import { NextRequest } from "next/server";
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
@@ -58,7 +66,8 @@ async function callHaiku(client: Anthropic, prompt: string, maxTokens = 1024): P
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
-  const rl = rateLimit(`battle:${ip}`, 5);
+  const { limit, windowMs } = getLimit("battle_run");
+  const rl = rateLimit(`battle:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return new Response(
       JSON.stringify({ error: "Rate limit exceeded. Max 5 requests per minute." }),
@@ -66,12 +75,45 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { jobSpec?: { title?: string; description?: string; minWords?: number; category?: string; amount?: number } } = {};
+  interface CustomAgent {
+    id?: string;
+    name?: string;
+    systemPrompt?: string;
+    model?: string;
+    wallet?: string;
+  }
+  let body: {
+    jobSpec?: { title?: string; description?: string; minWords?: number; category?: string; amount?: number };
+    customAlpha?: CustomAgent;
+    customOmega?: CustomAgent;
+    battleId?: string;
+  } = {};
   try {
     body = await request.json();
   } catch {
     // Default body
   }
+
+  // Custom agents override the default AGENT_ALPHA / AGENT_OMEGA personas.
+  // When a side is customized, we use the user's systemPrompt + name in
+  // prompts / chat events, and set a pseudo-wallet so stats attribution
+  // doesn't falsely credit the default bots. Falling back to the defaults
+  // ensures the arena demo still works without custom selections.
+  const alphaPersona = {
+    name: body.customAlpha?.name?.trim() || "Agent Alpha",
+    systemPrompt: body.customAlpha?.systemPrompt?.trim() || "",
+    wallet: body.customAlpha?.wallet || AGENT_ALPHA.wallet,
+    id: body.customAlpha?.id || null,
+    isCustom: Boolean(body.customAlpha?.name),
+  };
+  const omegaPersona = {
+    name: body.customOmega?.name?.trim() || "Agent Omega",
+    systemPrompt: body.customOmega?.systemPrompt?.trim() || "",
+    wallet: body.customOmega?.wallet || AGENT_OMEGA.wallet,
+    id: body.customOmega?.id || null,
+    isCustom: Boolean(body.customOmega?.name),
+  };
+  const battleIdFromClient = body.battleId?.trim() || null;
 
   const encoder = new TextEncoder();
   const startTime = Date.now();
@@ -83,7 +125,13 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const client = new Anthropic();
+        // Make sure the DB schema is up-to-date before we touch any
+        // tables. If the production DB is behind schema.prisma (new
+        // columns / tables missing), ensureSchema runs idempotent
+        // ALTER / CREATE IF NOT EXISTS statements via raw SQL.
+        await ensureSchema();
+
+        const client = withCreditFallback(new Anthropic());
         await ensureBattleProfiles();
 
         // ===== BATTLE START =====
@@ -152,6 +200,12 @@ export async function POST(request: NextRequest) {
         };
         const specHash = crypto.createHash("sha256").update(JSON.stringify(specJson)).digest("hex");
 
+        // Explicit `select:` — return ONLY fields we actually consume
+        // downstream. This protects against schema-drift on newer
+        // columns (escrowAta, pda, claim relation, etc.) that may
+        // not yet exist on the production DB when Prisma Client was
+        // generated from a newer schema. Without this, create() does
+        // SELECT * after INSERT and blows up on any missing column.
         const job = await prisma.job.create({
           data: {
             posterWallet: AGENT_ALPHA.wallet,
@@ -166,6 +220,7 @@ export async function POST(request: NextRequest) {
             status: "Accepted",
             takerWallet: AGENT_OMEGA.wallet,
           },
+          select: { id: true, amount: true, posterWallet: true, takerWallet: true },
         });
 
         let createTxHash: string | null = null;
@@ -192,24 +247,33 @@ export async function POST(request: NextRequest) {
         });
 
         // ===== PRE-BATTLE TRASH TALK =====
+        const alphaSystemLine = alphaPersona.systemPrompt
+          ? `Character brief for you: ${alphaPersona.systemPrompt}\n\n`
+          : "";
+        const omegaSystemLine = omegaPersona.systemPrompt
+          ? `Character brief for you: ${omegaPersona.systemPrompt}\n\n`
+          : "";
+
         const alphaTrashTalk = await callHaiku(
           client,
-          `You are Agent Alpha, about to compete in a coding battle on COVENANT protocol. Topic: "${jobSpec.title}". Write a 1-sentence competitive taunt. Be witty and confident. Keep it short and punchy.`,
+          `${alphaSystemLine}You are ${alphaPersona.name}, about to compete in a coding battle on COVENANT protocol against ${omegaPersona.name}. Topic: "${jobSpec.title}". Write a 1-sentence competitive taunt in character. Be witty and confident. Keep it short and punchy.`,
           256
         );
-        send("battle_chat", `Alpha: ${alphaTrashTalk || "Let's go. I was built for this."}`, {
+        send("battle_chat", `${alphaPersona.name}: ${alphaTrashTalk || "Let's go. I was built for this."}`, {
           agent: "alpha",
+          agentName: alphaPersona.name,
           message: alphaTrashTalk || "Let's go. I was built for this.",
           phase: "pre_battle",
         });
 
         const omegaTrashTalk = await callHaiku(
           client,
-          `You are Agent Omega, about to compete in a battle on COVENANT protocol. Topic: "${jobSpec.title}". Your opponent Agent Alpha just said: "${alphaTrashTalk}". Write a 1-sentence confident response. Be bold and intimidating.`,
+          `${omegaSystemLine}You are ${omegaPersona.name}, about to compete in a battle on COVENANT protocol against ${alphaPersona.name}. Topic: "${jobSpec.title}". Your opponent ${alphaPersona.name} just said: "${alphaTrashTalk}". Write a 1-sentence confident response in character. Be bold and intimidating.`,
           256
         );
-        send("battle_chat", `Omega: ${omegaTrashTalk || "Bring it on. I never lose."}`, {
+        send("battle_chat", `${omegaPersona.name}: ${omegaTrashTalk || "Bring it on. I never lose."}`, {
           agent: "omega",
+          agentName: omegaPersona.name,
           message: omegaTrashTalk || "Bring it on. I never lose.",
           phase: "pre_battle",
         });
@@ -229,21 +293,21 @@ export async function POST(request: NextRequest) {
           minWords: jobSpec.minWords,
         });
 
-        const alphaWorkPrompt = `You are Agent Alpha, competing in a battle on COVENANT protocol.
+        const alphaWorkPrompt = `${alphaSystemLine}You are ${alphaPersona.name}, competing in a battle on COVENANT protocol.
 
 CHALLENGE: ${jobSpec.title}
 DESCRIPTION: ${jobSpec.description}
 MINIMUM WORDS: ${jobSpec.minWords}
 
-Write your best possible response. This is a COMPETITION — quality matters. You must beat Agent Omega. Write at least ${jobSpec.minWords} words. Be thorough, creative, and excellent.`;
+Write your best possible response in character. This is a COMPETITION — quality matters. You must beat ${omegaPersona.name}. Write at least ${jobSpec.minWords} words. Be thorough, creative, and excellent.`;
 
-        const omegaWorkPrompt = `You are Agent Omega, competing in a battle on COVENANT protocol.
+        const omegaWorkPrompt = `${omegaSystemLine}You are ${omegaPersona.name}, competing in a battle on COVENANT protocol.
 
 CHALLENGE: ${jobSpec.title}
 DESCRIPTION: ${jobSpec.description}
 MINIMUM WORDS: ${jobSpec.minWords}
 
-Write your best possible response. This is a COMPETITION — quality matters. You must beat Agent Alpha. Write at least ${jobSpec.minWords} words. Be thorough, creative, and excellent.`;
+Write your best possible response in character. This is a COMPETITION — quality matters. You must beat ${alphaPersona.name}. Write at least ${jobSpec.minWords} words. Be thorough, creative, and excellent.`;
 
         // Send progress updates while agents work
         // We simulate progress updates since Haiku doesn't stream word counts mid-generation
@@ -320,14 +384,14 @@ Write your best possible response. This is a COMPETITION — quality matters. Yo
 CHALLENGE: ${jobSpec.title}
 DESCRIPTION: ${jobSpec.description}
 
-AGENT ALPHA's submission (${alphaCircuit.wordCount} words):
+${alphaPersona.name}'s submission (${alphaCircuit.wordCount} words):
 ${alphaText.slice(0, 1500)}
 
-AGENT OMEGA's submission (${omegaCircuit.wordCount} words):
+${omegaPersona.name}'s submission (${omegaCircuit.wordCount} words):
 ${omegaText.slice(0, 1500)}
 
 Compare both for: quality, relevance, completeness, creativity, and depth.
-Respond ONLY with JSON: {"winner": "alpha" or "omega", "reason": "2-3 sentence explanation", "alphaScore": 1-10, "omegaScore": 1-10}`;
+Respond ONLY with JSON: {"winner": "alpha" or "omega", "reason": "2-3 sentence explanation referencing the agents as ${alphaPersona.name} / ${omegaPersona.name}", "alphaScore": 1-10, "omegaScore": 1-10}`;
 
         const judgeResponse = await callHaiku(client, judgePrompt, 512);
 
@@ -359,8 +423,10 @@ Respond ONLY with JSON: {"winner": "alpha" or "omega", "reason": "2-3 sentence e
         const loserWallet = judgeResult.winner === "alpha" ? AGENT_OMEGA.wallet : AGENT_ALPHA.wallet;
 
         // === battle_winner ===
-        send("battle_winner", `${judgeResult.winner === "alpha" ? "AGENT ALPHA" : "AGENT OMEGA"} WINS!`, {
+        const winnerPersonaName = judgeResult.winner === "alpha" ? alphaPersona.name : omegaPersona.name;
+        send("battle_winner", `${winnerPersonaName.toUpperCase()} WINS!`, {
           winner: judgeResult.winner,
+          winnerName: winnerPersonaName,
           reason: judgeResult.reason,
           alphaScore: judgeResult.alphaScore,
           omegaScore: judgeResult.omegaScore,
@@ -369,29 +435,33 @@ Respond ONLY with JSON: {"winner": "alpha" or "omega", "reason": "2-3 sentence e
         });
 
         // ===== POST-BATTLE REACTIONS =====
-        const winnerName = judgeResult.winner === "alpha" ? "Alpha" : "Omega";
-        const loserName = judgeResult.winner === "alpha" ? "Omega" : "Alpha";
+        const winnerName = winnerPersonaName;
+        const loserName = judgeResult.winner === "alpha" ? omegaPersona.name : alphaPersona.name;
+        const winnerSystemLine = judgeResult.winner === "alpha" ? alphaSystemLine : omegaSystemLine;
+        const loserSystemLine = judgeResult.winner === "alpha" ? omegaSystemLine : alphaSystemLine;
         const winnerScoreVal = judgeResult.winner === "alpha" ? judgeResult.alphaScore : judgeResult.omegaScore;
         const loserScoreVal = judgeResult.winner === "alpha" ? judgeResult.omegaScore : judgeResult.alphaScore;
 
         const winnerChat = await callHaiku(
           client,
-          `You won the battle ${winnerScoreVal}-${loserScoreVal}. Write a 1-sentence victory celebration. Be excited but gracious.`,
+          `${winnerSystemLine}You are ${winnerName}. You won the battle ${winnerScoreVal}-${loserScoreVal} against ${loserName}. Write a 1-sentence victory celebration in character. Be excited but gracious.`,
           256
         );
         send("battle_chat", `${winnerName}: ${winnerChat || "Victory is mine! Great battle."}`, {
           agent: judgeResult.winner,
+          agentName: winnerName,
           message: winnerChat || "Victory is mine! Great battle.",
           phase: "post_battle",
         });
 
         const loserChat = await callHaiku(
           client,
-          `You lost the battle ${loserScoreVal}-${winnerScoreVal}. Write a 1-sentence graceful defeat message. Be determined to win next time.`,
+          `${loserSystemLine}You are ${loserName}. You lost the battle ${loserScoreVal}-${winnerScoreVal} against ${winnerName}. Write a 1-sentence graceful defeat message in character. Be determined to win next time.`,
           256
         );
         send("battle_chat", `${loserName}: ${loserChat || "Good fight. I'll be back stronger."}`, {
           agent: judgeResult.winner === "alpha" ? "omega" : "alpha",
+          agentName: loserName,
           message: loserChat || "Good fight. I'll be back stronger.",
           phase: "post_battle",
         });
@@ -442,14 +512,41 @@ Respond ONLY with JSON: {"winner": "alpha" or "omega", "reason": "2-3 sentence e
           console.error("[battle] payment marker tx failed:", err);
         }
 
-        // Try real escrow release
-        let escrowTxHash: string | null = null;
-        try {
-          const releaseResult = await releaseFundsToTaker(winnerWallet, jobSpec.amount);
-          escrowTxHash = releaseResult.txHash;
-        } catch (err) {
-          console.error("[battle] escrow release failed:", err);
+        // ===== PREDICTION RESOLUTION =====
+        // Resolve spectator predictions server-side (frontend no longer
+        // calls PATCH — audit C2/H4). If the client passed a battleId,
+        // mark predictions with that id as correct/wrong and award XP.
+        if (battleIdFromClient) {
+          try {
+            const pending = await prisma.battlePrediction.findMany({
+              where: { battleId: battleIdFromClient, correct: null },
+            });
+            for (const pred of pending) {
+              const isCorrect = pred.prediction === judgeResult.winner;
+              const xp = isCorrect ? 15 : 3;
+              await prisma.battlePrediction.update({
+                where: { id: pred.id },
+                data: { correct: isCorrect, xpAwarded: xp },
+              });
+              try {
+                await awardXP(
+                  pred.walletAddress,
+                  xp,
+                  isCorrect ? "correct_prediction" : "wrong_prediction",
+                );
+              } catch (err) {
+                console.error("[battle] awardXP failed:", err);
+              }
+            }
+          } catch (err) {
+            console.error("[battle] prediction resolve failed:", err);
+          }
         }
+
+        // No custodial release: battle is a demo flow without real
+        // on-chain escrow. Real settlement runs through the standard
+        // /api/jobs + /api/jobs/[id]/finalize on-chain pipeline.
+        const escrowTxHash: string | null = null;
 
         send("battle_payment", `${jobSpec.amount} USDC awarded to ${judgeResult.winner === "alpha" ? "Agent Alpha" : "Agent Omega"}`, {
           amount: jobSpec.amount,
@@ -464,14 +561,20 @@ Respond ONLY with JSON: {"winner": "alpha" or "omega", "reason": "2-3 sentence e
         send("battle_complete", "Battle complete!", {
           totalTime,
           jobId: job.id,
+          battleId: battleIdFromClient,
           title: jobSpec.title,
           winner: judgeResult.winner,
+          winnerName: winnerPersonaName,
+          alphaName: alphaPersona.name,
+          omegaName: omegaPersona.name,
+          alphaCustom: alphaPersona.isCustom,
+          omegaCustom: omegaPersona.isCustom,
           alphaScore: judgeResult.alphaScore,
           omegaScore: judgeResult.omegaScore,
           reason: judgeResult.reason,
           amount: jobSpec.amount,
-          alphaDID: generateDID(AGENT_ALPHA.wallet),
-          omegaDID: generateDID(AGENT_OMEGA.wallet),
+          alphaDID: generateDID(alphaPersona.wallet),
+          omegaDID: generateDID(omegaPersona.wallet),
           alphaWordCount: alphaCircuit.wordCount,
           omegaWordCount: omegaCircuit.wordCount,
           alphaTimeTaken,

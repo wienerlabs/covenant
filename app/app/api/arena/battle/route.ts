@@ -36,6 +36,8 @@ export async function POST(req: NextRequest) {
       category,
       alphaAgent,
       omegaAgent,
+      alphaName,
+      omegaName,
       alphaOutput,
       omegaOutput,
       alphaScore,
@@ -73,10 +75,25 @@ export async function POST(req: NextRequest) {
     const winnerWallet = isAlphaWinner ? String(alphaAgent) : String(omegaAgent);
     const loserWallet = isAlphaWinner ? String(omegaAgent) : String(alphaAgent);
 
-    // 3. Update ELO ratings
+    // 3. Update ELO ratings — pass display names through so the ELO
+    //    leaderboard shows the real agent name (custom or default)
+    //    instead of the raw wallet fallback.
+    const isAlphaWinner2 = isAlphaWinner;
+    const winnerName = isAlphaWinner2
+      ? (alphaName ? String(alphaName) : undefined)
+      : (omegaName ? String(omegaName) : undefined);
+    const loserName = isAlphaWinner2
+      ? (omegaName ? String(omegaName) : undefined)
+      : (alphaName ? String(alphaName) : undefined);
     let eloResult;
     try {
-      eloResult = await updateEloAfterBattle(winnerWallet, loserWallet, battle.id);
+      eloResult = await updateEloAfterBattle(
+        winnerWallet,
+        loserWallet,
+        battle.id,
+        winnerName,
+        loserName,
+      );
     } catch (eloErr) {
       console.error("[arena/battle] ELO update failed:", eloErr);
       eloResult = {
@@ -160,14 +177,66 @@ export async function GET(req: NextRequest) {
       omegaElo = { elo: 1200, wins: 0, losses: 0, draws: 0, peakElo: 1200 };
     }
 
+    // Resolve agent metadata (name + avatar) for every wallet that shows
+    // up across these battles. Custom battles reference hosted/published
+    // agents, defaults reference the baked-in Alpha/Omega personas.
+    const walletSet = new Set<string>();
+    for (const b of battles) {
+      if (b.alphaAgent) walletSet.add(b.alphaAgent);
+      if (b.omegaAgent) walletSet.add(b.omegaAgent);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const agentMeta = new Map<string, any>();
+    try {
+      const rows = await prisma.hostedAgent.findMany({
+        where: { walletAddress: { in: Array.from(walletSet) } },
+        select: {
+          walletAddress: true,
+          name: true,
+          avatarUrl: true,
+          avatarSeed: true,
+          category: true,
+        },
+      });
+      for (const r of rows) agentMeta.set(r.walletAddress, r);
+    } catch {
+      /* ignore — fall back to Alpha/Omega defaults client-side */
+    }
+
+    function metaFor(wallet: string | null, fallbackName: string) {
+      if (!wallet) return { name: fallbackName, avatarUrl: null, avatarSeed: null };
+      const hit = agentMeta.get(wallet);
+      if (hit)
+        return {
+          name: hit.name || fallbackName,
+          avatarUrl: hit.avatarUrl || null,
+          avatarSeed: hit.avatarSeed || null,
+        };
+      // Default personas — identified by wallet match against env vars.
+      if (wallet === alphaWallet)
+        return { name: "Agent Alpha", avatarUrl: null, avatarSeed: "agent-alpha-covenant-2026" };
+      if (wallet === omegaWallet)
+        return { name: "Agent Omega", avatarUrl: null, avatarSeed: "agent-omega-covenant-2026" };
+      return { name: fallbackName, avatarUrl: null, avatarSeed: null };
+    }
+
     return NextResponse.json({
       battles: battles.map((b) => ({
         id: b.id,
         challengeText: b.challengeText,
         category: b.category,
+        alphaAgent: b.alphaAgent,
+        omegaAgent: b.omegaAgent,
+        alphaName: metaFor(b.alphaAgent, "Agent Alpha").name,
+        omegaName: metaFor(b.omegaAgent, "Agent Omega").name,
+        alphaAvatarUrl: metaFor(b.alphaAgent, "").avatarUrl,
+        omegaAvatarUrl: metaFor(b.omegaAgent, "").avatarUrl,
+        alphaAvatarSeed: metaFor(b.alphaAgent, "").avatarSeed,
+        omegaAvatarSeed: metaFor(b.omegaAgent, "").avatarSeed,
         alphaScore: b.alphaScore,
         omegaScore: b.omegaScore,
         winnerAgent: b.winnerAgent,
+        winnerSide: b.winnerAgent === b.alphaAgent ? "alpha" : "omega",
         alphaEloBefore: b.alphaEloBefore,
         omegaEloBefore: b.omegaEloBefore,
         alphaEloAfter: b.alphaEloAfter,

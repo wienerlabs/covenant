@@ -2,8 +2,14 @@
 
 import { useState } from "react";
 import { useConnector } from "@solana/connector/react";
-import { signAndSendTransaction, deserializeTx } from "@/lib/wallet-sign";
+import { BN } from "@coral-xyz/anchor";
+import { PublicKey } from "@solana/web3.js";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { triggerBalanceRefresh } from "@/lib/balance-bus";
+import { USDC_DECIMALS, USDC_MINT } from "@/lib/constants";
+import { getAnchorProgram, createJobOnChain } from "@/lib/anchor-browser";
+import { buildJobSpec, hashJobSpecBytes } from "@/lib/spec";
+import { usdcToAtomic } from "@/lib/token-math";
 
 interface HireModalProps {
   open: boolean;
@@ -105,50 +111,85 @@ export default function HireModal({
     setError(null);
 
     try {
-      // 1. Build escrow lock transaction
-      setStep("signing");
-      const buildRes = await fetch("/api/escrow/build", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ posterWallet: account, amount }),
-      });
-
-      let escrowTxHash: string | undefined;
-      if (buildRes.ok) {
-        const build = await buildRes.json();
-        try {
-          const tx = deserializeTx(build.transaction);
-          escrowTxHash = await signAndSendTransaction(selectedWallet, account, tx);
-        } catch (signErr) {
-          setError(signErr instanceof Error ? signErr.message : "Wallet signing failed");
-          setStep("form");
-          setLoading(false);
-          return;
-        }
-      }
-
-      // 2. Create job on server
       const deadlineDate = deadline
         ? new Date(deadline)
         : new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const deadlineIso = deadlineDate.toISOString();
+      const createdAt = new Date().toISOString();
+      const minWordsValue = category === "design" ? 0 : 100;
 
-      const res = await fetch("/api/escrow/confirm", {
+      // 1. Build the canonical spec — both client + server hash the same shape.
+      setStep("signing");
+      const specJson = buildJobSpec({
+        posterWallet: account,
+        amount,
+        minWords: minWordsValue,
+        language: "English",
+        deadline: deadlineIso,
+        createdAt,
+        title: title.trim(),
+        description: description.trim(),
+        requirements: requirements.trim(),
+      });
+      const specHash = await hashJobSpecBytes(specJson);
+
+      const program = getAnchorProgram(account, selectedWallet);
+      if (!program) {
+        setError("Wallet not ready — reconnect and try again.");
+        setStep("form");
+        setLoading(false);
+        return;
+      }
+
+      const posterPk = new PublicKey(account);
+      const posterTokenAccount = await getAssociatedTokenAddress(USDC_MINT, posterPk);
+      const deadlineUnix = Math.floor(deadlineDate.getTime() / 1000);
+      const amountAtomic = usdcToAtomic(amount);
+
+      let escrowTxHash: string | undefined;
+      let escrowAtaStr: string | undefined;
+      let demoMode = false;
+      try {
+        const result = await createJobOnChain({
+          program,
+          poster: posterPk,
+          specHash,
+          amount: amountAtomic,
+          deadline: new BN(deadlineUnix),
+          challengePeriod: new BN(3600),
+          posterTokenAccount,
+          tokenMint: USDC_MINT,
+        });
+        escrowTxHash = result.sig;
+        escrowAtaStr = result.escrowTokenAccount.toBase58();
+      } catch (onchainErr) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[hire] on-chain create_job failed, falling back to demo mode:",
+          onchainErr,
+        );
+        demoMode = true;
+      }
+
+      // 2. Mirror to server. /api/jobs verifies the on-chain Job PDA matches.
+      const res = await fetch("/api/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           posterWallet: account,
           amount,
+          minWords: minWordsValue,
+          language: "en",
+          deadline: deadlineIso,
+          createdAt,
+          category,
+          paymentToken: "USDC",
+          title: title.trim(),
+          description: description.trim(),
+          requirements: requirements.trim(),
           escrowTxHash,
-          jobData: {
-            title: title.trim(),
-            description: description.trim(),
-            requirements: requirements.trim(),
-            category,
-            paymentToken: "USDC",
-            minWords: category === "design" ? 0 : 100,
-            language: "English",
-            deadline: deadlineDate.toISOString(),
-          },
+          escrowAta: escrowAtaStr,
+          demoMode,
         }),
       });
 

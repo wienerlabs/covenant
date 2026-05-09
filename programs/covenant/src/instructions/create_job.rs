@@ -25,9 +25,24 @@ pub struct CreateJob<'info> {
     )]
     pub job_escrow: Box<Account<'info, JobEscrow>>,
 
+    /// PDA-derived escrow token account.
+    ///
+    /// Previously this was a `Keypair`-init account requiring the
+    /// generated keypair as a co-signer. Some wallet-standard adapters
+    /// (notably the Solana Connector / WalletConnect path) reject any
+    /// transaction with an unknown signer, breaking create_job for
+    /// browser users.
+    ///
+    /// Switching to a PDA-derived address removes the co-signer entirely.
+    /// The seed `[b"escrow_token", job_escrow.key().as_ref()]` is
+    /// deterministic from the JobEscrow PDA, so every other instruction
+    /// (cancel_job, finalize_payment, resolve_dispute) derives the same
+    /// address client-side without any per-job state lookup.
     #[account(
         init,
         payer = poster,
+        seeds = [b"escrow_token", job_escrow.key().as_ref()],
+        bump,
         token::mint = token_mint,
         token::authority = job_escrow,
     )]

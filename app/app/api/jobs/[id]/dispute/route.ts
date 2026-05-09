@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  fetchJobEscrow,
+  verifyTxInvokedCovenant,
+} from "@/lib/program-server";
+import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
 
 const DEFAULT_BOND_BPS = 1_000; // 10%
@@ -101,6 +106,59 @@ export async function POST(
       .createHash("sha256")
       .update(reasonText, "utf8")
       .digest("hex");
+
+    // ---- On-chain raise_dispute verification ----
+    //
+    // Disputed status (and the bonded escrow) is meaningful only if
+    // the on-chain `raise_dispute` instruction actually ran. Require
+    // a confirmed tx signature from the poster's wallet and verify
+    // the JobEscrow PDA is now in 'Disputed' state with a matching
+    // reason hash + bond.
+    if (!txHash) {
+      return NextResponse.json(
+        {
+          error:
+            "txHash (on-chain raise_dispute tx signature) is required. " +
+            "The poster must invoke raise_dispute from their wallet before calling this endpoint.",
+        },
+        { status: 400 },
+      );
+    }
+    try {
+      await verifyTxInvokedCovenant(txHash);
+      if (job.pda) {
+        const onchain = await fetchJobEscrow(new PublicKey(job.pda));
+        if (!onchain) {
+          throw new Error(
+            `JobEscrow PDA ${job.pda.slice(0, 8)}… not found on chain.`,
+          );
+        }
+        if (onchain.status !== "Disputed") {
+          throw new Error(
+            `On-chain JobEscrow status is '${onchain.status}'; expected 'Disputed'.`,
+          );
+        }
+        if (onchain.dispute.reasonHashHex.toLowerCase() !== reasonHash.toLowerCase()) {
+          throw new Error(
+            "On-chain dispute reason_hash does not match the supplied reasonText.",
+          );
+        }
+        if (Math.abs(onchain.dispute.bond - providedBond) > 1e-6) {
+          throw new Error(
+            `On-chain dispute bond ${onchain.dispute.bond} does not match supplied bond ${providedBond}.`,
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[dispute] on-chain verification failed:", err);
+      return NextResponse.json(
+        {
+          error: "raise_dispute tx verification failed: " +
+            (err instanceof Error ? err.message : String(err)),
+        },
+        { status: 400 },
+      );
+    }
 
     const dispute = await prisma.$transaction(async (tx) => {
       const d = await tx.dispute.create({

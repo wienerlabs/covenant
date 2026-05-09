@@ -26,6 +26,11 @@ interface AgentEntry {
   losses: number;
   draws: number;
   peakElo: number;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  category?: string | null;
+  isCustom?: boolean;
+  isDefault?: boolean;
 }
 
 interface CreatorEntry {
@@ -615,19 +620,119 @@ export default function LeaderboardPage() {
                               {rankLabel(rank)}
                             </td>
 
-                            {/* Agent Name */}
+                            {/* Agent (avatar + name + badge) */}
                             <td style={cellStyle}>
-                              <span
-                                style={{
-                                  fontWeight: 600,
-                                  color:
-                                    rank <= 3
-                                      ? rankColor(rank)
-                                      : "rgba(255,255,255,0.85)",
-                                }}
-                              >
-                                {a.agentName || formatAddress(a.agentWallet)}
-                              </span>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                {a.avatarUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={a.avatarUrl}
+                                    alt={a.agentName || ""}
+                                    style={{
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: 6,
+                                      objectFit: "cover",
+                                      flexShrink: 0,
+                                      border: "1px solid rgba(255,255,255,0.1)",
+                                    }}
+                                  />
+                                ) : (
+                                  <div
+                                    style={{
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: 6,
+                                      flexShrink: 0,
+                                      background: a.isDefault
+                                        ? a.agentWallet ===
+                                          (process.env.NEXT_PUBLIC_AGENT_ALPHA_WALLET ||
+                                            "7GpXEwNrf8BVFBGMYjuYHoSmN1FvGFQD1MTtgJk2u7fG")
+                                          ? "#fffeb220"
+                                          : "#FF425E20"
+                                        : "rgba(255,255,255,0.06)",
+                                      border: `1px solid ${
+                                        a.isDefault ? "rgba(255,254,178,0.2)" : "rgba(255,255,255,0.08)"
+                                      }`,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      fontSize: 13,
+                                      fontWeight: 800,
+                                      color: a.isDefault
+                                        ? a.agentWallet ===
+                                          (process.env.NEXT_PUBLIC_AGENT_ALPHA_WALLET ||
+                                            "7GpXEwNrf8BVFBGMYjuYHoSmN1FvGFQD1MTtgJk2u7fG")
+                                          ? "#fffeb2"
+                                          : "#FF425E"
+                                        : "rgba(255,255,255,0.6)",
+                                    }}
+                                  >
+                                    {(a.agentName || a.agentWallet).charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <div style={{ minWidth: 0 }}>
+                                  <div
+                                    style={{
+                                      fontWeight: 600,
+                                      color:
+                                        rank <= 3
+                                          ? rankColor(rank)
+                                          : "rgba(255,255,255,0.9)",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 8,
+                                    }}
+                                  >
+                                    {a.agentName || formatAddress(a.agentWallet)}
+                                    {a.isDefault && (
+                                      <span
+                                        style={{
+                                          fontSize: 9,
+                                          padding: "1px 6px",
+                                          borderRadius: 3,
+                                          background: "rgba(255,255,255,0.08)",
+                                          color: "rgba(255,255,255,0.55)",
+                                          fontWeight: 700,
+                                          letterSpacing: "0.06em",
+                                          textTransform: "uppercase",
+                                        }}
+                                      >
+                                        Default
+                                      </span>
+                                    )}
+                                    {a.isCustom && (
+                                      <span
+                                        style={{
+                                          fontSize: 9,
+                                          padding: "1px 6px",
+                                          borderRadius: 3,
+                                          background: "rgba(124,255,124,0.12)",
+                                          color: "#7CFF7C",
+                                          fontWeight: 700,
+                                          letterSpacing: "0.06em",
+                                          textTransform: "uppercase",
+                                        }}
+                                      >
+                                        Community
+                                      </span>
+                                    )}
+                                  </div>
+                                  {a.category && (
+                                    <div
+                                      style={{
+                                        fontSize: 10,
+                                        color: "rgba(255,255,255,0.3)",
+                                        textTransform: "uppercase",
+                                        letterSpacing: "0.06em",
+                                        marginTop: 2,
+                                      }}
+                                    >
+                                      {a.category.replace(/_/g, " ")}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </td>
 
                             {/* ELO Rating */}

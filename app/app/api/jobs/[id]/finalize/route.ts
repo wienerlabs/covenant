@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
-import { releaseFundsToTaker } from "@/lib/escrow";
 import { awardXP, XP_REWARDS } from "@/lib/xp";
 import { checkAndUnlock } from "@/lib/achievements";
 import { PROTOCOL_FEE_BPS } from "@/lib/constants";
+import { fetchJobEscrow, verifyTxInvokedCovenant } from "@/lib/program-server";
+import { finalizeWithClaim, keypairFromEnv } from "@/lib/credit-server";
+import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
 
 /**
@@ -12,7 +14,8 @@ import crypto from "crypto";
  *
  * Permissionless. Anyone can call this after the challenge period has
  * expired and no dispute is active. The server re-checks on-chain /
- * database state, releases escrow to the taker, and moves the job to
+ * database state, releases escrow to the taker (or to the claim buyer
+ * if a Covenant Credit listing has been Bought), and moves the job to
  * Finalized.
  *
  * In a production deployment this endpoint is called by a cron worker
@@ -27,8 +30,10 @@ export async function POST(
     const { id } = await params;
     const body = (await request.json().catch(() => ({}))) as {
       callerWallet?: string;
+      txSignature?: string;
     };
     const caller = body.callerWallet ?? "anonymous";
+    const callerTxSig = body.txSignature;
 
     const job = await prisma.job.findUnique({
       where: { id },
@@ -71,40 +76,86 @@ export async function POST(
       );
     }
 
-    // 1. Atomically claim the finalization (prevent double-payment race)
-    const claimed = await prisma.job.updateMany({
-      where: { id, status: "Delivered" },
-      data: { status: "Finalized" },
-    });
-    if (claimed.count === 0) {
-      // Another request already finalized — return success (idempotent)
-      return NextResponse.json({
-        job: { id, status: "Finalized" },
-        paymentTxHash: "already-finalized",
-        finalizedBy: caller,
-      });
-    }
-
-    // 2. Release escrow (skip for agent-fulfilled jobs — no real USDC was locked)
+    // ---- On-chain finalize ----
+    //
+    // Three paths:
+    //   A. Synthetic agent job: no funds to move, just a marker.
+    //   B. Caller already invoked the on-chain `finalize_payment` crank
+    //      from their browser and passes `txSignature` in the body.
+    //      Verify tx + check on-chain JobEscrow.status == Finalized.
+    //   C. Server-cranked via lib/credit-server.finalizeWithClaim —
+    //      claim-aware: routes proceeds to the buyer if a ClaimListing
+    //      is Bought, otherwise to the taker. Crank pays only SOL fees;
+    //      the program enforces the beneficiary.
+    //
+    // The server NEVER signs a custodial release tx here. The previous
+    // `releaseFundsToTaker` custodial path was removed in the on-chain
+    // settlement refactor (audit C-01).
     const isAgentJob = job.takerWallet.startsWith("covenant-agent-");
     let paymentTxHash: string | null = null;
+    let routedToBuyer = false;
+    let settlementBuyer: string | null = null;
+
     if (isAgentJob) {
+      // Path A — synthetic agent job, record-only marker.
       paymentTxHash = "agent:finalized:" + crypto.randomBytes(12).toString("hex");
-    } else {
+    } else if (callerTxSig) {
+      // Path B — client-cranked. Verify the tx landed + invoked our
+      // program + the JobEscrow status is now Finalized.
       try {
-        const result = await releaseFundsToTaker(job.takerWallet, job.amount);
-        paymentTxHash = result.txHash;
+        await verifyTxInvokedCovenant(callerTxSig);
+        if (job.pda) {
+          const onchain = await fetchJobEscrow(new PublicKey(job.pda));
+          if (onchain && onchain.status !== "Finalized") {
+            throw new Error(
+              `On-chain JobEscrow status is ${onchain.status}; expected Finalized after the crank tx.`,
+            );
+          }
+        }
+        paymentTxHash = callerTxSig;
       } catch (err) {
-        console.error("[finalize] escrow release failed:", err);
-        // Revert status so it can be retried
-        await prisma.job.updateMany({
-          where: { id, status: "Finalized" },
-          data: { status: "Delivered" },
-        });
+        console.error("[finalize] client-cranked verify failed:", err);
+        return NextResponse.json(
+          {
+            error: "Finalize tx verification failed: " +
+              (err instanceof Error ? err.message : String(err)),
+          },
+          { status: 400 },
+        );
+      }
+    } else {
+      // Path C — server-cranked, claim-aware.
+      if (!job.pda || !job.escrowAta) {
         return NextResponse.json(
           {
             error:
-              "Escrow release failed; funds remain locked. Manual intervention required.",
+              "Job is missing on-chain PDA / escrowAta; cannot run server crank. " +
+              "Invoke finalize_payment from a wallet and POST back with txSignature instead.",
+          },
+          { status: 400 },
+        );
+      }
+      try {
+        const crankEnv = process.env.CRANK_KEYPAIR ? "CRANK_KEYPAIR" : "DEPLOYER_KEYPAIR";
+        const crankKp = keypairFromEnv(crankEnv);
+        const result = await finalizeWithClaim({
+          crankKeypair: crankKp,
+          poster: new PublicKey(job.posterWallet),
+          taker: new PublicKey(job.takerWallet),
+          specHash: Buffer.from(job.specHash, "hex"),
+          escrowTokenAccount: new PublicKey(job.escrowAta),
+        });
+        paymentTxHash = result.sig;
+        routedToBuyer = result.routedToBuyer;
+        settlementBuyer = result.buyer;
+      } catch (err) {
+        console.error("[finalize] server crank failed:", err);
+        return NextResponse.json(
+          {
+            error:
+              "Server-side crank failed; funds remain locked. " +
+              "Caller can retry by invoking finalize_payment from a wallet and " +
+              "passing txSignature in this request body.",
             detail: err instanceof Error ? err.message : String(err),
           },
           { status: 500 },
@@ -112,12 +163,51 @@ export async function POST(
       }
     }
 
-    // 2b. Calculate protocol fee (recorded only — on-chain deduction comes at mainnet)
+    // Atomically mark the DB row Finalized once the on-chain settlement
+    // is confirmed. If another concurrent request beat us to it, we
+    // still return success (idempotent) since the chain is the truth.
+    const claimed = await prisma.job.updateMany({
+      where: { id, status: "Delivered" },
+      data: { status: "Finalized" },
+    });
+    if (claimed.count === 0) {
+      return NextResponse.json({
+        job: { id, status: "Finalized" },
+        paymentTxHash,
+        finalizedBy: caller,
+        note: "already-finalized",
+      });
+    }
+
+    // Mirror Covenant Credit settlement if the payout was routed.
+    if (routedToBuyer && paymentTxHash && settlementBuyer) {
+      try {
+        const claim = await prisma.claimListing.findUnique({
+          where: { jobId: id },
+        });
+        if (claim && claim.status === "Bought") {
+          await prisma.claimListing.update({
+            where: { id: claim.id },
+            data: {
+              status: "Settled",
+              settledAt: new Date(),
+              settleTxHash: paymentTxHash,
+            },
+          });
+        }
+      } catch (err) {
+        console.error("[finalize] claim settlement mirror failed:", err);
+        // non-blocking
+      }
+    }
+
+    // Protocol fee, recorded only. Devnet escrow does not deduct it
+    // on chain; the field exists so analytics + audits can track it.
     const feeAmount = (job.amount * PROTOCOL_FEE_BPS) / 10000;
     const takerPayout = job.amount - feeAmount;
     console.log(`[finalize] fee=${feeAmount} takerPayout=${takerPayout} job=${id}`);
 
-    // 3. Update related DB records
+    // Update related DB records.
     const updated = await prisma.$transaction(async (tx) => {
       const j = await tx.job.findUnique({ where: { id } });
       await tx.reputation.upsert({
@@ -147,6 +237,8 @@ export async function POST(
             paymentTxHash,
             feeAmount,
             takerPayout,
+            routedToBuyer,
+            buyer: settlementBuyer,
           },
         },
       });
@@ -156,12 +248,12 @@ export async function POST(
             paymentTxHash ?? "local:finalized:" + crypto.randomBytes(12).toString("hex"),
           type: "finalize_payment",
           jobId: id,
-          wallet: caller,
+          wallet: (routedToBuyer && settlementBuyer) || caller,
           amount: job.amount,
           status: "confirmed",
         },
       });
-      // Record protocol fee
+      // Record protocol fee.
       await tx.protocolFee.create({
         data: {
           jobId: id,
@@ -173,7 +265,7 @@ export async function POST(
       return j;
     });
 
-    // Award XP + check achievements (best effort)
+    // Award XP + check achievements (best effort).
     try {
       await awardXP(job.posterWallet, XP_REWARDS.job_finalize, "job_finalize");
       if (!isAgentJob) {
@@ -183,7 +275,7 @@ export async function POST(
       if (!isAgentJob) await checkAndUnlock(job.takerWallet);
     } catch { /* best effort */ }
 
-    // Best-effort Solana marker
+    // Best-effort Solana marker.
     try {
       const markerTx = await sendMarkerTransaction("finalize_payment:" + id);
       console.log("[finalize] marker tx:", markerTx);
@@ -195,6 +287,8 @@ export async function POST(
       job: updated,
       paymentTxHash,
       finalizedBy: caller,
+      routedToBuyer,
+      settlementBuyer,
     });
   } catch (error) {
     console.error("POST /api/jobs/[id]/finalize error:", error);

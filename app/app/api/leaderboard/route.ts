@@ -86,8 +86,14 @@ export async function GET() {
   } catch (error) {
     console.error("GET /api/leaderboard error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch leaderboard" },
-      { status: 500 }
+      {
+        users: [],
+        topTakers: [],
+        topPosters: [],
+        dbHealthy: false,
+        error: error instanceof Error ? error.message : "Failed to fetch leaderboard",
+      },
+      { status: 200 },
     );
   }
 }

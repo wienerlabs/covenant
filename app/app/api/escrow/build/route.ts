@@ -1,52 +1,28 @@
-import { NextRequest, NextResponse } from "next/server";
-import { buildEscrowLockTransaction, checkUSDCBalance } from "@/lib/client-escrow";
+import { NextResponse } from "next/server";
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { posterWallet, amount } = body;
-
-    if (!posterWallet || typeof posterWallet !== "string") {
-      return NextResponse.json(
-        { error: "posterWallet is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!amount || typeof amount !== "number" || amount <= 0) {
-      return NextResponse.json(
-        { error: "amount must be a positive number" },
-        { status: 400 }
-      );
-    }
-
-    // Check balance first
-    const balance = await checkUSDCBalance(posterWallet);
-    if (balance < amount) {
-      return NextResponse.json(
-        {
-          error: `Insufficient USDC balance. You have ${balance.toFixed(2)} USDC but need ${amount} USDC.`,
-          balance,
-          required: amount,
-        },
-        { status: 400 }
-      );
-    }
-
-    const result = await buildEscrowLockTransaction(posterWallet, amount);
-
-    return NextResponse.json({
-      transaction: result.transaction,
-      escrowAta: result.escrowAta,
-      posterAta: result.posterAta,
-      amount,
-      balance,
-    });
-  } catch (error) {
-    console.error("POST /api/escrow/build error:", error);
-    return NextResponse.json(
-      { error: "Failed to build escrow transaction: " + (error instanceof Error ? error.message : "Unknown error") },
-      { status: 500 }
-    );
-  }
+/**
+ * POST /api/escrow/build
+ *
+ * Historically built an SPL transfer tx into a deployer-controlled escrow.
+ * Removed in the on-chain settlement refactor (audit C-01 / H-02), then
+ * temporarily re-enabled in **demo mode** for live presentations: returns
+ * a `demoMode` flag instructing the client to skip the signing step and
+ * post a record-only job to /api/jobs. /api/jobs honors `demoMode: true`
+ * by mirroring the row to Postgres without on-chain verification.
+ *
+ * For real on-chain settlement, callers should invoke `createJobOnChain`
+ * (see lib/anchor-browser.ts) and post the resulting signature directly
+ * as `escrowTxHash`.
+ */
+export async function POST() {
+  return NextResponse.json(
+    {
+      demoMode: true,
+      escrowAta: null,
+      note:
+        "Demo mode: client should skip signing and post job with demoMode=true. " +
+        "Real on-chain escrow uses createJobOnChain (lib/anchor-browser.ts).",
+    },
+    { status: 200 },
+  );
 }

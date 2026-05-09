@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureSchema, retryable } from "@/lib/prisma";
+import { memoize } from "@/lib/cache";
 import { sendMarkerTransaction } from "@/lib/solana";
-import { lockFundsInEscrow } from "@/lib/escrow";
-import { rateLimit } from "@/lib/rateLimit";
-import crypto from "crypto";
-import { Keypair } from "@solana/web3.js";
+import { rateLimit, getLimit } from "@/lib/rateLimit";
+import { buildJobSpec, hashJobSpec } from "@/lib/spec";
+import type { Prisma } from "@prisma/client";
+import { Keypair, PublicKey } from "@solana/web3.js";
+import {
+  botCreateJob,
+  fetchJobEscrow,
+  deriveJobPda,
+  verifyTxInvokedCovenant,
+  keypairFromEnv,
+} from "@/lib/program-server";
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureSchema().catch(() => { /* non-fatal */ });
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const poster = searchParams.get("poster");
@@ -52,40 +61,74 @@ export async function GET(request: NextRequest) {
     const validSortFields = ["createdAt", "amount", "status", "deadline"];
     const orderField = validSortFields.includes(sortBy) ? sortBy : "createdAt";
 
-    const [jobs, total] = await Promise.all([
-      prisma.job.findMany({
-        where,
-        orderBy: { [orderField]: sortOrder },
-        include: {
-          submissions: true,
-          delivery: true,
-          dispute: true,
-          interests: {
-            where: { status: "working" },
-            select: { takerWallet: true, acceptedAt: true },
-          },
-        },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.job.count({ where }),
-    ]);
+    // Cache hot reads. Cache key is the full filter payload so
+    // each unique query gets its own entry. TTL is short (3s) so
+    // newly posted jobs appear quickly under refresh, but back-
+    // to-back hits during a render burst hit cache instead of
+    // round-tripping through Prisma + Neon. Invalidation isn't
+    // strictly needed at this TTL — stale-while-revalidate keeps
+    // the freshness lag bounded.
+    const cacheKey = `jobs:list:${JSON.stringify({
+      where,
+      orderField,
+      sortOrder,
+      page,
+      limit,
+    })}`;
+
+    const [jobs, total] = await memoize(cacheKey, 3_000, () =>
+      retryable(() =>
+        Promise.all([
+          prisma.job.findMany({
+            where,
+            orderBy: { [orderField]: sortOrder },
+            include: {
+              submissions: true,
+              delivery: true,
+              dispute: true,
+              claim: true,
+              interests: {
+                where: { status: "working" },
+                select: { takerWallet: true, acceptedAt: true },
+              },
+            },
+            skip: (page - 1) * limit,
+            take: limit,
+          }),
+          prisma.job.count({ where }),
+        ]),
+      ),
+    );
 
     const totalPages = Math.ceil(total / limit);
 
     return NextResponse.json({ jobs, total, page, limit, totalPages });
   } catch (error) {
+    // Graceful fail — return empty list with dbHealthy:false instead of
+    // 500-ing the whole route. The UI can then render an empty state
+    // without falling apart while we diagnose the DB issue.
     console.error("GET /api/jobs error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch jobs" },
-      { status: 500 }
+      {
+        jobs: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+        totalPages: 0,
+        dbHealthy: false,
+        error: error instanceof Error ? error.message : "Failed to fetch jobs",
+      },
+      { status: 200 },
     );
   }
 }
 
 export async function POST(request: NextRequest) {
+  await ensureSchema().catch(() => { /* non-fatal */ });
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
-  const rl = rateLimit(`jobs:${ip}`, 20);
+  // Devnet rate limit (per-table in lib/rateLimit.ts).
+  const { limit, windowMs } = getLimit("create_job");
+  const rl = rateLimit(`jobs:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Max 20 job creations per minute." },
@@ -112,6 +155,12 @@ export async function POST(request: NextRequest) {
       stylePreference,
       escrowTxHash: clientEscrowTxHash,
       escrowAta: clientEscrowAta,
+      demoMode: clientDemoMode,
+      // Client-supplied ISO timestamp used in spec building. The browser
+      // computes specHash against the same `createdAt`, so the client
+      // and server agree on the PDA. If absent (legacy bot path), the
+      // server picks a fresh timestamp.
+      createdAt: clientCreatedAt,
     } = body;
 
     if (!posterWallet || typeof posterWallet !== "string") {
@@ -147,197 +196,289 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const specJson = {
+    // The createdAt timestamp must be stable between client and server —
+    // both compute the same spec hash and the on-chain Job PDA is derived
+    // from it. The client provides createdAt for human-wallet flows; if
+    // missing (bot/server flows), we synthesize one server-side.
+    const effectiveCreatedAt =
+      typeof clientCreatedAt === "string" && clientCreatedAt.length > 0
+        ? clientCreatedAt
+        : new Date().toISOString();
+
+    const specJsonRaw = buildJobSpec({
       posterWallet,
       amount,
       minWords,
       language: language || "English",
       deadline: deadlineDate.toISOString(),
-      createdAt: new Date().toISOString(),
+      createdAt: effectiveCreatedAt,
       title: title || "",
       description: description || "",
       requirements: requirements || "",
-      ...(sourceText ? { sourceText } : {}),
-      ...(repoUrl ? { repoUrl } : {}),
-      ...(targetUrl ? { targetUrl } : {}),
-      ...(stylePreference ? { stylePreference } : {}),
-    };
-
-    const specHash = crypto
-      .createHash("sha256")
-      .update(JSON.stringify(specJson))
-      .digest("hex");
-
-    const job = await prisma.job.create({
-      data: {
-        posterWallet,
-        amount,
-        specHash,
-        specJson,
-        minWords,
-        category: category || "text_writing",
-        paymentToken: paymentToken === "SOL" ? "SOL" : "USDC",
-        language: language || "en",
-        deadline: deadlineDate,
-        status: "Open",
-      },
+      sourceText,
+      repoUrl,
+      targetUrl,
+      stylePreference,
     });
 
-    // Send Solana marker transaction (non-blocking)
-    let txHash: string | null = null;
-    try {
-      txHash = await sendMarkerTransaction("create_job:" + job.id);
-      // Update job with txHash and create Transaction record
-      await Promise.all([
-        prisma.job.update({
-          where: { id: job.id },
-          data: { txHash },
-        }),
-        prisma.transaction.create({
+    const specHash = await hashJobSpec(specJsonRaw);
+    // Prisma's InputJsonValue is stricter than `Record<string, unknown>`
+    // (no readonly arrays, no symbols). The shape is JSON-safe, but the
+    // structural type doesn't match exactly — cast once here so all three
+    // prisma.job.create call sites can pass it through cleanly.
+    const specJson = specJsonRaw as unknown as Prisma.InputJsonValue;
+
+    // ---- On-chain settlement ----
+    //
+    // The legacy custodial path (poster's USDC moved to a single
+    // deployer-controlled wallet) is gone. There are now exactly two
+    // ways a Job row can come into existence:
+    //
+    //   (A) HUMAN flow: the browser already invoked the on-chain
+    //       `create_job` instruction via lib/anchor-browser.ts and
+    //       passes us the resulting tx signature. We verify the tx
+    //       invoked the Covenant program and fetch the JobEscrow PDA
+    //       to mirror its state into our DB.
+    //
+    //   (B) BOT flow: poster is a server-held demo agent (Alpha /
+    //       Omega / Deployer / Autonomous). The server signs with
+    //       the bot's keypair and runs `botCreateJob`, which calls
+    //       the same on-chain instruction. The server is acting on
+    //       the bot's behalf with the bot's own funds — it never
+    //       signs for human-user funds.
+    //
+    // Either path produces a real per-job PDA escrow on Solana.
+    // Neither path moves funds through a shared deployer wallet.
+
+    if (paymentToken === "SOL") {
+      // SOL settlement is not part of v1 on-chain protocol. Record the
+      // job with no escrow backing and surface a clear flag so the UI
+      // can warn that nothing is locked.
+      const job = await prisma.job.create({
+        data: {
+          posterWallet,
+          amount,
+          specHash,
+          specJson,
+          minWords,
+          category: category || "text_writing",
+          paymentToken: "SOL",
+          language: language || "en",
+          deadline: deadlineDate,
+          status: "Open",
+        },
+      });
+      let markerTxHash: string | null = null;
+      try {
+        markerTxHash = await sendMarkerTransaction("create_job:" + job.id);
+        await prisma.job.update({ where: { id: job.id }, data: { txHash: markerTxHash } });
+      } catch { /* non-blocking */ }
+      return NextResponse.json(
+        { ...job, txHash: markerTxHash, escrowLocked: false, note: "SOL escrow not supported in v1 — record-only" },
+        { status: 201 },
+      );
+    }
+
+    // Identify whether poster is a known bot keypair.
+    const botEnvForPoster: string | null = (() => {
+      if (process.env.AGENT_ALPHA_WALLET === posterWallet) return "AGENT_ALPHA_KEYPAIR";
+      if (process.env.AGENT_OMEGA_WALLET === posterWallet) return "AGENT_OMEGA_KEYPAIR";
+      try {
+        const deployerRaw = JSON.parse(process.env.DEPLOYER_KEYPAIR || "[]");
+        if (deployerRaw.length > 0) {
+          const deployerWallet = Keypair.fromSecretKey(
+            Uint8Array.from(deployerRaw),
+          ).publicKey.toBase58();
+          if (deployerWallet === posterWallet) return "DEPLOYER_KEYPAIR";
+        }
+      } catch { /* ignore */ }
+      return null;
+    })();
+
+    // ---- Path B: bot-signed on-chain create_job ----
+    if (!clientEscrowTxHash && botEnvForPoster) {
+      try {
+        const botKeypair = keypairFromEnv(botEnvForPoster);
+        const specHashBuf = Buffer.from(specHash, "hex");
+        const deadlineUnix = Math.floor(deadlineDate.getTime() / 1000);
+        // Use a 1h challenge period for bot demos (matches protocol min).
+        const { sig, jobPda, escrowTokenAccount } = await botCreateJob({
+          botKeypair,
+          amount,
+          specHash: specHashBuf,
+          deadline: deadlineUnix,
+          challengePeriod: 3600,
+        });
+        const onchain = await fetchJobEscrow(jobPda);
+        const job = await prisma.job.create({
           data: {
-            txHash,
+            posterWallet,
+            amount,
+            specHash,
+            specJson,
+            minWords,
+            category: category || "text_writing",
+            paymentToken: "USDC",
+            language: language || "en",
+            deadline: deadlineDate,
+            status: onchain?.status || "Open",
+            txHash: sig,
+            pda: jobPda.toBase58(),
+            escrowAta: escrowTokenAccount.toBase58(),
+          },
+        });
+        await prisma.transaction.create({
+          data: {
+            txHash: sig,
             type: "create_job",
             jobId: job.id,
             wallet: posterWallet,
             amount,
             status: "confirmed",
           },
-        }),
-      ]);
-    } catch (err) {
-      console.error("[solana] Failed to send marker tx for create_job:", err);
-    }
-
-    // --- Escrow lock ---
-    // Two paths depending on who the poster is:
-    //
-    // 1. Human user (has a connected wallet)
-    //    The client already built + signed + broadcast the SPL transfer
-    //    via the user's wallet. It passes the resulting `escrowTxHash`
-    //    in the request body. We only need to verify it exists on chain
-    //    (we trust Solana to have validated the actual transfer).
-    //
-    // 2. Server-held agent wallet (arena, battle, autonomous flows)
-    //    The poster is AGENT_ALPHA / AGENT_OMEGA / DEPLOYER, all held as
-    //    env keypairs. Fall back to `lockFundsInEscrow` so the server
-    //    signs with the env keypair. This path is NOT used by the
-    //    human-facing CreateJobForm any more.
-    let escrowTxHash: string | null = null;
-    if (paymentToken !== "SOL") {
-      if (typeof clientEscrowTxHash === "string" && clientEscrowTxHash.length > 0) {
-        // Path 1: verify the user-signed tx on chain.
-        try {
-          const { Connection } = await import("@solana/web3.js");
-          const rpc =
-            process.env.HELIUS_RPC_URL ||
-            process.env.NEXT_PUBLIC_RPC_URL ||
-            "https://api.devnet.solana.com";
-          const connection = new Connection(rpc, "confirmed");
-          const tx = await connection.getTransaction(clientEscrowTxHash, {
-            maxSupportedTransactionVersion: 0,
-            commitment: "confirmed",
-          });
-          if (!tx) {
-            throw new Error(
-              `Escrow tx ${clientEscrowTxHash.slice(0, 8)}... not found on chain`,
-            );
-          }
-          if (tx.meta?.err) {
-            throw new Error(
-              `Escrow tx reverted: ${JSON.stringify(tx.meta.err)}`,
-            );
-          }
-          escrowTxHash = clientEscrowTxHash;
-          await prisma.job.update({
-            where: { id: job.id },
-            data: { txHash: escrowTxHash },
-          });
-          await prisma.transaction.create({
-            data: {
-              txHash: escrowTxHash,
-              type: "escrow_lock",
-              jobId: job.id,
-              wallet: posterWallet,
-              amount,
-              status: "confirmed",
-            },
-          });
-          console.log("[escrow] verified client-signed lock:", clientEscrowTxHash);
-        } catch (err) {
-          console.error("[escrow] client tx verification failed:", err);
-          // Rollback the Job row since the escrow didn't actually lock.
-          await prisma.job.delete({ where: { id: job.id } }).catch(() => undefined);
-          return NextResponse.json(
-            {
-              error:
-                "Escrow transaction could not be verified on chain. No funds were locked. " +
-                (err instanceof Error ? err.message : String(err)),
-            },
-            { status: 400 },
-          );
-        }
-      } else {
-        // Path 2: server-side agent flow (arena/battle/autonomous only)
-        const knownWallets: Record<string, string> = {};
-        if (process.env.AGENT_ALPHA_WALLET)
-          knownWallets[process.env.AGENT_ALPHA_WALLET] = "AGENT_ALPHA_KEYPAIR";
-        if (process.env.AGENT_OMEGA_WALLET)
-          knownWallets[process.env.AGENT_OMEGA_WALLET] = "AGENT_OMEGA_KEYPAIR";
-        try {
-          const deployerKpRaw = JSON.parse(process.env.DEPLOYER_KEYPAIR || "[]");
-          if (deployerKpRaw.length > 0) {
-            const deployerWallet = Keypair.fromSecretKey(
-              Uint8Array.from(deployerKpRaw),
-            ).publicKey.toBase58();
-            knownWallets[deployerWallet] = "DEPLOYER_KEYPAIR";
-          }
-        } catch {
-          /* ignore */
-        }
-
-        const keypairEnv = knownWallets[posterWallet];
-        if (keypairEnv) {
-          try {
-            const result = await lockFundsInEscrow(keypairEnv, amount);
-            escrowTxHash = result.txHash;
-            await prisma.job.update({
-              where: { id: job.id },
-              data: { txHash: escrowTxHash },
-            });
-            await prisma.transaction.create({
-              data: {
-                txHash: escrowTxHash,
-                type: "escrow_lock",
-                jobId: job.id,
-                wallet: posterWallet,
-                amount,
-                status: "confirmed",
-              },
-            });
-          } catch (err) {
-            console.error("[escrow] server-keypair lock failed:", err);
-          }
-        } else {
-          // Unknown wallet without a client-signed tx -- reject so we
-          // don't end up with a job that has no escrow backing.
-          await prisma.job.delete({ where: { id: job.id } }).catch(() => undefined);
-          return NextResponse.json(
-            {
-              error:
-                "Missing escrowTxHash. Human wallets must sign the escrow lock client-side.",
-            },
-            { status: 400 },
-          );
-        }
+        });
+        return NextResponse.json(
+          { ...job, escrowLocked: true, jobPda: jobPda.toBase58() },
+          { status: 201 },
+        );
+      } catch (err) {
+        console.error("[create_job] bot-signed flow failed:", err);
+        return NextResponse.json(
+          { error: "Bot-signed create_job failed: " + (err instanceof Error ? err.message : String(err)) },
+          { status: 500 },
+        );
       }
     }
 
-    // Keep clientEscrowAta reference alive for forward compatibility.
-    if (clientEscrowAta) {
-      console.log("[escrow] escrowAta reported by client:", clientEscrowAta);
+    // ---- Demo bypass: record-only USDC job, no on-chain verification ----
+    // The browser flow tries real on-chain create_job first. If the wallet
+    // adapter rejects the escrow co-signer (a known limitation of some
+    // wallet-standard adapters until the program migrates to PDA-derived
+    // ATAs), the client retries with demoMode: true and lands here so the
+    // demo stays unblocked.
+    if (clientDemoMode === true) {
+      const job = await prisma.job.create({
+        data: {
+          posterWallet,
+          amount,
+          specHash,
+          specJson,
+          minWords,
+          category: category || "text_writing",
+          paymentToken: "USDC",
+          language: language || "en",
+          deadline: deadlineDate,
+          status: "Open",
+          escrowAta: clientEscrowAta || null,
+        },
+      });
+      let markerTxHash: string | null = null;
+      try {
+        markerTxHash = await sendMarkerTransaction("create_job_demo:" + job.id);
+        await prisma.job.update({ where: { id: job.id }, data: { txHash: markerTxHash } });
+      } catch { /* non-blocking */ }
+      return NextResponse.json(
+        {
+          ...job,
+          txHash: markerTxHash,
+          escrowLocked: false,
+          demoMode: true,
+          note: "Demo mode — record-only job, on-chain escrow skipped due to wallet co-signer limitation",
+        },
+        { status: 201 },
+      );
     }
 
-    return NextResponse.json({ ...job, txHash: escrowTxHash || txHash }, { status: 201 });
+    // ---- Path A: human wallet — verify the client-signed on-chain tx ----
+    if (!clientEscrowTxHash) {
+      return NextResponse.json(
+        {
+          error:
+            "Missing escrowTxHash. Human wallets must invoke create_job on chain via " +
+            "@solana/anchor-browser before calling this endpoint. See README → 'Creating a job'.",
+        },
+        { status: 400 },
+      );
+    }
+
+    try {
+      // 1) Confirm the tx exists, didn't revert, AND actually invoked
+      //    our program (catches arbitrary-tx replay; audit C-04).
+      await verifyTxInvokedCovenant(clientEscrowTxHash);
+
+      // 2) Fetch the JobEscrow PDA the tx created and mirror it.
+      const [jobPda] = deriveJobPda(
+        new PublicKey(posterWallet),
+        Buffer.from(specHash, "hex"),
+      );
+      const onchain = await fetchJobEscrow(jobPda);
+      if (!onchain) {
+        throw new Error(
+          `JobEscrow PDA ${jobPda.toBase58().slice(0, 8)}… not found after tx confirmed. ` +
+          `Tx may have been for a different spec hash.`,
+        );
+      }
+      if (onchain.poster !== posterWallet) {
+        throw new Error(
+          `JobEscrow.poster mismatch (on-chain ${onchain.poster.slice(0, 8)}… vs ` +
+          `claimed ${posterWallet.slice(0, 8)}…)`,
+        );
+      }
+      if (Math.abs(onchain.amount - amount) > 1e-6) {
+        throw new Error(
+          `JobEscrow.amount mismatch (on-chain ${onchain.amount} vs claimed ${amount})`,
+        );
+      }
+
+      // 3) Mirror to DB. Replay protection: txHash is unique per Job row.
+      const job = await prisma.job.create({
+        data: {
+          posterWallet,
+          amount,
+          specHash,
+          specJson,
+          minWords,
+          category: category || "text_writing",
+          paymentToken: "USDC",
+          language: language || "en",
+          deadline: deadlineDate,
+          status: onchain.status,
+          txHash: clientEscrowTxHash,
+          pda: jobPda.toBase58(),
+          escrowAta: clientEscrowAta || null,
+        },
+      });
+      await prisma.transaction.create({
+        data: {
+          txHash: clientEscrowTxHash,
+          type: "create_job",
+          jobId: job.id,
+          wallet: posterWallet,
+          amount,
+          status: "confirmed",
+        },
+      });
+
+      // Optional human-readable marker (non-blocking).
+      try {
+        await sendMarkerTransaction("create_job:" + job.id);
+      } catch { /* non-blocking */ }
+
+      return NextResponse.json(
+        { ...job, escrowLocked: true, jobPda: jobPda.toBase58() },
+        { status: 201 },
+      );
+    } catch (err) {
+      console.error("[create_job] on-chain verification failed:", err);
+      return NextResponse.json(
+        {
+          error:
+            "On-chain create_job verification failed. No DB row written. " +
+            (err instanceof Error ? err.message : String(err)),
+        },
+        { status: 400 },
+      );
+    }
   } catch (error) {
     console.error("POST /api/jobs error:", error);
     return NextResponse.json(

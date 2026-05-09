@@ -18,7 +18,7 @@ pub mod state;
 use instructions::*;
 use state::{ARBITRATOR_COUNT, DisputeResolution};
 
-declare_id!("AJAJPkC8oRsVaSYgVh36TKbMKZtzn8kKHcQXwZEn2vrQ");
+declare_id!("5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT");
 
 #[program]
 pub mod covenant {
@@ -103,5 +103,19 @@ pub mod covenant {
 
     pub fn cancel_job(ctx: Context<CancelJob>) -> Result<()> {
         cancel_job::handler(ctx)
+    }
+
+    // ---- Covenant Credit (BNPL for pending claims) ----
+
+    pub fn list_claim(ctx: Context<ListClaim>, price: u64) -> Result<()> {
+        list_claim::handler(ctx, price)
+    }
+
+    pub fn buy_claim(ctx: Context<BuyClaim>) -> Result<()> {
+        buy_claim::handler(ctx)
+    }
+
+    pub fn cancel_claim(ctx: Context<CancelClaim>) -> Result<()> {
+        cancel_claim::handler(ctx)
     }
 }

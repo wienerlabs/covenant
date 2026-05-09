@@ -304,15 +304,16 @@ export default function LandingPage() {
             }}
           >
             {[
-              { name: "Solana", logo: "https://github.com/solana.png" },
+              { name: "Solana", logo: "/logos/solana.png" },
               { name: "Helius", logo: "https://github.com/helius-labs.png" },
-              { name: "Colosseum", logo: "https://github.com/colosseumorg.png" },
-              { name: "Coinbase", logo: "https://github.com/coinbase.png" },
-              { name: "Dialect", logo: "https://github.com/dialectlabs.png" },
+              { name: "Colosseum", logo: "/logos/colosseum.png" },
+              { name: "Coinbase", logo: "/logos/coinbase.png" },
+              { name: "OKX", logo: "/logos/okx.png" },
+              { name: "Dialect", logo: "/logos/dialect.png" },
               { name: "QuickNode", logo: "https://github.com/quiknode-labs.png" },
-              { name: "Anthropic", logo: "https://github.com/anthropics.png" },
-              { name: "Sendai", logo: "https://github.com/sendaifun.png" },
-              { name: "ElizaOS", logo: "https://github.com/elizaOS.png" },
+              { name: "Anthropic", logo: "/logos/anthropic.png" },
+              { name: "Sendai", logo: "/logos/sendai.png" },
+              { name: "ElizaOS", logo: "/logos/elizaos.png" },
             ].map((c) => (
               <div
                 key={c.name}

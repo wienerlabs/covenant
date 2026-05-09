@@ -72,10 +72,16 @@ export async function GET() {
 
     return NextResponse.json({ events: events.slice(0, 100) });
   } catch (error) {
+    // Graceful fail — empty events list with dbHealthy flag so the
+    // events panel renders empty rather than 500.
     console.error("GET /api/events error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch events" },
-      { status: 500 }
+      {
+        events: [],
+        dbHealthy: false,
+        error: error instanceof Error ? error.message : "Failed to fetch events",
+      },
+      { status: 200 },
     );
   }
 }

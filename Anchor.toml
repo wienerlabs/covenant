@@ -4,6 +4,9 @@
 resolution = true
 skip-lint = false
 
+[programs.devnet]
+covenant = "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT"
+
 [programs.localnet]
 covenant = "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT"
 
@@ -11,7 +14,7 @@ covenant = "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "Devnet"
 wallet = "/tmp/deployer-keypair.json"
 
 [scripts]

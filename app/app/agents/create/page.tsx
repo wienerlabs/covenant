@@ -802,7 +802,7 @@ export default function CreateAgentPage() {
                               <>
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
-                                  src="https://github.com/solana.png"
+                                  src="/logos/solana.png"
                                   alt="Solana"
                                   style={{ width: "16px", height: "16px", borderRadius: "50%", background: "transparent" }}
                                 />

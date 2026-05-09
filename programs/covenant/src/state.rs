@@ -200,6 +200,95 @@ impl Default for DisputeResolution {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Covenant Credit — BNPL / factoring for pending claims.
+// ---------------------------------------------------------------------------
+//
+// A taker who has delivered work has a conditional right to payment once
+// the challenge period expires with no dispute. Instead of waiting 24h, the
+// taker may list this right for sale at a discount. A lender buys the
+// listing, pays the taker immediately, and inherits the right to receive
+// the full escrow amount when finalize_payment (or resolve_dispute
+// FavorTaker / Split) fires.
+//
+// The lender bears dispute risk: if resolve_dispute goes FavorPoster, they
+// lose their principal. This risk is priced into the discount — the market
+// sets the APR.
+//
+// ClaimListing is a PDA:
+//   seeds = [b"claim", job_escrow.key()]
+// so exactly one listing can exist per job.
+//
+// Payment routing:
+//   finalize_payment  — if a ClaimListing with status = Bought exists,
+//                       proceeds go to buyer's ATA, NOT the taker's.
+//   resolve_dispute   — same routing on FavorTaker / Split.
+//   FavorPoster / Cancelled — buyer loses, no payment redirected.
+//
+// Reputation credit always goes to the original taker — on-chain proof of
+// work is bound to the worker, not to whoever bought the paper.
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ClaimStatus {
+    /// Listed for sale but not yet bought.
+    Listed,
+    /// Bought by a lender; payment now routes to `buyer`.
+    Bought,
+    /// Seller cancelled the listing before a buyer stepped in.
+    Cancelled,
+    /// Terminal: payment has been disbursed to the buyer.
+    Settled,
+}
+
+impl Default for ClaimStatus {
+    fn default() -> Self {
+        Self::Listed
+    }
+}
+
+/// Per-job claim listing PDA.
+///
+/// seeds = [b"claim", job_escrow.key()]
+#[account]
+pub struct ClaimListing {
+    /// JobEscrow PDA this listing references.
+    pub job: Pubkey,
+    /// Original taker (worker) — also the seller of the claim.
+    pub seller: Pubkey,
+    /// Lender who bought the claim. `Pubkey::default()` until bought.
+    pub buyer: Pubkey,
+    /// Amount (in escrow mint atomic units) the lender pays the seller
+    /// when buy_claim executes. Strictly less than `face_value`.
+    pub price: u64,
+    /// Full escrow amount this claim settles for — informational copy of
+    /// `job_escrow.amount` at listing time.
+    pub face_value: u64,
+    /// Unix timestamp when the listing was created.
+    pub listed_at: i64,
+    /// Unix timestamp when the listing was bought. 0 until bought.
+    pub bought_at: i64,
+    pub status: ClaimStatus,
+    pub bump: u8,
+}
+
+impl ClaimListing {
+    pub const LEN: usize =
+        8 +                                          // discriminator
+        32 +                                         // job
+        32 +                                         // seller
+        32 +                                         // buyer
+        8 +                                          // price
+        8 +                                          // face_value
+        8 +                                          // listed_at
+        8 +                                          // bought_at
+        1 +                                          // status (enum tag)
+        1;                                           // bump
+
+    pub fn is_bought(&self) -> bool {
+        self.status == ClaimStatus::Bought
+    }
+}
+
 /// Per-wallet reputation PDA. seeds = [b"reputation", wallet].
 #[account]
 pub struct AgentReputation {

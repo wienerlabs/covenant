@@ -78,16 +78,27 @@ export async function GET(req: NextRequest) {
 
 /**
  * PATCH /api/battle/predict
- * Resolve predictions after battle ends.
+ * Resolve predictions after battle ends. INTERNAL USE ONLY.
+ *
+ * Authentication is fail-CLOSED: CRON_SECRET must be configured AND the
+ * request must present it via x-internal-secret or Authorization bearer.
+ * The legacy "fail-open when env unset" behaviour was flagged in the
+ * battle audit (H4) — users were able to force-resolve predictions in
+ * their favour and mint XP.
+ *
+ * The canonical resolution path now lives inside /api/battle/run (SSE
+ * stream) which resolves its own predictions using the same logic. This
+ * PATCH endpoint remains for cron / manual backfills.
+ *
  * Body: { battleId, winner: "alpha"|"omega" }
  */
 export async function PATCH(req: NextRequest) {
   const INTERNAL_SECRET = process.env.CRON_SECRET || "";
-  if (INTERNAL_SECRET) {
-    const auth = req.headers.get("x-internal-secret") || req.headers.get("authorization")?.replace("Bearer ", "");
-    if (auth !== INTERNAL_SECRET) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  const auth =
+    req.headers.get("x-internal-secret") ||
+    req.headers.get("authorization")?.replace("Bearer ", "");
+  if (!INTERNAL_SECRET || auth !== INTERNAL_SECRET) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -99,12 +110,18 @@ export async function PATCH(req: NextRequest) {
     if (!battleId || !winner) {
       return NextResponse.json({ error: "battleId, winner required" }, { status: 400 });
     }
-
-    // Verify the battle actually exists before resolving predictions
-    const battle = await prisma.arenaBattle.findUnique({ where: { id: battleId } });
-    if (!battle) {
-      return NextResponse.json({ error: "Battle not found" }, { status: 404 });
+    if (winner !== "alpha" && winner !== "omega") {
+      return NextResponse.json(
+        { error: "winner must be 'alpha' or 'omega'" },
+        { status: 400 },
+      );
     }
+
+    // Previously required a matching arenaBattle row. The frontend's
+    // `battle-${Date.now()}` id never matched an arenaBattle id so this
+    // check caused every PATCH to 404 (audit C2). Accept any battleId
+    // that has predictions — the caller is already authenticated via
+    // CRON_SECRET, so an arbitrary id isn't a privilege escalation.
 
     const predictions = await prisma.battlePrediction.findMany({
       where: { battleId, correct: null },

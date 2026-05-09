@@ -34,7 +34,11 @@ export default function Providers({ children }: ProvidersProps) {
           },
         ],
         wallets: {
-          featured: ["Phantom"],
+          // Featured wallets surface first in the connector modal. OKX
+          // Wallet registers as a wallet-standard provider (browser
+          // extension + mobile injects under this name), so listing it
+          // here is enough — no extra adapter needed.
+          featured: ["Phantom", "OKX Wallet"],
         },
       }),
     []

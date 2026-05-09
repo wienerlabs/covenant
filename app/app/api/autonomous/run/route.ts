@@ -2,9 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
-import { rateLimit } from "@/lib/rateLimit";
-import { releaseFundsToTaker } from "@/lib/escrow";
+import { rateLimit, getLimit } from "@/lib/rateLimit";
+// autonomous/run is a head-less DEMO route. Real settlement uses the
+// on-chain create_job → submit_work → finalize_payment pipeline (see
+// lib/program-server.ts botCreateJob / botFinalizePayment). Custodial
+// `releaseFundsToTaker` was removed in the on-chain refactor (audit
+// C-01). Demo runs no longer move USDC.
 import Anthropic from "@anthropic-ai/sdk";
+import { withCreditFallback } from "@/lib/anthropic-safe";
 import crypto from "crypto";
 import { executeCircuit } from "@/lib/work-metrics";
 import { NextRequest } from "next/server";
@@ -35,7 +40,8 @@ function delay(ms: number) {
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
-  const rl = rateLimit(`autonomous:${ip}`, 3);
+  const { limit: autoLimit, windowMs: autoWindow } = getLimit("arena_run");
+  const rl = rateLimit(`autonomous:${ip}`, Math.max(1, Math.floor(autoLimit / 3)), autoWindow);
   if (!rl.allowed) {
     return new Response(
       JSON.stringify({ error: "Rate limit exceeded. Max 3 requests per minute." }),
@@ -63,7 +69,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const client = new Anthropic();
+        const client = withCreditFallback(new Anthropic());
 
         // Ensure agent profiles
         await prisma.profile.upsert({
@@ -276,14 +282,10 @@ Complete this job. Write at least ${job.minWords} words. Be thorough and profess
             console.error("[autonomous] submit tx failed:", err);
           }
 
-          // Try escrow release
-          let escrowTxHash: string | null = null;
-          try {
-            const releaseResult = await releaseFundsToTaker(agentWallet, jobAmount);
-            escrowTxHash = releaseResult.txHash;
-          } catch (err) {
-            console.error("[autonomous] escrow release failed:", err);
-          }
+          // No custodial release: demo flow records earnings but does
+          // not move USDC. Bot agents that want real settlement should
+          // post via the on-chain pipeline instead.
+          const escrowTxHash: string | null = null;
 
           totalEarned += jobAmount;
           totalJobsDone++;

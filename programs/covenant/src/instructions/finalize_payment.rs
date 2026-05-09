@@ -2,11 +2,26 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, CloseAccount, Token, TokenAccount, Transfer};
 
 use crate::errors::CovError;
-use crate::state::{AgentReputation, JobEscrow, JobStatus};
+use crate::state::{AgentReputation, ClaimListing, ClaimStatus, JobEscrow, JobStatus};
 
 /// Permissionless: anyone can call finalize_payment once the challenge
-/// period has expired and no dispute is active. This ensures the protocol
-/// always makes progress even if neither party is online to push the button.
+/// period has expired and no dispute is active.
+///
+/// ## Payment routing (Covenant Credit)
+///
+/// The ClaimListing PDA is ALWAYS passed as an account — its address is
+/// deterministic (`seeds = [b"claim", job_escrow.key()]`) so the crank
+/// cannot omit it to hide a sold claim. We distinguish:
+///   - lamports == 0 (account uninitialized): no listing, pay taker
+///   - lamports > 0 + status == Bought: pay buyer, mark Settled
+///   - lamports > 0 + status == Listed / Cancelled / Settled: pay taker
+///
+/// This closes the grief vector where a seller-crank could bypass their
+/// own sale by silently "forgetting" to pass the listing.
+///
+/// The `taker_token_account` parameter is the payment beneficiary ATA —
+/// its owner must match whoever the chain routes payment to. Reputation
+/// credit always goes to the original taker.
 #[derive(Accounts)]
 pub struct FinalizePayment<'info> {
     #[account(mut)]
@@ -34,15 +49,16 @@ pub struct FinalizePayment<'info> {
     )]
     pub escrow_token_account: Box<Account<'info, TokenAccount>>,
 
+    /// Payment beneficiary token account.
+    /// Owner is validated in the handler against the routed destination.
     #[account(
         mut,
-        constraint = taker_token_account.owner == job_escrow.taker @ CovError::Unauthorized,
-        constraint = taker_token_account.mint == escrow_token_account.mint,
+        constraint = taker_token_account.mint == escrow_token_account.mint @ CovError::MintMismatch,
     )]
     pub taker_token_account: Box<Account<'info, TokenAccount>>,
 
     /// CHECK: used as destination for rent reclamation when closing the
-    /// escrow token account; must match job.taker
+    /// escrow token account; must match job.taker.
     #[account(
         mut,
         constraint = taker.key() == job_escrow.taker @ CovError::Unauthorized,
@@ -57,6 +73,16 @@ pub struct FinalizePayment<'info> {
         bump,
     )]
     pub taker_reputation: Box<Account<'info, AgentReputation>>,
+
+    /// CHECK: deterministic PDA at seeds=[b"claim", job_escrow.key()].
+    /// May be uninitialized (lamports == 0) → no listing; handler reads
+    /// and routes payment accordingly.
+    #[account(
+        mut,
+        seeds = [b"claim", job_escrow.key().as_ref()],
+        bump,
+    )]
+    pub claim_listing: UncheckedAccount<'info>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -77,10 +103,43 @@ pub fn handler(ctx: Context<FinalizePayment>) -> Result<()> {
         (job.poster, job.spec_hash, job.bump, job.amount)
     };
 
+    // ---- Claim routing ----
+    let job_key = ctx.accounts.job_escrow.key();
+    let mut pay_to_buyer: Option<Pubkey> = None;
+    let mut settle_listing = false;
+
+    if ctx.accounts.claim_listing.lamports() > 0 {
+        // Listing exists. Owner must be this program (Anchor's seeds+bump
+        // on UncheckedAccount already verified the address).
+        require!(
+            ctx.accounts.claim_listing.owner == ctx.program_id,
+            CovError::ClaimListingMismatch,
+        );
+        let data = ctx.accounts.claim_listing.try_borrow_data()?;
+        let listing = ClaimListing::try_deserialize(&mut &data[..])?;
+        require!(listing.job == job_key, CovError::ClaimListingMismatch);
+        match listing.status {
+            ClaimStatus::Bought => {
+                pay_to_buyer = Some(listing.buyer);
+                settle_listing = true;
+            }
+            ClaimStatus::Listed | ClaimStatus::Cancelled | ClaimStatus::Settled => {
+                // No payment re-routing for these states.
+            }
+        }
+    }
+
+    // Enforce beneficiary owner matches the routed destination.
+    let expected_owner = pay_to_buyer.unwrap_or(ctx.accounts.job_escrow.taker);
+    require!(
+        ctx.accounts.taker_token_account.owner == expected_owner,
+        CovError::Unauthorized,
+    );
+
     let seeds: &[&[u8]] = &[b"job", poster_key.as_ref(), spec_hash.as_ref(), &[bump]];
     let signer_seeds = &[seeds];
 
-    // 1. Transfer full escrow to taker
+    // 1. Transfer full escrow to the beneficiary.
     let transfer_ctx = CpiContext::new_with_signer(
         ctx.accounts.token_program.to_account_info(),
         Transfer {
@@ -92,7 +151,9 @@ pub fn handler(ctx: Context<FinalizePayment>) -> Result<()> {
     );
     token::transfer(transfer_ctx, amount)?;
 
-    // 2. Close escrow token account, rent returned to taker
+    // 2. Close escrow token account; SPL rent refund always to the taker
+    //    (a few lamports; routing to buyer would add complexity with
+    //    marginal benefit).
     let close_ctx = CpiContext::new_with_signer(
         ctx.accounts.token_program.to_account_info(),
         CloseAccount {
@@ -104,7 +165,7 @@ pub fn handler(ctx: Context<FinalizePayment>) -> Result<()> {
     );
     token::close_account(close_ctx)?;
 
-    // 3. Update taker reputation
+    // 3. Update taker reputation (original worker, regardless of claim sale).
     {
         let reputation = &mut ctx.accounts.taker_reputation;
         let taker_key = ctx.accounts.taker.key();
@@ -125,15 +186,30 @@ pub fn handler(ctx: Context<FinalizePayment>) -> Result<()> {
         }
     }
 
-    // 4. Mark terminal status (PDA is closed to poster via `close =` on the account constraint)
+    // 4. If a ClaimListing routed the payment, mark it Settled on chain.
+    //    Account is left open (rent refund can be reclaimed by a future
+    //    cleanup instruction) so the settlement trail remains visible.
+    if settle_listing {
+        let mut data = ctx.accounts.claim_listing.try_borrow_mut_data()?;
+        let mut listing = ClaimListing::try_deserialize(&mut &data[..])?;
+        listing.status = ClaimStatus::Settled;
+        let mut cursor: &mut [u8] = &mut data[..];
+        listing.try_serialize(&mut cursor)?;
+    }
+
+    // 5. Mark terminal status on the job (PDA closes to poster via
+    //    `close =` on the account constraint above).
     let job = &mut ctx.accounts.job_escrow;
     job.status = JobStatus::Finalized;
 
+    let recipient = ctx.accounts.taker_token_account.owner;
     msg!(
-        "Payment finalized: taker={}, amount={}, crank={}",
+        "Payment finalized: recipient={}, taker={}, amount={}, crank={}, claim_routed={}",
+        recipient,
         job.taker,
         amount,
-        ctx.accounts.crank.key()
+        ctx.accounts.crank.key(),
+        pay_to_buyer.is_some(),
     );
 
     Ok(())

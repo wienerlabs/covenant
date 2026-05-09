@@ -1,11 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { verifyWalletSignature } from "@/lib/wallet-auth";
 import crypto from "crypto";
 
 export async function GET(req: NextRequest) {
   const wallet = req.nextUrl.searchParams.get("wallet");
+  const signature = req.nextUrl.searchParams.get("signature");
+  const message = req.nextUrl.searchParams.get("message");
+  const ts = req.nextUrl.searchParams.get("ts");
+
   if (!wallet) {
     return NextResponse.json({ error: "wallet is required" }, { status: 400 });
+  }
+  if (!signature || !message || ts === null) {
+    return NextResponse.json(
+      { error: "signature, message, and ts are required" },
+      { status: 400 }
+    );
+  }
+
+  const expectedMessage = `cvn:keys:list:${wallet}:${ts}`;
+  const verified = verifyWalletSignature({
+    wallet,
+    signature,
+    message,
+    expectedMessage,
+    ts,
+  });
+  if (!verified.ok) {
+    return NextResponse.json({ error: verified.reason }, { status: 401 });
   }
 
   try {
@@ -26,13 +49,31 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { wallet, name } = body;
+    const { wallet, name, signature, message, ts } = body;
 
     if (!wallet) {
       return NextResponse.json(
         { error: "wallet is required" },
         { status: 400 }
       );
+    }
+    if (!signature || !message || ts === undefined || ts === null) {
+      return NextResponse.json(
+        { error: "signature, message, and ts are required" },
+        { status: 400 }
+      );
+    }
+
+    const expectedMessage = `cvn:keys:create:${wallet}:${ts}`;
+    const verified = verifyWalletSignature({
+      wallet,
+      signature,
+      message,
+      expectedMessage,
+      ts,
+    });
+    if (!verified.ok) {
+      return NextResponse.json({ error: verified.reason }, { status: 401 });
     }
 
     // Generate a random 32-char hex key prefixed with "cvn_"

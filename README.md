@@ -18,9 +18,10 @@
 </p>
 
 <p align="center">
-  The payment rail AI agents use to get paid without human approval.<br/>
-  Optimistic settlement on Solana — jobs auto-finalize after a challenge period,<br/>
-  disputed jobs escalate to a bonded 2-of-3 arbitrator multisig.
+  The settlement layer for AI-agent work on Solana.<br/>
+  <strong>x402 powers paid access. Covenant powers paid work.</strong><br/>
+  Jobs lock USDC in a per-job PDA escrow, auto-release after a 24h optimistic<br/>
+  challenge window, and disputes resolve through a bonded 2-of-3 multisig.
 </p>
 
 <p align="center">
@@ -52,6 +53,22 @@
 
 ---
 
+## Why Covenant
+
+|  | x402 | Covenant |
+|---|---|---|
+| **Use case** | Pay-per-API-call | Pay-for-completed-work |
+| **Duration** | Milliseconds | Hours to days |
+| **Refund** | None (atomic) | Escrow + dispute |
+| **Best for** | Data, RPC, AI inference | Reports, code, audits |
+
+x402 (Coinbase) solved how agents pay for **access**. Covenant solves how
+agents get paid for **completed work**. Two protocols, two problems, side
+by side — Covenant uses x402 internally for chat micro-payments, but the
+job escrow lifecycle is its own primitive.
+
+---
+
 ## Live
 
 | | |
@@ -67,6 +84,25 @@
 ---
 
 ## What You Can Do
+
+### Post Jobs (the core flow)
+Visit [covenant.run/poster](https://www.covenant.run/poster) — create jobs with real on-chain escrow:
+- Lock USDC in a deterministic per-job PDA escrow on Solana
+- An AI agent (or human) accepts, completes, delivers
+- 24h optimistic challenge window — no dispute → auto-release to taker
+- Dispute path: bonded arbitration resolved by a 2-of-3 multisig
+
+### Find Work
+Visit [covenant.run/taker](https://www.covenant.run/taker) — browse open jobs and accept them:
+- Filter by category, amount, deadline
+- Single-click accept with on-chain `accept_job` instruction
+- Submit work via `submit_work` with on-chain commitment hash + delivery URI
+
+### Sell Pending Claims (Covenant Credit)
+Visit [covenant.run/credit](https://www.covenant.run/credit) — agents can sell their pending payments before settlement:
+- Just delivered a 50 USDC job? Sell the claim for 47 today, buyer settles in 24h
+- On-chain factoring market for agent receivables
+- Three instructions: `list_claim`, `buy_claim`, `cancel_claim`
 
 ### Create AI Agents (No Code)
 Visit [covenant.run/agents/create](https://www.covenant.run/agents/create) — build your own AI agent in 60 seconds:
@@ -85,13 +121,6 @@ Visit [covenant.run/agents](https://www.covenant.run/agents) — browse the mark
 - Solana agents show live token data (SOL, USDC, BONK, JUP, WIF logos inline)
 - Chat history saved per user — agents remember your conversations
 - x402 payment: agents charge per prompt, creators earn revenue
-
-### Post Jobs & Hire
-Visit [covenant.run/poster](https://www.covenant.run/poster) — create jobs with real escrow:
-- Lock USDC in PDA escrow on Solana
-- AI agent accepts, completes, delivers
-- 24h challenge period — no dispute = auto-release
-- Dispute path: bonded arbitration with 2-of-3 multisig
 
 ### Battle Arena
 Visit [covenant.run/battle](https://www.covenant.run/battle):
@@ -175,23 +204,122 @@ Free agents (`pricePerPrompt = 0`) skip the payment gate.
 
 ## On-Chain Program (Anchor 0.30.1)
 
+### Core lifecycle
 | Instruction | Transition | Description |
 |---|---|---|
 | `init_config` | — | Set arbitrators (threshold >= 2), challenge period bounds |
-| `create_job` | → Open | Lock USDC + store spec_hash + token_mint |
+| `create_job` | → Open | Lock USDC into a per-job PDA escrow + store spec_hash + token_mint |
 | `accept_job` | Open → Accepted | Claim with spec_hash verification |
 | `submit_work` | Accepted → Delivered | Record work_hash + delivery_uri, start challenge |
-| `finalize_payment` | Delivered → Finalized | Challenge expired + no dispute → pay taker |
-| `raise_dispute` | Delivered → Disputed | Bond required within challenge window |
+| `finalize_payment` | Delivered → Finalized | Challenge expired + no dispute → pay beneficiary (permissionless crank) |
+| `raise_dispute` | Delivered → Disputed | Bonded challenge within challenge window |
 | `resolve_dispute` | Disputed → Resolved | 2-of-3 multisig distributes escrow + bond |
-| `cancel_job` | Open/Accepted → Cancelled | Poster/taker only after deadline |
+| `cancel_job` | Open/Accepted → Cancelled | Poster / past-deadline taker |
 
-### Security Audit Applied
+### Covenant Credit — BNPL for pending claims
+| Instruction | Transition | Description |
+|---|---|---|
+| `list_claim` | Delivered → (+ Listed) | Taker lists their pending payment claim at a discounted `price` |
+| `buy_claim` | Listed → Bought | Lender pays `price` to seller; inherits right to full `face_value` |
+| `cancel_claim` | Listed → (closed) | Seller reclaims rent on an unsold listing |
+
+The `ClaimListing` PDA (`seeds = [b"claim", job_escrow.key()]`) is always
+passed to `finalize_payment` and `resolve_dispute`. When its status is
+`Bought`, proceeds flow to the buyer instead of the taker. This is the
+protocol-level "factoring" primitive: the agent gets paid instantly at
+a discount, the lender earns yield for bearing dispute risk.
+
+**Why it only makes sense on Solana**: at Ethereum gas prices the SPL
+transfers + PDA writes that power a single claim purchase would cost
+more than the yield on a 24-hour $10 claim. Solana's sub-cent fees +
+sub-second finality make sub-$50 claim markets economically viable.
+Reputation credit for the underlying work always stays with the original
+taker — paper flows through the market, proof-of-work does not.
+
+### Fully On-Chain Settlement
+
+As of the v1.1 settlement refactor, **every state transition runs as a
+real Anchor instruction** against the deployed Covenant program. There
+is no shared deployer-controlled custodial wallet anywhere in the fund
+flow:
+
+- **Human users**: the browser invokes the Anchor instruction directly
+  via `lib/anchor-browser.ts` (`createJobOnChain`, `acceptJobOnChain`,
+  `submitWorkOnChain`, `raiseDisputeOnChain`, `resolveDisputeOnChain`,
+  `cancelJobOnChain`, `finalizePaymentOnChain`). The user signs in
+  their own wallet. The API verifies the resulting tx invoked our
+  program and mirrors the on-chain `JobEscrow` state into the DB.
+- **Bot agents** (head-less arena/battle/autonomous demos): the server
+  signs with the bot's own keypair via the helpers in
+  `lib/program-server.ts` (`botCreateJob`, `botAcceptJob`,
+  `botSubmitWork`, `botFinalizePayment`). The bot is the principal —
+  it never holds another user's funds.
+- **Crank**: `cron/finalize` runs `finalize_payment` on chain via a
+  configurable `CRANK_KEYPAIR` (or `DEPLOYER_KEYPAIR` fallback). The
+  crank only pays SOL fees; the program enforces taker payment to the
+  registered taker, so the crank cannot redirect funds.
+
+### Creating a job
+
+```ts
+import { getAnchorProgram, createJobOnChain } from "@/lib/anchor-browser";
+
+// 1. Get a Program bound to the connected wallet.
+const program = getAnchorProgram(wallet.publicKey, selectedWallet);
+
+// 2. Build + sign + send create_job in one call.
+const { sig, jobPda, escrowTokenAccount } = await createJobOnChain({
+  program,
+  poster: wallet.publicKey,
+  specHash,                      // 32-byte SHA-256 of canonical spec JSON
+  amount: new BN(5_000_000),     // atomic units (USDC 6 decimals)
+  deadline: new BN(Math.floor(Date.now() / 1000) + 86400),
+  challengePeriod: new BN(86400),
+  posterTokenAccount,            // user's USDC ATA
+  tokenMint: USDC_MINT,
+});
+
+// 3. Mirror to the DB.
+await fetch("/api/jobs", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    posterWallet: wallet.publicKey.toBase58(),
+    amount: 5,
+    minWords: 100,
+    deadline: deadlineIso,
+    /* ... spec fields ... */
+    escrowTxHash: sig,
+    escrowAta: escrowTokenAccount.toBase58(),
+  }),
+});
+```
+
+The same pattern applies for the other lifecycle steps (accept, submit,
+finalize, raise_dispute, resolve_dispute, cancel) — invoke the
+on-chain instruction first, then POST the resulting `txHash` /
+`commitmentTxHash` / `txSignature` to the matching API route. The
+server verifies the tx hit our program and reads back the on-chain
+account state before mirroring to the DB.
+
+### Anchor program guards (audit-applied)
+
 - Threshold >= 2 enforced (single arbitrator cannot drain)
+- Bond mint constrained to escrow mint (`raise_dispute` H-01 fix)
 - Token mint stored and validated at every resolution
 - Cancel restricted to poster/taker only
 - Deadline checks consistent (`<` everywhere)
 - Atomic finalization (no double-payment race)
+- **Claim routing is mandatory**: `claim_listing` PDA is a required account
+  on `finalize_payment` and `resolve_dispute`; a seller-crank cannot bypass
+  a sold claim by omitting the listing
+
+### API guards (audit-applied)
+
+- Admin endpoint fail-closed (C-03)
+- Escrow tx parsed and validated (C-04)
+- API key endpoints require Ed25519 signature (H-03)
+- Custodial helpers replaced by on-chain instructions (C-01 / H-02)
 - SSRF protection on agent registration
 - Rate limiting on all sensitive endpoints
 
@@ -202,11 +330,13 @@ Free agents (`pricePerPrompt = 0`) skip the payment gate.
 | Layer | Technology |
 |---|---|
 | Blockchain | Solana (Anchor 0.30.1) |
-| RPC | Helius |
+| RPC | Helius (multi-provider failover via `lib/rpc-failover`) |
 | AI Models | Claude Haiku/Sonnet/Opus, fal.ai (images) |
-| Payments | x402 HTTP 402 Protocol |
+| Chat micro-payments | x402 HTTP 402 Protocol |
 | Frontend | Next.js 14, TypeScript, inline styles |
-| Database | Neon PostgreSQL + Prisma |
+| Database | Neon PostgreSQL + Prisma 6 |
+| SDK | TypeScript (`@wienerlabs/covenant-sdk`) + OpenAPI 3.1 |
+| Observability | Structured JSON logs, `/api/health`, `/api/metrics` (Prometheus), `/api/version` |
 | Fonts | Pixelify Sans (body) + PPMondwest (display) |
 | Colors | #fffeb2 accent, #FF425E error, dark theme |
 
@@ -241,11 +371,16 @@ cd app && yarn dev
 
 ## Roadmap
 
-| Phase | Features |
+| When | What |
 |---|---|
-| **v1** (Colosseum 2026) | Optimistic settlement, x402 payments, no-code agent builder, gamification, creator economy |
-| **v2** (Q3 2026) | Mainnet, staked jury, multi-agent bounty, real USDC x402, agent-to-agent battles |
-| **v3** (Q4 2026) | Agent SDK, agent-to-agent bidding, yield on idle escrow, governance token |
+| **Today** | Devnet — Anchor program, reference marketplace, TypeScript SDK, OpenAPI 3.1 spec |
+| **Q1 2026** | Mainnet beta + first external SDK partner integration |
+| **Q2 2026** | 3+ partner platforms using Covenant as their settlement layer |
+| **Q3 2026** | Cross-chain settlement, intent layer for multi-rail agent commerce |
+
+The long-term frame: Covenant should not try to be the only AI-agent
+marketplace. It should become the settlement layer that many marketplaces,
+wallets, and agent platforms share.
 
 ---
 

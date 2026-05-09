@@ -38,10 +38,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(disputes);
   } catch (error) {
     console.error("GET /api/disputes error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch disputes" },
-      { status: 500 },
-    );
+    // Empty array keeps the disputes page renderable on DB failure.
+    return NextResponse.json([], { status: 200 });
   }
 }
 

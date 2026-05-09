@@ -48,4 +48,19 @@ pub enum CovError {
     MathOverflow,
     #[msg("Token mint does not match the escrow's original mint")]
     MintMismatch,
-}
+
+    // ---- Covenant Credit (claim listings) ----
+    #[msg("Claim listing price must be greater than zero and less than the escrow face value")]
+    InvalidClaimPrice,
+    #[msg("Claim listing already exists for this job")]
+    ClaimListingAlreadyExists,
+    #[msg("Claim listing is not in the required status for this operation")]
+    InvalidClaimStatus,
+    #[msg("Claim listing references a different JobEscrow")]
+    ClaimListingMismatch,
+    #[msg("A bought claim listing exists; payment must route to the buyer (pass the ClaimListing account)")]
+    ClaimListingRequired,
+    #[msg("Only the original seller may cancel this listing")]
+    NotClaimSeller,
+    #[msg("Buyer may not be the same wallet as the seller")]
+    BuyerIsSeller,

@@ -46,6 +46,8 @@ export default function FaucetPage() {
     padding: "32px",
   };
 
+  // Devnet-only deployment — the faucet is always enabled.
+
   return (
     <div style={{ minHeight: "100vh", fontFamily: "inherit", position: "relative" }}>
       {/* Background */}

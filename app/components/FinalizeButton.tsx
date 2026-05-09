@@ -5,6 +5,8 @@ import { useConnector } from "@solana/connector/react";
 import {
   getAnchorProgram,
   finalizePaymentOnChain,
+  deriveJobPda,
+  deriveEscrowTokenPda,
   PublicKey,
 } from "@/lib/anchor-browser";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
@@ -67,22 +69,20 @@ export default function FinalizeButton({
                 // For now, try the on-chain call; if it fails, fallback to server.
                 const crankPk = new PublicKey(callerWallet);
 
-                // Try to get escrow token account from job events
-                const escrowAta = jobData.delivery?.escrowAta
-                  ? new PublicKey(jobData.delivery.escrowAta)
-                  : undefined;
+                // Derive escrow token account PDA from JobEscrow PDA — no
+                // longer needs to be looked up from delivery state.
+                const [jobPda] = deriveJobPda(posterPk, specHash);
+                const [escrowAta] = deriveEscrowTokenPda(jobPda);
 
-                if (escrowAta) {
-                  onChainSig = await finalizePaymentOnChain({
-                    program,
-                    crank: crankPk,
-                    poster: posterPk,
-                    taker: takerPk,
-                    specHash,
-                    escrowTokenAccount: escrowAta,
-                    takerTokenAccount: takerAta,
-                  });
-                }
+                onChainSig = await finalizePaymentOnChain({
+                  program,
+                  crank: crankPk,
+                  poster: posterPk,
+                  taker: takerPk,
+                  specHash,
+                  escrowTokenAccount: escrowAta,
+                  takerTokenAccount: takerAta,
+                });
               }
             }
           }

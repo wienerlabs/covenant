@@ -1,38 +1,45 @@
+/**
+ * Public constants for the Covenant frontend + API.
+ *
+ * Covenant is currently demo-locked to **Solana Devnet**. All
+ * cluster-specific values (PROGRAM_ID, USDC_MINT, RPC_URL) are
+ * hardcoded for devnet via `lib/network.ts`.
+ */
+
 import { PublicKey } from "@solana/web3.js";
 
-export const PROGRAM_ID = new PublicKey(
-  "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT"
-);
+// Re-exports — keep the existing import surface stable.
+export {
+  PROGRAM_ID,
+  USDC_MINT,
+  USDC_DECIMALS,
+  RPC_URL,
+  CLUSTER,
+  IS_MAINNET,
+  IS_DEVNET,
+  IS_LOCALNET,
+  FAUCET_ENABLED,
+  getRpcUrl,
+  explorerTxUrl,
+  explorerAccountUrl,
+  getClusterLabel,
+} from "@/lib/network";
 
+/** @deprecated Use RPC_URL — kept for any direct callers. */
 export const DEVNET_ENDPOINT = "https://api.devnet.solana.com";
 
-export const USDC_DECIMALS = 6;
-
 /**
- * Test USDC mint used across every Covenant flow on devnet. The /faucet
- * page mints this exact token, so every balance check, transfer and
- * escrow lock references the same pubkey. Do not change without also
- * updating the faucet and the agent wallets' ATAs.
- */
-export const USDC_MINT = new PublicKey(
-  "F7RYRqCy8uWYxjxrXVhU3iUCRwa9bKBUTkGKktpyYueQ"
-);
-
-/**
- * Escrow wallet that holds locked USDC during a job's lifecycle.
- *
- * For v1 this is the deployer wallet itself — practical, matches the
- * existing server-side release logic in lib/escrow.ts. A follow-up
- * moves escrow into a per-job PDA owned by the Anchor program.
+ * @deprecated Shared escrow wallet — no longer in use after the
+ * on-chain settlement refactor (audit C-01 / H-02). Funds now live
+ * in per-job PDA escrows owned by the Covenant Anchor program.
  */
 export const ESCROW_WALLET = new PublicKey(
   "Gy5cU3bNH1DKsff6rp91H1BmtEfwspziR52WfmMVfbPZ"
 );
 
 /**
- * Memo program address — used by SubmitWorkModal to attach a signed
- * delivery-commitment memo to the taker's transaction without moving
- * any tokens.
+ * Memo program — used by SubmitWorkModal to attach a signed delivery
+ * commitment memo to the taker's transaction without moving tokens.
  */
 export const MEMO_PROGRAM_ID = new PublicKey(
   "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"

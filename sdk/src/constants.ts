@@ -42,4 +42,5 @@ export const PDA_SEEDS = {
   job: Buffer.from("job"),
   reputation: Buffer.from("reputation"),
   bond: Buffer.from("bond"),
+  claim: Buffer.from("claim"),
 } as const;

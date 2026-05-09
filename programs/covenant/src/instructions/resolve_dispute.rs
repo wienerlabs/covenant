@@ -3,7 +3,8 @@ use anchor_spl::token::{self, CloseAccount, Token, TokenAccount, Transfer};
 
 use crate::errors::CovError;
 use crate::state::{
-    AgentReputation, DisputeResolution, JobEscrow, JobStatus, ProtocolConfig,
+    AgentReputation, ClaimListing, ClaimStatus, DisputeResolution, JobEscrow, JobStatus,
+    ProtocolConfig,
 };
 
 /// Resolve a disputed job. Requires `config.threshold` approvals from
@@ -61,10 +62,13 @@ pub struct ResolveDispute<'info> {
     )]
     pub poster_token_account: Box<Account<'info, TokenAccount>>,
 
+    /// Payment beneficiary token account on the taker/buyer side.
+    /// Owner validated in the handler against the routed destination
+    /// (original taker for FavorPoster / no claim; claim buyer for
+    /// FavorTaker or Split when a Bought listing exists).
     #[account(
         mut,
-        constraint = taker_token_account.owner == job_escrow.taker @ CovError::Unauthorized,
-        constraint = taker_token_account.mint == escrow_token_account.mint,
+        constraint = taker_token_account.mint == escrow_token_account.mint @ CovError::MintMismatch,
     )]
     pub taker_token_account: Box<Account<'info, TokenAccount>>,
 
@@ -83,6 +87,17 @@ pub struct ResolveDispute<'info> {
         bump,
     )]
     pub taker_reputation: Box<Account<'info, AgentReputation>>,
+
+    /// CHECK: deterministic PDA at seeds=[b"claim", job_escrow.key()].
+    /// May be uninitialized (lamports == 0) when no claim listing exists;
+    /// handler reads and routes FavorTaker/Split payments to the buyer if
+    /// a Bought listing is present.
+    #[account(
+        mut,
+        seeds = [b"claim", job_escrow.key().as_ref()],
+        bump,
+    )]
+    pub claim_listing: UncheckedAccount<'info>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -173,6 +188,40 @@ pub fn handler(ctx: Context<ResolveDispute>, resolution: DisputeResolution) -> R
             (taker_amount, refund, 0)
         }
     };
+
+    // ---- Claim routing for the taker-side payout ----
+    //
+    // If a ClaimListing exists in Bought state and this resolution pays
+    // the taker (FavorTaker or Split), the proceeds go to the BUYER's
+    // ATA. FavorPoster means the buyer loses (priced into discount) —
+    // nothing is re-routed. Bond on FavorTaker also goes to the buyer
+    // since it's the economic continuation of the taker's position.
+    let job_key = ctx.accounts.job_escrow.key();
+    let mut pay_to_buyer: Option<Pubkey> = None;
+    let mut settle_listing = false;
+
+    if ctx.accounts.claim_listing.lamports() > 0 {
+        require!(
+            ctx.accounts.claim_listing.owner == ctx.program_id,
+            CovError::ClaimListingMismatch,
+        );
+        let data = ctx.accounts.claim_listing.try_borrow_data()?;
+        let listing = ClaimListing::try_deserialize(&mut &data[..])?;
+        require!(listing.job == job_key, CovError::ClaimListingMismatch);
+        if listing.status == ClaimStatus::Bought && escrow_to_taker > 0 {
+            pay_to_buyer = Some(listing.buyer);
+            settle_listing = true;
+        }
+    }
+
+    // Enforce owner of the taker-side beneficiary ATA.
+    if escrow_to_taker > 0 {
+        let expected_owner = pay_to_buyer.unwrap_or(ctx.accounts.job_escrow.taker);
+        require!(
+            ctx.accounts.taker_token_account.owner == expected_owner,
+            CovError::Unauthorized,
+        );
+    }
 
     // Transfer from escrow token account (main)
     if escrow_to_taker > 0 {
@@ -291,7 +340,19 @@ pub fn handler(ctx: Context<ResolveDispute>, resolution: DisputeResolution) -> R
         }
     }
 
-    // 4. Finalize status on the job account
+    // 4. If a claim listing routed the payout, mark it Settled so the
+    //    on-chain audit trail reflects the resolution. Listings that were
+    //    Bought but resolved FavorPoster remain in Bought state — the
+    //    buyer's loss is visible forever as an unsettled listing.
+    if settle_listing {
+        let mut data = ctx.accounts.claim_listing.try_borrow_mut_data()?;
+        let mut listing = ClaimListing::try_deserialize(&mut &data[..])?;
+        listing.status = ClaimStatus::Settled;
+        let mut cursor: &mut [u8] = &mut data[..];
+        listing.try_serialize(&mut cursor)?;
+    }
+
+    // 5. Finalize status on the job account
     let job = &mut ctx.accounts.job_escrow;
     job.status = JobStatus::Resolved;
     job.dispute.resolved_at = clock.unix_timestamp;

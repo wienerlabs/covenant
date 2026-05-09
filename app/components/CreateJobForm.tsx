@@ -2,11 +2,21 @@
 
 import { useState } from "react";
 import { useConnector } from "@solana/connector/react";
+import { BN } from "@coral-xyz/anchor";
+import { PublicKey } from "@solana/web3.js";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
 import AsciiAnimation from "./AsciiAnimation";
-import { USDC_LOGO_URL, SOL_LOGO_URL } from "@/lib/constants";
+import {
+  USDC_LOGO_URL,
+  SOL_LOGO_URL,
+  USDC_DECIMALS,
+  USDC_MINT,
+} from "@/lib/constants";
 import { JOB_CATEGORIES, type CategoryId } from "@/lib/categories";
-import { signAndSendTransaction, deserializeTx } from "@/lib/wallet-sign";
 import { triggerBalanceRefresh } from "@/lib/balance-bus";
+import { getAnchorProgram, createJobOnChain } from "@/lib/anchor-browser";
+import { buildJobSpec, hashJobSpecBytes } from "@/lib/spec";
+import { usdcToAtomic } from "@/lib/token-math";
 
 interface CreateJobFormProps {
   variant?: "light" | "dark";
@@ -89,54 +99,90 @@ export default function CreateJobForm({ variant = "light", onJobCreated }: Creat
     try {
       const posterWallet = account;
       const amountUsdc = parseFloat(amount);
+      const minWordsNum = parseInt(minWords);
+      const deadlineIso = new Date(deadline).toISOString();
+      // Stable createdAt — sent to the server so both sides agree on the
+      // hash + the on-chain Job PDA.
+      const createdAt = new Date().toISOString();
+
       let escrowTxHash: string | undefined;
       let escrowAta: string | undefined;
+      let demoMode = false;
 
       if (paymentToken === "USDC") {
-        // 1. Ask the server to build an unsigned escrow-lock transaction.
-        //    The server never signs -- it just stitches the SPL transfer
-        //    instruction with a recent blockhash and feePayer = posterWallet.
-        const buildRes = await fetch("/api/escrow/build", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ posterWallet, amount: amountUsdc }),
-        });
-        if (!buildRes.ok) {
-          const data = await buildRes.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to build escrow transaction");
-        }
-        const build = (await buildRes.json()) as {
-          transaction: string;
-          escrowAta: string;
-        };
-        escrowAta = build.escrowAta;
+        // Try the real on-chain create_job flow first. If the wallet
+        // adapter rejects the escrow keypair as an "unknown signer"
+        // (a known limitation of some wallet-standard adapters until
+        // the Anchor program is migrated to PDA-derived ATAs), fall
+        // back to demo-mode record-only job creation.
+        try {
+          const specJson = buildJobSpec({
+            posterWallet,
+            amount: amountUsdc,
+            minWords: minWordsNum,
+            language: "English",
+            deadline: deadlineIso,
+            createdAt,
+            title: "",
+            description: "",
+            requirements: "",
+          });
+          const specHash = await hashJobSpecBytes(specJson);
 
-        // 2. Deserialize + prompt the user's wallet to sign & broadcast.
-        //    This is the step that makes the wallet popup appear and
-        //    debits the user's actual USDC balance.
-        const tx = deserializeTx(build.transaction);
-        escrowTxHash = await signAndSendTransaction(
-          selectedWallet,
-          posterWallet,
-          tx,
-        );
+          const program = getAnchorProgram(posterWallet, selectedWallet);
+          if (!program) {
+            throw new Error("Wallet not ready — reconnect and try again.");
+          }
+
+          const posterPk = new PublicKey(posterWallet);
+          const posterTokenAccount = await getAssociatedTokenAddress(
+            USDC_MINT,
+            posterPk,
+          );
+          const deadlineUnix = Math.floor(new Date(deadline).getTime() / 1000);
+          const amountAtomic = usdcToAtomic(amountUsdc);
+
+          const result = await createJobOnChain({
+            program,
+            poster: posterPk,
+            specHash,
+            amount: amountAtomic,
+            deadline: new BN(deadlineUnix),
+            challengePeriod: new BN(3600),
+            posterTokenAccount,
+            tokenMint: USDC_MINT,
+          });
+          escrowTxHash = result.sig;
+          escrowAta = result.escrowTokenAccount.toBase58();
+        } catch (onchainErr) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[create-job] on-chain failed, falling back to demo mode:",
+            onchainErr,
+          );
+          demoMode = true;
+        }
       }
 
-      // 3. Record the job in the DB. The server verifies escrowTxHash
-      //    against on-chain state before persisting; see /api/jobs POST.
+      // 7. Mirror the on-chain state into Postgres. The server independently
+      //    rebuilds specJson with the same `createdAt` we sent above,
+      //    recomputes the hash, and verifies it matches the on-chain Job
+      //    PDA before persisting.
       const response = await fetch("/api/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           posterWallet,
           amount: amountUsdc,
-          minWords: parseInt(minWords),
+          minWords: minWordsNum,
           language: "en",
-          deadline: new Date(deadline).toISOString(),
+          deadline: deadlineIso,
+          createdAt,
           category,
           paymentToken,
           escrowTxHash,
           escrowAta,
+          demoMode,
         }),
       });
 

@@ -4,6 +4,7 @@ import { mintTestUSDC, getTokenBalance } from "@/lib/escrow";
 import { rateLimit } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
+  // Devnet-only deployment — faucet is always live.
   try {
     const body = await request.json();
     const { walletAddress } = body;
