@@ -47,7 +47,11 @@ function getBuffer(): ErrorBufferEntry[] {
  */
 export function recordError(entry: Omit<ErrorBufferEntry, "recorded_at">): void {
   const buf = getBuffer();
-  buf.push({ recorded_at: new Date().toISOString(), ...entry });
+  const full: ErrorBufferEntry = {
+    ...entry,
+    recorded_at: new Date().toISOString(),
+  };
+  buf.push(full);
   while (buf.length > MAX_ENTRIES) buf.shift();
 }
 
