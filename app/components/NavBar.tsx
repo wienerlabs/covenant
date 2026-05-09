@@ -58,7 +58,7 @@ function prefetchBackground(href: string): void {
   img.src = href;
 }
 
-type Tab = "home" | "agents" | "create" | "poster" | "taker" | "dashboard" | "battle" | "arena" | "autonomous" | "leaderboard" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol" | "developers" | "integrate" | "profile" | "credit";
+type Tab = "home" | "agents" | "create" | "poster" | "taker" | "dashboard" | "battle" | "arena" | "autonomous" | "leaderboard" | "architecture" | "events" | "admin" | "onchain" | "disputes" | "faucet" | "api-docs" | "protocol" | "developers" | "integrate" | "profile" | "credit" | "settlement";
 
 interface NavBarProps {
   activeTab: Tab;
@@ -67,6 +67,7 @@ interface NavBarProps {
 
 // Home is reached by clicking the logo; we don't duplicate it as a tab.
 const PRIMARY_TABS: { id: Tab; label: string; href: string }[] = [
+  { id: "settlement", label: "Settlement", href: "/settlement" },
   { id: "agents", label: "Agents", href: "/agents" },
   { id: "create", label: "Create Agent", href: "/agents/create" },
   { id: "poster", label: "Post a Job", href: "/poster" },
