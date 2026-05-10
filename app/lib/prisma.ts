@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 /**
  * Prisma client tuned for serverless + Neon Postgres.
@@ -56,15 +56,18 @@ function tunedDatabaseUrl(): string | undefined {
 
 function makeClient(): PrismaClient {
   const url = tunedDatabaseUrl();
-  // `as const` so Prisma's LogLevel[] type accepts the literal tuple
-  // under strict mode. Without this, some TS configs widen the inner
-  // strings to plain `string[]` which fails the constructor signature.
-  const log = ["error", "warn"] as const;
-  return new PrismaClient(
-    url
-      ? { datasources: { db: { url } }, log: [...log] }
-      : { log: [...log] },
-  );
+  // Build the options object explicitly typed against Prisma's own
+  // PrismaClientOptions. Without the explicit annotation the conditional
+  // produces a union type that TS can't reconcile against the constructor
+  // signature under strict mode, and spread of readonly log arrays widens
+  // to `string[]` which doesn't satisfy LogLevel[].
+  const options: Prisma.PrismaClientOptions = {
+    log: ["error", "warn"],
+  };
+  if (url) {
+    options.datasources = { db: { url } };
+  }
+  return new PrismaClient(options);
 }
 
 export const prisma = globalForPrisma.prisma ?? makeClient();
