@@ -13,8 +13,15 @@
  * logger emits, plus a `recorded_at` timestamp.
  */
 
-export interface ErrorBufferEntry {
-  recorded_at: string;
+/**
+ * Required + well-known fields callers (the structured logger, tests)
+ * pass to `recordError`. The index signature lives on the wider
+ * ErrorBufferEntry below, *not* here, because `Omit<T, K>` collapses
+ * to the index signature alone when T has `[key: string]: any` —
+ * which loses the required field check at the call site. Keeping
+ * the input type free of an index signature preserves that check.
+ */
+export interface ErrorBufferInput {
   ts: string;
   level: string;
   msg: string;
@@ -24,7 +31,11 @@ export interface ErrorBufferEntry {
   err_message?: string;
   err_stack?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [key: string]: any;
+  [extraKey: string]: any;
+}
+
+export interface ErrorBufferEntry extends ErrorBufferInput {
+  recorded_at: string;
 }
 
 const MAX_ENTRIES = 100;
@@ -45,12 +56,15 @@ function getBuffer(): ErrorBufferEntry[] {
  * the structured logger only — direct calls from route handlers
  * are noisy.
  */
-export function recordError(entry: Omit<ErrorBufferEntry, "recorded_at">): void {
+export function recordError(entry: ErrorBufferInput): void {
   const buf = getBuffer();
-  const full: ErrorBufferEntry = {
+  // The spread of an index-signature type drops named-field info under TS
+  // strict mode, so we cast at construction. `entry` is statically typed
+  // as ErrorBufferInput which guarantees ts/level/msg at the call site.
+  const full = {
     ...entry,
     recorded_at: new Date().toISOString(),
-  };
+  } as ErrorBufferEntry;
   buf.push(full);
   while (buf.length > MAX_ENTRIES) buf.shift();
 }
