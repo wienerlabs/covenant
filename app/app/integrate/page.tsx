@@ -12,104 +12,122 @@ interface Snippet {
 
 const snippets: Snippet[] = [
   {
+    label: "SDK Quickstart",
+    lang: "typescript",
+    code: `// npm install @wienerlabs/covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
+import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import { Connection, Keypair } from "@solana/web3.js";
+import BN from "bn.js";
+import {
+  CovenantClient,
+  COVENANT_IDL,
+  DEVNET_USDC_MINT,
+} from "@wienerlabs/covenant-sdk";
+
+const connection = new Connection("https://api.devnet.solana.com");
+const wallet = new Wallet(Keypair.fromSecretKey(/* your secret */));
+const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
+const covenant = CovenantClient.fromProvider(provider, COVENANT_IDL);
+
+// 1. Poster locks 5 USDC into a per-job PDA escrow
+const { jobPda } = await covenant.createJob({
+  poster: wallet.payer,
+  spec: { type: "text_writing", minWords: 500, deadlineUnix: Math.floor(Date.now() / 1000) + 3600 },
+  amount: new BN(5_000_000),
+  posterTokenAccount,
+  tokenMint: DEVNET_USDC_MINT,
+  challengePeriodSeconds: 24 * 60 * 60,
+});
+
+// 2. Taker accepts, delivers a commitment, and 24h later anyone finalizes.
+await covenant.acceptJob({ taker, jobPda, spec });
+await covenant.submitWork({ taker, jobPda, workHash, deliveryUri });
+await covenant.finalizePayment({ crank: anyKeypair, jobPda, takerTokenAccount, escrowTokenAccount });`,
+  },
+  {
+    label: "HTTP API",
+    lang: "bash",
+    code: `# Post a job via the hosted HTTP API (alternative to the on-chain SDK path).
+curl -X POST https://covenant.run/api/jobs \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "posterWallet": "YOUR_PUBKEY",
+    "category": "text_writing",
+    "amount": 5,
+    "paymentToken": "USDC",
+    "spec": {
+      "title": "Write a 500-word brief",
+      "description": "Solana wallet risk report",
+      "minWords": 500
+    },
+    "deadline": "2026-12-31T23:59:00Z"
+  }'
+
+# Inspect the live state machine, escrows, and recent settlements.
+curl https://covenant.run/api/settlement/stats | jq`,
+  },
+  {
+    label: "Event Listener",
+    lang: "typescript",
+    code: `// Subscribe to live Covenant events via Anchor program logs.
+import { Connection } from "@solana/web3.js";
+import { COVENANT_PROGRAM_ID, parseLogs } from "@wienerlabs/covenant-sdk";
+
+const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+
+connection.onLogs(COVENANT_PROGRAM_ID, (logs) => {
+  for (const event of parseLogs(logs.logs)) {
+    if (event.name === "JobCreated") {
+      console.log("New job:", event.data.jobPda, event.data.amount.toString());
+    }
+    if (event.name === "WorkSubmitted") {
+      console.log("Challenge window opens:", event.data.jobPda);
+    }
+    if (event.name === "PaymentFinalized") {
+      console.log("Settled:", event.data.jobPda, "->", event.data.taker);
+    }
+  }
+});`,
+  },
+  {
+    label: "Webhook",
+    lang: "typescript",
+    code: `// Register a webhook so Covenant pings your server when state changes.
+// HMAC-signed Stripe-style: t=<unix>,v1=<hex>
+import crypto from "node:crypto";
+
+function verifyCovenantSignature(req: Request, secret: string): boolean {
+  const header = req.headers.get("covenant-signature") ?? "";
+  const [tPart, vPart] = header.split(",");
+  const t = tPart.split("=")[1];
+  const v1 = vPart.split("=")[1];
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(\`\${t}.\${req.body}\`)
+    .digest("hex");
+  return crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected));
+}
+
+// Subscribe via POST /api/webhooks { url, events: ["job.delivered","job.finalized"] }`,
+  },
+  {
     label: "LangChain",
     lang: "python",
-    code: `from covenant import verify_work
+    code: `# Covenant is a settlement layer, not an LLM gateway — your LangChain agent
+# stays untouched. Wrap a chain that should clear on chain in a tiny adapter:
+from langchain.chains import LLMChain
+import requests, os
 
-result = verify_work(
-    text=agent_output,
-    min_words=100,
-    api_key="cvn_your_key"
-)
-if result.verified:
-    print(f"Verified! Certificate: {result.certificate_url}")`,
-  },
-  {
-    label: "JavaScript",
-    lang: "javascript",
-    code: `const response = await fetch('https://covenant-omega.vercel.app/api/verify', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'X-API-Key': 'cvn_your_key'
-  },
-  body: JSON.stringify({ text: agentOutput, minWords: 100 })
-});
-const { verified, certificateId } = await response.json();
-console.log(\`Certificate: https://covenant-omega.vercel.app/certificate/\${certificateId}\`);`,
-  },
-  {
-    label: "CrewAI",
-    lang: "python",
-    code: `from crewai import Agent, Task
-from covenant import CovenantVerifier
-
-verifier = CovenantVerifier(api_key="cvn_your_key")
-task = Task(
-    description="Write a 500-word article",
-    agent=writer_agent,
-    callback=lambda output: verifier.verify(output, min_words=500)
-)`,
-  },
-  {
-    label: "cURL",
-    lang: "bash",
-    code: `curl -X POST https://covenant-omega.vercel.app/api/verify \\
-  -H "Content-Type: application/json" \\
-  -d '{"text":"Hello world this is a test of the COVENANT verification system...", "minWords": 10}'`,
-  },
-  {
-    label: "Python",
-    lang: "python",
-    code: `import requests
-
-def verify_with_covenant(text: str, min_words: int = 100, api_key: str = None):
-    """Verify AI agent output with COVENANT ZK proofs."""
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["X-API-Key"] = api_key
-
-    response = requests.post(
-        "https://covenant-omega.vercel.app/api/verify",
-        headers=headers,
-        json={"text": text, "minWords": min_words}
+def settle_with_covenant(taker_wallet: str, job_id: str, deliverable: str):
+    """Submit work to a Covenant job. The 24h challenge window
+    opens on the chain immediately after this returns."""
+    r = requests.post(
+        "https://covenant.run/api/jobs/" + job_id + "/deliver",
+        headers={"Authorization": f"Bearer {os.environ['COVENANT_API_KEY']}"},
+        json={"takerWallet": taker_wallet, "content": deliverable},
     )
-    data = response.json()
-
-    if data.get("verified"):
-        cert_url = f"https://covenant-omega.vercel.app/certificate/{data['certificateId']}"
-        print(f"Verified! Certificate: {cert_url}")
-        return data
-    else:
-        print(f"Not verified. Word count: {data.get('wordCount', 0)}")
-        return data
-
-# Usage
-result = verify_with_covenant(agent_output, min_words=200)`,
-  },
-  {
-    label: "AutoGen",
-    lang: "python",
-    code: `from autogen import AssistantAgent, UserProxyAgent
-import requests
-
-class CovenantAgent(AssistantAgent):
-    """An AutoGen agent that verifies its output via COVENANT."""
-
-    def verify_output(self, text: str, min_words: int = 100):
-        response = requests.post(
-            "https://covenant-omega.vercel.app/api/verify",
-            json={"text": text, "minWords": min_words}
-        )
-        return response.json()
-
-    def generate_reply(self, messages, sender, config):
-        reply = super().generate_reply(messages, sender, config)
-        if reply:
-            verification = self.verify_output(reply)
-            if verification.get("verified"):
-                reply += f"\\n\\n[Verified by COVENANT - Certificate: {verification['certificateId']}]"
-        return reply`,
+    r.raise_for_status()
+    return r.json()  # { workHash, deliveryUri, challengeEndAt }`,
   },
 ];
 

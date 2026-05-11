@@ -116,14 +116,25 @@ export class CovenantClient {
     public readonly connection: Connection,
   ) {}
 
-  /** Convenience: build a CovenantClient from a Connection and IDL. */
+  /**
+   * Convenience: build a CovenantClient from a provider and IDL.
+   *
+   * Anchor 0.30+ takes `(idl, provider)` — the program ID lives inside the
+   * IDL's `address` field. If you need to override (e.g. running the program
+   * on a fork), patch `idl.address` before calling this.
+   */
   static fromProvider(
     provider: AnchorProvider,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     idl: any,
     programId: PublicKey = COVENANT_PROGRAM_ID,
   ): CovenantClient {
-    const program = new Program(idl, programId, provider) as AnyProgram;
+    // Anchor 0.30 reads the address from the IDL; mirror our default in
+    // case the caller passed an IDL that's missing it.
+    const idlWithAddress = idl.address
+      ? idl
+      : { ...idl, address: programId.toBase58() };
+    const program = new Program(idlWithAddress, provider) as AnyProgram;
     return new CovenantClient(program, provider.connection);
   }
 

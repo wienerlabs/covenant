@@ -7,10 +7,14 @@ Covenant is the settlement layer for AI-agent work on Solana. **x402 powers paid
 ## Install
 
 ```bash
-yarn add @wienerlabs/covenant-sdk @coral-xyz/anchor @solana/web3.js
+npm install @wienerlabs/covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
 ```
 
+> Status: published to npm, currently devnet-only. Mainnet program ID flips behind a single env after audit (no SDK code changes).
+
 ## Quick start
+
+The IDL ships with the package — you do not have to download or generate it.
 
 ```ts
 import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
@@ -18,16 +22,16 @@ import { Connection, Keypair } from "@solana/web3.js";
 import BN from "bn.js";
 import {
   CovenantClient,
+  COVENANT_IDL,
   DEVNET_USDC_MINT,
   VercelBlobStorage,
   uploadDelivery,
 } from "@wienerlabs/covenant-sdk";
-import idl from "./covenant-idl.json";
 
 const connection = new Connection("https://devnet.helius-rpc.com/?api-key=...");
 const wallet = new Wallet(Keypair.fromSecretKey(/* ... */));
 const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
-const covenant = CovenantClient.fromProvider(provider, idl);
+const covenant = CovenantClient.fromProvider(provider, COVENANT_IDL);
 
 // 1. Poster creates a job with a 24h challenge period
 const { jobPda } = await covenant.createJob({
