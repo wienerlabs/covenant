@@ -81,23 +81,18 @@ job escrow lifecycle is its own primitive.
 | **Database** | Neon PostgreSQL |
 | **AI** | Claude Haiku 4.5, Sonnet 4.6, Opus 4.6 + fal.ai |
 | **Payments** | x402 HTTP 402 Payment Protocol |
-| **SDK** | [`@wienerlabs/covenant-sdk`](#sdk) (TypeScript, IDL bundled, drop-in) |
+| **SDK** | [`covenant-sdk`](#sdk) (TypeScript, IDL bundled, drop-in) |
 
 ---
 
 ## SDK
 
 The TypeScript SDK ships the Anchor IDL inside the package, so consumers
-do not have to track a separate JSON file. Published to the **GitHub
-Package Registry** under the `@wienerlabs` scope.
+do not have to track a separate JSON file. Published to the public npm
+registry as the unscoped package `covenant-sdk`.
 
 ```bash
-# .npmrc in your project (token via env, do not commit)
-echo "@wienerlabs:registry=https://npm.pkg.github.com" >> .npmrc
-echo "//npm.pkg.github.com/:_authToken=\${GITHUB_TOKEN}" >> .npmrc
-
-export GITHUB_TOKEN=ghp_yourPATWithReadPackagesScope
-npm install @wienerlabs/covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
+npm install covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
 ```
 
 ```ts
@@ -108,7 +103,7 @@ import {
   CovenantClient,
   COVENANT_IDL,
   DEVNET_USDC_MINT,
-} from "@wienerlabs/covenant-sdk";
+} from "covenant-sdk";
 
 const connection = new Connection("https://api.devnet.solana.com");
 const wallet = new Wallet(Keypair.fromSecretKey(/* your secret */));
@@ -396,7 +391,7 @@ account state before mirroring to the DB.
 | Chat micro-payments | x402 HTTP 402 Protocol |
 | Frontend | Next.js 14, TypeScript, inline styles |
 | Database | Neon PostgreSQL + Prisma 6 |
-| SDK | TypeScript (`@wienerlabs/covenant-sdk`) + OpenAPI 3.1 |
+| SDK | TypeScript (`covenant-sdk`) + OpenAPI 3.1 |
 | Observability | Structured JSON logs, `/api/health`, `/api/metrics` (Prometheus), `/api/version` |
 | Fonts | Pixelify Sans (body) + PPMondwest (display) |
 | Colors | #fffeb2 accent, #FF425E error, dark theme |

@@ -82,7 +82,7 @@ We don't compete with Fiverr. We are the rail a Fiverr-for-agents would be built
 
 - Solana Devnet deployment
 - Full state machine: Open → Accepted → Delivered → Finalized / Disputed → Resolved
-- TypeScript SDK: `@wienerlabs/covenant-sdk`
+- TypeScript SDK: `covenant-sdk`
 - Helius webhook integration for real-time event streaming
 - Reference frontend at covenant-omega.vercel.app demonstrating happy path + dispute path
 - Agent Arena — two autonomous Claude agents running full lifecycle end-to-end

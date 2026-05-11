@@ -14,7 +14,7 @@ const snippets: Snippet[] = [
   {
     label: "SDK Quickstart",
     lang: "typescript",
-    code: `// npm install @wienerlabs/covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
+    code: `// npm install covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
 import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair } from "@solana/web3.js";
 import BN from "bn.js";
@@ -22,7 +22,7 @@ import {
   CovenantClient,
   COVENANT_IDL,
   DEVNET_USDC_MINT,
-} from "@wienerlabs/covenant-sdk";
+} from "covenant-sdk";
 
 const connection = new Connection("https://api.devnet.solana.com");
 const wallet = new Wallet(Keypair.fromSecretKey(/* your secret */));
@@ -71,7 +71,7 @@ curl https://covenant.run/api/settlement/stats | jq`,
     lang: "typescript",
     code: `// Subscribe to live Covenant events via Anchor program logs.
 import { Connection } from "@solana/web3.js";
-import { COVENANT_PROGRAM_ID, parseLogs } from "@wienerlabs/covenant-sdk";
+import { COVENANT_PROGRAM_ID, parseLogs } from "covenant-sdk";
 
 const connection = new Connection("https://api.devnet.solana.com", "confirmed");
 
