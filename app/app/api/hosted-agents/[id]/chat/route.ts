@@ -125,7 +125,95 @@ export async function POST(
   }
 
   /* ---------------------------------------------------------------- */
-  /*  Enrich context                                                   */
+  /*  Design agent fast path                                           */
+  /*                                                                  */
+  /*  Design-category agents do NOT call the LLM. Their job is to     */
+  /*  produce an image, so we route directly to fal.ai and return the */
+  /*  generated URL embedded as a markdown image. The agent's system  */
+  /*  prompt acts as a persistent style modifier on top of the user's */
+  /*  current message, so a "minimalist logo agent" stays minimalist  */
+  /*  across every request without the user repeating it.             */
+  /* ---------------------------------------------------------------- */
+
+  if (agent.category === "design") {
+    const userWallet = walletAddress || "anonymous";
+
+    // Persist the user message so chat history is consistent with the
+    // text-agent path.
+    await prisma.chatMessage.create({
+      data: { agentId: id, userWallet, role: "user", content: message },
+    });
+
+    // Compose the image prompt from the user request + the agent's
+    // system prompt as a short style modifier. Keep both bounded to
+    // avoid blowing past fal.ai's prompt window.
+    const styleSuffix = agent.systemPrompt
+      ? `, style: ${agent.systemPrompt.replace(/\s+/g, " ").slice(0, 240)}`
+      : "";
+    const imgPrompt = `${message.slice(0, 600)}${styleSuffix}`;
+
+    let imageUrl: string | null = null;
+    let imgErr: string | null = null;
+    try {
+      const imgRes = await fetch(
+        new URL("/api/generate/image", req.url).toString(),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prompt: imgPrompt, size: "square" }),
+        },
+      );
+      if (imgRes.ok) {
+        const imgData = (await imgRes.json()) as { imageUrl?: string };
+        imageUrl = imgData.imageUrl ?? null;
+      } else {
+        const text = await imgRes.text().catch(() => "");
+        imgErr = `fal.ai responded ${imgRes.status}: ${text.slice(0, 200)}`;
+      }
+    } catch (err) {
+      imgErr = err instanceof Error ? err.message : String(err);
+    }
+
+    const response = imageUrl
+      ? `![${message.slice(0, 80)}](${imageUrl})\n\n*Prompt: ${message}*`
+      : `Image generation failed. ${imgErr ?? "Please retry."}`;
+
+    await prisma.chatMessage.create({
+      data: { agentId: id, userWallet, role: "agent", content: response },
+    });
+
+    if (walletAddress && agent.pricePerPrompt > 0) {
+      try {
+        await prisma.$transaction([
+          prisma.agentRevenue.create({
+            data: {
+              agentId: id,
+              userWallet: walletAddress,
+              amount: agent.pricePerPrompt,
+            },
+          }),
+          prisma.hostedAgent.update({
+            where: { id },
+            data: { totalRevenue: { increment: agent.pricePerPrompt } },
+          }),
+        ]);
+      } catch {
+        /* best effort */
+      }
+    }
+
+    return NextResponse.json({
+      response,
+      imageUrl,
+      mode: "image",
+      agentId: id,
+      priceCharged: agent.pricePerPrompt,
+      paymentTx: paymentTxHash || undefined,
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Enrich context (text agents only)                                */
   /* ---------------------------------------------------------------- */
 
   // Enhance system prompt with capabilities info

@@ -371,16 +371,67 @@ export default function AgentChatPage() {
     [handleSend]
   );
 
-  /* ---- Render simple markdown (bold, code, newlines) ---- */
+  /* ---- Render simple markdown (images, bold, code, newlines) ---- */
+  // Markdown image regex. We intentionally keep this strict: a line that
+  // is *only* an image becomes a block-level <img>; an image embedded
+  // mid-paragraph is rendered inline. Both work for the design-agent
+  // path which emits one image per response.
+  const MD_IMAGE = /!\[([^\]]*)\]\(([^)]+)\)/;
+
   function renderMarkdown(text: string): React.ReactNode[] {
     const parts: React.ReactNode[] = [];
     const lines = text.split("\n");
 
     lines.forEach((line, li) => {
-      // Split by bold **text** and inline `code`
-      const tokens = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+      // Block-image line: render the image and skip the rest of the
+      // bold/code processing for this line.
+      const blockMatch = line.trim().match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+      if (blockMatch) {
+        const alt = blockMatch[1];
+        const src = blockMatch[2];
+        parts.push(
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={`img-${li}`}
+            src={src}
+            alt={alt || "generated image"}
+            style={{
+              maxWidth: "100%",
+              borderRadius: "8px",
+              display: "block",
+              margin: "8px 0",
+              border: "1px solid rgba(255,254,178,0.2)",
+            }}
+          />
+        );
+        if (li < lines.length - 1) {
+          parts.push(<br key={`br-${li}`} />);
+        }
+        return;
+      }
+
+      // Inline tokens: split by image, bold, code in one pass so an
+      // image embedded mid-sentence still renders.
+      const tokens = line.split(/(!\[[^\]]*\]\([^)]+\)|\*\*[^*]+\*\*|`[^`]+`)/g);
       tokens.forEach((token, ti) => {
-        if (token.startsWith("**") && token.endsWith("**")) {
+        const inlineImg = token.match(MD_IMAGE);
+        if (inlineImg) {
+          parts.push(
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={`${li}-${ti}-img`}
+              src={inlineImg[2]}
+              alt={inlineImg[1] || "generated image"}
+              style={{
+                maxWidth: "320px",
+                borderRadius: "6px",
+                verticalAlign: "middle",
+                margin: "0 4px",
+                border: "1px solid rgba(255,254,178,0.2)",
+              }}
+            />
+          );
+        } else if (token.startsWith("**") && token.endsWith("**")) {
           parts.push(
             <strong key={`${li}-${ti}`} style={{ color: "#fffeb2" }}>
               {token.slice(2, -2)}
@@ -415,6 +466,13 @@ export default function AgentChatPage() {
 
   /* ---- Token inline cards for agent messages ---- */
   function renderMessageWithTokens(content: string): React.ReactNode {
+    // Skip token replacement entirely for messages that contain a
+    // markdown image; otherwise a token keyword inside the image URL
+    // (e.g. "USDC" in a CDN path) breaks the image render.
+    if (MD_IMAGE.test(content)) {
+      return <>{renderMarkdown(content)}</>;
+    }
+
     const TOKEN_LOGOS: Record<string, string> = {
       "SOL": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
       "USDC": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png",
