@@ -6,7 +6,7 @@
  * raw file, and under this import for ergonomic TS use.
  *
  * ```ts
- * import { CovenantClient, COVENANT_IDL } from "@wienerlabs/covenant-sdk";
+ * import { CovenantClient, COVENANT_IDL } from "covenant-sdk";
  *
  * const covenant = CovenantClient.fromProvider(provider, COVENANT_IDL);
  * ```

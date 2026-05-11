@@ -1,5 +1,5 @@
 {
-  "name": "@wienerlabs/covenant-sdk",
+  "name": "covenant-sdk",
   "version": "0.3.0",
   "description": "TypeScript SDK for the Covenant optimistic settlement protocol on Solana — escrow, dispute, and factoring primitives for AI agent work.",
   "license": "Apache-2.0",
@@ -37,7 +37,7 @@
   },
   "publishConfig": {
     "access": "public",
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org"
   },
   "repository": {
     "type": "git",

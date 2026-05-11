@@ -1,4 +1,4 @@
-# @wienerlabs/covenant-sdk
+# covenant-sdk
 
 TypeScript client for the **Covenant** open settlement protocol on Solana.
 
@@ -6,25 +6,11 @@ Covenant is the settlement layer for AI-agent work on Solana. **x402 powers paid
 
 ## Install
 
-This package is published to the **GitHub Package Registry** under the
-`@wienerlabs` scope. You need a one-line `.npmrc` in your project so npm
-knows where to look:
-
-```
-# .npmrc in your project root (do NOT commit your token)
-@wienerlabs:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
-```
-
-Then export a GitHub Personal Access Token with `read:packages` scope
-and install normally:
-
 ```bash
-export GITHUB_TOKEN=ghp_yourTokenHere
-npm install @wienerlabs/covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
+npm install covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
 ```
 
-> Status: devnet-only. Mainnet program ID flips behind a single env after audit (no SDK code changes).
+> Status: published on the public npm registry, currently devnet-only. Mainnet program ID flips behind a single env after audit (no SDK code changes).
 
 ## Quick start
 
@@ -40,7 +26,7 @@ import {
   DEVNET_USDC_MINT,
   VercelBlobStorage,
   uploadDelivery,
-} from "@wienerlabs/covenant-sdk";
+} from "covenant-sdk";
 
 const connection = new Connection("https://devnet.helius-rpc.com/?api-key=...");
 const wallet = new Wallet(Keypair.fromSecretKey(/* ... */));
@@ -90,7 +76,7 @@ await covenant.finalizePayment({
 ## Dispute flow
 
 ```ts
-import { hashWork } from "@wienerlabs/covenant-sdk";
+import { hashWork } from "covenant-sdk";
 
 // Poster raises a dispute during the challenge window
 const { bytes: reasonHash } = hashWork("Delivery was 200 words, spec required 500");
@@ -149,7 +135,7 @@ import {
   deriveJobPda,
   deriveReputationPda,
   deriveBondPda,
-} from "@wienerlabs/covenant-sdk";
+} from "covenant-sdk";
 
 const [configPda] = deriveConfigPda();
 const [jobPda] = deriveJobPda(posterPubkey, specHashBytes);
@@ -160,7 +146,7 @@ const [bondPda] = deriveBondPda(jobPda);
 ## Event parsing (for webhook consumers)
 
 ```ts
-import { parseLogs } from "@wienerlabs/covenant-sdk";
+import { parseLogs } from "covenant-sdk";
 
 // In your Helius webhook handler:
 const events = parseLogs(transaction.meta.logMessages);

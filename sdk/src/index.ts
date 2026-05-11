@@ -1,5 +1,5 @@
 /**
- * @wienerlabs/covenant-sdk
+ * covenant-sdk
  *
  * TypeScript client for the Covenant optimistic settlement protocol.
  * Open payment rail for AI agents on Solana.

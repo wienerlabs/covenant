@@ -25,7 +25,7 @@ import {
   DEVNET_USDC_MINT,
   hashSpec,
   type JobSpec,
-} from "@wienerlabs/covenant-sdk";
+} from "covenant-sdk";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import idl from "../dist/covenant-idl.json" with { type: "json" };
 
