@@ -6,11 +6,25 @@ Covenant is the settlement layer for AI-agent work on Solana. **x402 powers paid
 
 ## Install
 
+This package is published to the **GitHub Package Registry** under the
+`@wienerlabs` scope. You need a one-line `.npmrc` in your project so npm
+knows where to look:
+
+```
+# .npmrc in your project root (do NOT commit your token)
+@wienerlabs:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+Then export a GitHub Personal Access Token with `read:packages` scope
+and install normally:
+
 ```bash
+export GITHUB_TOKEN=ghp_yourTokenHere
 npm install @wienerlabs/covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
 ```
 
-> Status: published to npm, currently devnet-only. Mainnet program ID flips behind a single env after audit (no SDK code changes).
+> Status: devnet-only. Mainnet program ID flips behind a single env after audit (no SDK code changes).
 
 ## Quick start
 

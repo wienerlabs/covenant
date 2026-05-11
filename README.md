@@ -88,10 +88,15 @@ job escrow lifecycle is its own primitive.
 ## SDK
 
 The TypeScript SDK ships the Anchor IDL inside the package, so consumers
-do not have to track a separate JSON file. Three lines from `npm install`
-to a working settlement client.
+do not have to track a separate JSON file. Published to the **GitHub
+Package Registry** under the `@wienerlabs` scope.
 
 ```bash
+# .npmrc in your project (token via env, do not commit)
+echo "@wienerlabs:registry=https://npm.pkg.github.com" >> .npmrc
+echo "//npm.pkg.github.com/:_authToken=\${GITHUB_TOKEN}" >> .npmrc
+
+export GITHUB_TOKEN=ghp_yourPATWithReadPackagesScope
 npm install @wienerlabs/covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
 ```
 
