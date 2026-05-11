@@ -670,40 +670,43 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
               </div>
             </div>
 
-            {/* Min Words */}
-            <div>
-              <label style={labelStyle}>Min Words</label>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                <input
-                  type="range"
-                  min={50}
-                  max={1000}
-                  step={10}
-                  value={data.minWords}
-                  onChange={(e) => setData((d) => ({ ...d, minWords: parseInt(e.target.value) }))}
-                  style={{ flex: 1, accentColor: isDark ? "#ffffff" : "#000000" }}
-                />
-                <input
-                  type="number"
-                  value={data.minWords}
-                  onChange={(e) => setData((d) => ({ ...d, minWords: parseInt(e.target.value) || 50 }))}
-                  min={50}
-                  max={1000}
-                  style={{
-                    width: "60px",
-                    padding: "6px 8px",
-                    fontSize: "13px",
-                    fontFamily: "inherit",
-                    borderRadius: "6px",
-                    border: `1px solid ${cardBorder}`,
-                    backgroundColor: cardBg,
-                    color: textColor,
-                    outline: "none",
-                    textAlign: "center",
-                  }}
-                />
+            {/* Min Words — only for text-based categories. Design deliverables are
+                images, so a word count is meaningless there. */}
+            {data.category !== "design" && (
+              <div>
+                <label style={labelStyle}>Min Words</label>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input
+                    type="range"
+                    min={50}
+                    max={1000}
+                    step={10}
+                    value={data.minWords}
+                    onChange={(e) => setData((d) => ({ ...d, minWords: parseInt(e.target.value) }))}
+                    style={{ flex: 1, accentColor: isDark ? "#ffffff" : "#000000" }}
+                  />
+                  <input
+                    type="number"
+                    value={data.minWords}
+                    onChange={(e) => setData((d) => ({ ...d, minWords: parseInt(e.target.value) || 50 }))}
+                    min={50}
+                    max={1000}
+                    style={{
+                      width: "60px",
+                      padding: "6px 8px",
+                      fontSize: "13px",
+                      fontFamily: "inherit",
+                      borderRadius: "6px",
+                      border: `1px solid ${cardBorder}`,
+                      backgroundColor: cardBg,
+                      color: textColor,
+                      outline: "none",
+                      textAlign: "center",
+                    }}
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Deadline */}
             <div>
@@ -821,10 +824,17 @@ export default function JobWizard({ onComplete, variant = "dark" }: JobWizardPro
                   <span style={{ fontSize: "11px", color: mutedText }}>{data.paymentToken}</span>
                 </div>
               </div>
-              <div>
-                <div style={labelStyle}>Min Words</div>
-                <div style={{ fontSize: "13px", color: textColor }}>{data.minWords}</div>
-              </div>
+              {data.category === "design" ? (
+                <div>
+                  <div style={labelStyle}>Deliverable</div>
+                  <div style={{ fontSize: "13px", color: textColor }}>Image</div>
+                </div>
+              ) : (
+                <div>
+                  <div style={labelStyle}>Min Words</div>
+                  <div style={{ fontSize: "13px", color: textColor }}>{data.minWords}</div>
+                </div>
+              )}
               <div>
                 <div style={labelStyle}>Deadline</div>
                 <div style={{ fontSize: "13px", color: textColor }}>
