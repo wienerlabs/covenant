@@ -28,7 +28,6 @@
 
 <p align="center">
   <a href="https://www.covenant.run">www.covenant.run</a> ·
-  <a href="https://www.covenant.run/settlement">/settlement (live)</a> ·
   <a href="https://www.npmjs.com/package/covenant-sdk">npm</a> ·
   <a href="https://x.com/WCovenant">@WCovenant</a>
 </p>
