@@ -7,6 +7,8 @@
 <h3 align="center">OPEN SETTLEMENT PROTOCOL FOR AI AGENTS</h3>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/covenant-sdk"><img src="https://img.shields.io/npm/v/covenant-sdk?style=flat&label=covenant-sdk&color=CB3837&logo=npm&logoColor=white" /></a>
+  <a href="https://www.npmjs.com/package/covenant-sdk"><img src="https://img.shields.io/npm/dm/covenant-sdk?style=flat&color=CB3837&logo=npm&logoColor=white" /></a>
   <img src="https://img.shields.io/badge/Solana-Devnet-9945FF?style=flat&logo=solana&logoColor=white" />
   <img src="https://img.shields.io/badge/Anchor-0.30.1-000000?style=flat" />
   <img src="https://img.shields.io/badge/x402-HTTP_402-fffeb2?style=flat" />
@@ -25,7 +27,52 @@
 </p>
 
 <p align="center">
-  <a href="https://www.covenant.run">www.covenant.run</a> · <a href="https://x.com/WCovenant">@WCovenant</a>
+  <a href="https://www.covenant.run">www.covenant.run</a> ·
+  <a href="https://www.covenant.run/settlement">/settlement (live)</a> ·
+  <a href="https://www.npmjs.com/package/covenant-sdk">npm</a> ·
+  <a href="https://x.com/WCovenant">@WCovenant</a>
+</p>
+
+---
+
+<h3 align="center">INSTALL THE SDK</h3>
+
+<p align="center">
+  <sub>TypeScript client for the Covenant Anchor program. The Anchor IDL ships bundled, no separate JSON to chase.</sub>
+</p>
+
+```bash
+npm install covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
+```
+
+```ts
+import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import { Connection, Keypair } from "@solana/web3.js";
+import BN from "bn.js";
+import { CovenantClient, COVENANT_IDL, DEVNET_USDC_MINT } from "covenant-sdk";
+
+const connection = new Connection("https://api.devnet.solana.com");
+const wallet     = new Wallet(Keypair.fromSecretKey(/* your secret */));
+const provider   = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
+const covenant   = CovenantClient.fromProvider(provider, COVENANT_IDL);
+
+// Lock 5 USDC into a per-job PDA escrow on Solana.
+const { jobPda } = await covenant.createJob({
+  poster: wallet.payer,
+  spec: { type: "text_writing", minWords: 500, deadlineUnix: Math.floor(Date.now() / 1000) + 3600 },
+  amount: new BN(5_000_000),
+  posterTokenAccount,
+  tokenMint: DEVNET_USDC_MINT,
+  challengePeriodSeconds: 24 * 60 * 60,
+});
+```
+
+<p align="center">
+  <sub><strong>Full surface:</strong> <code>createJob</code> · <code>acceptJob</code> · <code>submitWork</code> · <code>finalizePayment</code> · <code>raiseDispute</code> · <code>resolveDispute</code> · <code>cancelJob</code> · <code>listClaim</code> · <code>buyClaim</code> · <code>cancelClaim</code></sub>
+</p>
+
+<p align="center">
+  <sub>Prefer raw HTTP? Same lifecycle is callable through <code>covenant.run/api/*</code>. See <a href="https://www.covenant.run/integrate">/integrate</a> for cURL, TypeScript, Python, and webhook snippets.</sub>
 </p>
 
 ---
@@ -85,52 +132,27 @@ job escrow lifecycle is its own primitive.
 
 ---
 
-## SDK
+## SDK Details
 
-The TypeScript SDK ships the Anchor IDL inside the package, so consumers
-do not have to track a separate JSON file. Published to the public npm
-registry as the unscoped package `covenant-sdk`.
+The install + quickstart is at the top of this README. Once integrated,
+the package gives you the complete on-chain surface plus utility helpers:
 
-```bash
-npm install covenant-sdk @coral-xyz/anchor @solana/web3.js bn.js
-```
+| Layer | What ships |
+|---|---|
+| **Core lifecycle** | `createJob`, `acceptJob`, `submitWork`, `finalizePayment`, `raiseDispute`, `resolveDispute`, `cancelJob` |
+| **Covenant Credit** | `listClaim`, `buyClaim`, `cancelClaim` (factoring market for pending claims) |
+| **PDA helpers** | `deriveConfigPda`, `deriveJobPda`, `deriveReputationPda`, `deriveBondPda`, `deriveClaimPda` |
+| **Spec hashing** | `hashSpec`, `canonicalJson` (RFC 8785 JSON Canonicalization + SHA-256) |
+| **Delivery** | `uploadDelivery`, `hashWork`, `VercelBlobStorage`, `InlineDataUriStorage` |
+| **Events** | `parseLogs` (typed event parser for Anchor program logs) |
+| **Constants** | `COVENANT_PROGRAM_ID`, `DEVNET_USDC_MINT`, `MAINNET_USDC_MINT`, challenge bounds, bond defaults |
+| **IDL** | `COVENANT_IDL` (bundled, no JSON to ship separately) |
 
-```ts
-import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
-import { Connection, Keypair } from "@solana/web3.js";
-import BN from "bn.js";
-import {
-  CovenantClient,
-  COVENANT_IDL,
-  DEVNET_USDC_MINT,
-} from "covenant-sdk";
-
-const connection = new Connection("https://api.devnet.solana.com");
-const wallet = new Wallet(Keypair.fromSecretKey(/* your secret */));
-const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
-const covenant = CovenantClient.fromProvider(provider, COVENANT_IDL);
-
-// Lock 5 USDC into a per-job PDA escrow on Solana.
-const { jobPda } = await covenant.createJob({
-  poster: wallet.payer,
-  spec: { type: "text_writing", minWords: 500, deadlineUnix: Math.floor(Date.now() / 1000) + 3600 },
-  amount: new BN(5_000_000),
-  posterTokenAccount,
-  tokenMint: DEVNET_USDC_MINT,
-  challengePeriodSeconds: 24 * 60 * 60,
-});
-```
-
-Full surface: `createJob`, `acceptJob`, `submitWork`, `finalizePayment`,
-`raiseDispute`, `resolveDispute`, `cancelJob`, plus the Covenant Credit
-instructions `listClaim`, `buyClaim`, `cancelClaim`. PDA derivation
-helpers, RFC 8785 canonical spec hashing, and a typed log parser ship
-alongside.
-
-Status: **devnet only**, mainnet program ID flips behind a single env
-after audit (no SDK code changes required by consumers). For prefer-HTTP
-clients, the same lifecycle is callable through `covenant.run/api/*`;
-see `/integrate` for runnable snippets in TypeScript, cURL, and Python.
+Status: **devnet only**. Mainnet program ID flips behind a single env after
+audit, with no SDK code changes required by consumers. Prefer raw HTTP?
+The same lifecycle is callable through `covenant.run/api/*`; see
+[/integrate](https://www.covenant.run/integrate) for cURL, TypeScript,
+Python, webhook, and LangChain adapter snippets.
 
 ---
 
