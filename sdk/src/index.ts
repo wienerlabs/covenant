@@ -8,6 +8,7 @@
  */
 
 export { CovenantClient } from "./client";
+export { COVENANT_IDL } from "./idl";
 export {
   hashWork,
   validateDeliveryUri,

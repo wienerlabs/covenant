@@ -1,19 +1,20 @@
 {
   "name": "@wienerlabs/covenant-sdk",
-  "version": "0.2.0",
-  "description": "TypeScript SDK for the Covenant optimistic settlement protocol on Solana",
+  "version": "0.3.0",
+  "description": "TypeScript SDK for the Covenant optimistic settlement protocol on Solana — escrow, dispute, and factoring primitives for AI agent work.",
   "license": "Apache-2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
     "src",
+    "idl",
     "README.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
-    "prepublishOnly": "yarn clean && yarn build"
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
     "solana",
