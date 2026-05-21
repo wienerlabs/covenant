@@ -6,6 +6,7 @@ import NavBar from "@/components/NavBar";
 import LiveFeed from "@/components/LiveFeed";
 import GasTracker from "@/components/GasTracker";
 import OnboardingWizard from "@/components/OnboardingWizard";
+import StatusBanner from "@/components/StatusBanner";
 import { USDC_LOGO_URL } from "@/lib/constants";
 
 interface Stats {
@@ -143,6 +144,14 @@ export default function LandingPage() {
           flexDirection: "column",
         }}
       >
+        {/* Incident banner. Dismissible per user via localStorage. Bump the
+            storageKey when a new incident needs to re-surface for users who
+            already dismissed the prior one. */}
+        <StatusBanner
+          storageKey="covenant.status.2026-05-railway-neon"
+          message="Heads up: brief service disruption while we cycle Railway and our Neon database. Some pages may load slowly or show stale data."
+        />
+
         {/* Top bar */}
         <NavBar activeTab="home" variant="transparent" />
 
