@@ -370,12 +370,6 @@ function SettlementTicker({ items }: { items: RecentSettlement[] }) {
           </span>
         )}
       </div>
-      <style jsx>{`
-        @keyframes covenant-ticker {
-          from { transform: translateX(0); }
-          to { transform: translateX(-50%); }
-        }
-      `}</style>
     </div>
   );
 }
