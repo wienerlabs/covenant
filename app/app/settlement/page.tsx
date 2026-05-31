@@ -280,6 +280,29 @@ export default function SettlementPage() {
             <LifecycleFlow buckets={stats?.bucketCounts ?? null} total={totalJobs} />
           </div>
 
+          {/* Challenge timeline board (departures-board) */}
+          <div style={{ marginBottom: "16px" }}>
+            <ChallengeTimeline jobs={stats?.inChallengeJobs ?? []} loading={loading} />
+          </div>
+
+          {/* Activity heatmap */}
+          <div style={{ marginBottom: "16px" }}>
+            <ActivityHeatmap cells={stats?.heatmap ?? []} loading={loading} />
+          </div>
+
+          {/* Category bars + top earners */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.3fr 1fr",
+              gap: "16px",
+              marginBottom: "16px",
+            }}
+          >
+            <CategoryBars categories={stats?.categoryBreakdown ?? []} loading={loading} />
+            <TopEarners earners={stats?.topEarners ?? []} loading={loading} />
+          </div>
+
           {/* Bottom grid: challenge window + recent settlements */}
           <div
             style={{
@@ -688,6 +711,226 @@ function RecentPanel({ items, loading }: { items: RecentSettlement[]; loading: b
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Challenge timeline (departures board)                              */
+/* ------------------------------------------------------------------ */
+
+function ChallengeTimeline({ jobs, loading }: { jobs: InChallengeJob[]; loading: boolean }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const WINDOW = 24 * 3600 * 1000; // full challenge window for the scale
+  const rows = jobs
+    .map((j) => ({ j, endAt: j.challengeEndAt ? new Date(j.challengeEndAt).getTime() : 0 }))
+    .filter((r) => r.endAt > 0)
+    .sort((a, b) => a.endAt - b.endAt);
+
+  return (
+    <div style={card}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "14px" }}>
+        <div style={label}>Challenge window timeline</div>
+        <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
+          left edge = release now · right edge = full 24h remaining
+        </div>
+      </div>
+      {loading ? (
+        <Skeleton rows={4} />
+      ) : rows.length === 0 ? (
+        <Empty text="No jobs counting down right now." />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+          {rows.map(({ j, endAt }) => {
+            const remaining = Math.max(0, endAt - now);
+            const frac = Math.min(1, remaining / WINDOW);
+            const mins = Math.floor(remaining / 60000);
+            const hh = Math.floor(mins / 60);
+            const mm = mins % 60;
+            const urgent = remaining < 2 * 3600 * 1000;
+            return (
+              <Link
+                key={j.id}
+                href={`/job/${j.id}`}
+                style={{ display: "grid", gridTemplateColumns: "150px 1fr 70px", gap: "10px", alignItems: "center", textDecoration: "none", color: "inherit" }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: "11px", color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {j.title ?? j.category}
+                  </div>
+                  <div style={{ fontSize: "9px", color: ACCENT }}>
+                    {j.paymentToken === "USDC" ? `$${j.amount.toFixed(2)}` : `${j.amount} ${j.paymentToken}`}
+                  </div>
+                </div>
+                <div style={{ position: "relative", height: "16px", borderRadius: "4px", backgroundColor: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: `${frac * 100}%`,
+                      backgroundColor: urgent ? "rgba(239,68,68,0.45)" : "rgba(56,189,248,0.4)",
+                      borderRight: `2px solid ${urgent ? "#ef4444" : "#38bdf8"}`,
+                      transition: "width 1s linear",
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: "11px", fontFamily: "monospace", color: urgent ? "#ef4444" : "rgba(255,255,255,0.7)", textAlign: "right" }}>
+                  {hh > 0 ? `${hh}h ${mm}m` : `${mm}m`}
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Activity heatmap (dow x hour)                                      */
+/* ------------------------------------------------------------------ */
+
+const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function ActivityHeatmap({ cells, loading }: { cells: HeatCell[]; loading: boolean }) {
+  const grid: number[][] = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
+  let max = 0;
+  for (const c of cells) {
+    if (c.dow >= 0 && c.dow < 7 && c.hour >= 0 && c.hour < 24) {
+      grid[c.dow][c.hour] = c.count;
+      if (c.count > max) max = c.count;
+    }
+  }
+  const intensity = (v: number): string => {
+    if (v <= 0 || max === 0) return "rgba(255,255,255,0.04)";
+    const a = 0.15 + 0.75 * (v / max);
+    return `rgba(255,254,178,${a.toFixed(2)})`;
+  };
+
+  return (
+    <div style={card}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "14px" }}>
+        <div style={label}>Settlement activity · last 30 days</div>
+        <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>the agent economy runs 24/7</div>
+      </div>
+      {loading ? (
+        <Skeleton rows={4} />
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "3px", minWidth: "640px" }}>
+            {/* hour axis */}
+            <div style={{ display: "grid", gridTemplateColumns: "34px repeat(24, 1fr)", gap: "3px", marginBottom: "2px" }}>
+              <div />
+              {Array.from({ length: 24 }).map((_, h) => (
+                <div key={h} style={{ fontSize: "7px", color: "rgba(255,255,255,0.3)", textAlign: "center" }}>
+                  {h % 6 === 0 ? `${h}` : ""}
+                </div>
+              ))}
+            </div>
+            {grid.map((rowArr, dow) => (
+              <div key={dow} style={{ display: "grid", gridTemplateColumns: "34px repeat(24, 1fr)", gap: "3px", alignItems: "center" }}>
+                <div style={{ fontSize: "8px", color: "rgba(255,255,255,0.4)" }}>{DOW_LABELS[dow]}</div>
+                {rowArr.map((v, h) => (
+                  <div
+                    key={h}
+                    title={`${DOW_LABELS[dow]} ${h}:00 · ${v} settlements`}
+                    style={{ aspectRatio: "1", borderRadius: "2px", backgroundColor: intensity(v), minHeight: "12px" }}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Category breakdown bars                                            */
+/* ------------------------------------------------------------------ */
+
+function CategoryBars({ categories, loading }: { categories: CategoryStat[]; loading: boolean }) {
+  const cats = categories.filter((c) => c.settledUsdc > 0 || c.lockedUsdc > 0).sort((a, b) => b.settledUsdc + b.lockedUsdc - (a.settledUsdc + a.lockedUsdc));
+  const maxV = Math.max(1, ...cats.map((c) => c.settledUsdc + c.lockedUsdc));
+
+  return (
+    <div style={card}>
+      <div style={{ ...label, marginBottom: "14px" }}>Volume by category</div>
+      {loading ? (
+        <Skeleton rows={5} />
+      ) : cats.length === 0 ? (
+        <Empty text="No category volume yet." />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {cats.map((c) => {
+            const settledW = (c.settledUsdc / maxV) * 100;
+            const lockedW = (c.lockedUsdc / maxV) * 100;
+            return (
+              <div key={c.category}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginBottom: "4px" }}>
+                  <span style={{ color: "rgba(255,255,255,0.7)", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ width: "8px", height: "8px", borderRadius: "2px", backgroundColor: colorFor(c.category) }} />
+                    {c.category}
+                  </span>
+                  <span style={{ color: "rgba(255,255,255,0.5)" }}>
+                    <strong style={{ color: ACCENT }}>{usd(c.settledUsdc)}</strong> settled · {usd(c.lockedUsdc)} locked
+                  </span>
+                </div>
+                <div style={{ display: "flex", height: "8px", borderRadius: "4px", overflow: "hidden", backgroundColor: "rgba(255,255,255,0.05)" }}>
+                  <div style={{ width: `${settledW}%`, backgroundColor: colorFor(c.category) }} />
+                  <div style={{ width: `${lockedW}%`, backgroundColor: colorFor(c.category), opacity: 0.3 }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Top earners leaderboard                                            */
+/* ------------------------------------------------------------------ */
+
+function TopEarners({ earners, loading }: { earners: TopEarner[]; loading: boolean }) {
+  const max = Math.max(1, ...earners.map((e) => e.earnedUsdc));
+  return (
+    <div style={card}>
+      <div style={{ ...label, marginBottom: "14px" }}>Top earning agents</div>
+      {loading ? (
+        <Skeleton rows={5} />
+      ) : earners.length === 0 ? (
+        <Empty text="No agent earnings yet." />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {earners.map((e, i) => (
+            <div key={e.wallet} style={{ display: "grid", gridTemplateColumns: "20px 1fr 70px", gap: "8px", alignItems: "center" }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: i < 3 ? ACCENT : "rgba(255,255,255,0.35)", textAlign: "center" }}>
+                {i + 1}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: "11px", fontFamily: "monospace", color: "#fff" }}>{shortWallet(e.wallet)}</div>
+                <div style={{ height: "4px", marginTop: "3px", borderRadius: "2px", backgroundColor: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+                  <div style={{ width: `${(e.earnedUsdc / max) * 100}%`, height: "100%", backgroundColor: ACCENT }} />
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "12px", color: ACCENT, fontWeight: 700 }}>{usd(e.earnedUsdc)}</div>
+                <div style={{ fontSize: "8px", color: "rgba(255,255,255,0.4)" }}>{e.jobsCompleted} jobs</div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
