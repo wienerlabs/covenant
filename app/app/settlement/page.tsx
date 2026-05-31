@@ -303,17 +303,39 @@ export default function SettlementPage() {
             <TopEarners earners={stats?.topEarners ?? []} loading={loading} />
           </div>
 
-          {/* Bottom grid: challenge window + recent settlements */}
+          {/* Dispute panel + protocol fee counter */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.3fr 1fr",
+              gap: "16px",
+              marginBottom: "16px",
+            }}
+          >
+            <DisputePanel buckets={stats?.bucketCounts ?? null} disputeRate={stats?.disputeRate ?? 0} loading={loading} />
+            <ProtocolFeeCounter fee={stats?.protocolFeeUsdc ?? 0} settled={stats?.totalSettledUsdc ?? 0} loading={loading} />
+          </div>
+
+          {/* Agent network graph */}
+          <div style={{ marginBottom: "16px" }}>
+            <AgentNetworkGraph edges={stats?.networkEdges ?? []} loading={loading} />
+          </div>
+
+          {/* Challenge window + recent settlements */}
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
               gap: "16px",
+              marginBottom: "16px",
             }}
           >
             <ChallengePanel jobs={stats?.inChallengeJobs ?? []} count={stats?.inChallengeNow ?? 0} loading={loading} />
             <RecentPanel items={stats?.recentSettlements ?? []} loading={loading} />
           </div>
+
+          {/* Job inspector (mini block explorer) */}
+          <JobInspector />
         </div>
       </div>
     </div>
@@ -927,6 +949,335 @@ function TopEarners({ earners, loading }: { earners: TopEarner[]; loading: boole
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Dispute & resolution panel                                         */
+/* ------------------------------------------------------------------ */
+
+function DisputePanel({ buckets, disputeRate, loading }: { buckets: BucketCounts | null; disputeRate: number; loading: boolean }) {
+  const finalized = buckets?.Finalized ?? 0;
+  const resolved = buckets?.Resolved ?? 0;
+  const disputed = buckets?.Disputed ?? 0;
+  const settledTotal = finalized + resolved + disputed;
+  const autoPct = settledTotal > 0 ? finalized / settledTotal : 0;
+  const resolvedPct = settledTotal > 0 ? resolved / settledTotal : 0;
+  const openDisputePct = settledTotal > 0 ? disputed / settledTotal : 0;
+
+  return (
+    <div style={card}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "14px" }}>
+        <div style={label}>Disputes & resolution</div>
+        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>
+          dispute rate <strong style={{ color: disputeRate > 0.1 ? "#ef4444" : "#22c55e" }}>{pct(disputeRate)}</strong>
+        </div>
+      </div>
+      {loading ? (
+        <Skeleton rows={3} />
+      ) : (
+        <>
+          {/* outcome bar */}
+          <div style={{ display: "flex", height: "20px", borderRadius: "6px", overflow: "hidden", marginBottom: "16px", backgroundColor: "rgba(255,255,255,0.05)" }}>
+            <div style={{ width: `${autoPct * 100}%`, backgroundColor: "#22c55e" }} title={`Auto-released ${finalized}`} />
+            <div style={{ width: `${resolvedPct * 100}%`, backgroundColor: "#a855f7" }} title={`Multisig resolved ${resolved}`} />
+            <div style={{ width: `${openDisputePct * 100}%`, backgroundColor: "#ef4444" }} title={`Open disputes ${disputed}`} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+            <Outcome color="#22c55e" label="Auto-released" value={finalized} sub="silent window" />
+            <Outcome color="#a855f7" label="Multisig resolved" value={resolved} sub="2-of-3 committee" />
+            <Outcome color="#ef4444" label="Open disputes" value={disputed} sub="awaiting committee" />
+          </div>
+          <div style={{ marginTop: "14px", fontSize: "10px", color: "rgba(255,255,255,0.4)", lineHeight: 1.5 }}>
+            Most jobs settle on the optimistic path. The 2-of-3 multisig only touches the cold path; a frivolous dispute burns the loser&apos;s bond and reputation.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Outcome({ color, label: l, value, sub }: { color: string; label: string; value: number; sub: string }) {
+  return (
+    <div style={{ padding: "10px", borderRadius: "8px", backgroundColor: "rgba(0,0,0,0.25)", border: `1px solid ${color}55` }}>
+      <div style={{ fontSize: "20px", fontWeight: 800, color: "#fff" }}>{value}</div>
+      <div style={{ fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.06em", color, fontWeight: 600, marginTop: "2px" }}>{l}</div>
+      <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.4)", marginTop: "2px" }}>{sub}</div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Protocol fee counter (animated)                                    */
+/* ------------------------------------------------------------------ */
+
+function ProtocolFeeCounter({ fee, settled, loading }: { fee: number; settled: number; loading: boolean }) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const start = performance.now();
+    const from = shown;
+    const to = fee;
+    const dur = 900;
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - start) / dur);
+      const eased = 1 - Math.pow(1 - k, 3);
+      setShown(from + (to - from) * eased);
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fee]);
+
+  return (
+    <div style={{ ...card, display: "flex", flexDirection: "column", justifyContent: "center", background: "linear-gradient(135deg, rgba(20,241,149,0.08), rgba(255,255,255,0.03))" }}>
+      <div style={{ ...label, marginBottom: "10px" }}>Protocol fee accrued</div>
+      {loading ? (
+        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>Loading...</div>
+      ) : (
+        <>
+          <div style={{ fontSize: "34px", fontWeight: 800, color: "#14f195", fontFamily: "monospace", letterSpacing: "-0.02em" }}>
+            ${shown.toFixed(4)}
+          </div>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", marginTop: "6px", lineHeight: 1.5 }}>
+            <strong style={{ color: "#fff" }}>20 bps</strong> on {usd(settled)} settled. The fee is the business; no token at launch.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Agent network graph (circular layout)                              */
+/* ------------------------------------------------------------------ */
+
+function AgentNetworkGraph({ edges, loading }: { edges: NetworkEdge[]; loading: boolean }) {
+  const { nodes, links } = useMemo(() => {
+    const vol = new Map<string, number>();
+    for (const e of edges) {
+      vol.set(e.poster, (vol.get(e.poster) ?? 0) + e.amount);
+      vol.set(e.taker, (vol.get(e.taker) ?? 0) + e.amount);
+    }
+    const top = [...vol.entries()].sort((a, b) => b[1] - a[1]).slice(0, 28).map(([w]) => w);
+    const idx = new Map(top.map((w, i) => [w, i]));
+    const W = 900;
+    const H = 380;
+    const cx = W / 2;
+    const cy = H / 2;
+    const R = 150;
+    const maxVol = Math.max(1, ...top.map((w) => vol.get(w) ?? 0));
+    const nodes = top.map((w, i) => {
+      const a = (i / top.length) * Math.PI * 2 - Math.PI / 2;
+      return {
+        w,
+        x: cx + R * Math.cos(a),
+        y: cy + R * Math.sin(a),
+        r: 3 + 7 * Math.sqrt((vol.get(w) ?? 0) / maxVol),
+      };
+    });
+    const links = edges
+      .filter((e) => idx.has(e.poster) && idx.has(e.taker) && e.poster !== e.taker)
+      .slice(0, 80)
+      .map((e) => ({ a: nodes[idx.get(e.poster)!], b: nodes[idx.get(e.taker)!], amount: e.amount }));
+    return { nodes, links, W, H, cx, cy };
+  }, [edges]);
+
+  const W = 900;
+  const H = 380;
+
+  return (
+    <div style={card}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }}>
+        <div style={label}>Agent settlement network</div>
+        <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>nodes = wallets · edges = settlements · size = volume</div>
+      </div>
+      {loading ? (
+        <Skeleton rows={5} />
+      ) : nodes.length === 0 ? (
+        <Empty text="No settlement edges yet." />
+      ) : (
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="xMidYMid meet">
+          {links.map((l, i) => (
+            <line
+              key={i}
+              x1={l.a.x}
+              y1={l.a.y}
+              x2={l.b.x}
+              y2={l.b.y}
+              stroke="rgba(255,254,178,0.12)"
+              strokeWidth={Math.min(2.5, 0.4 + l.amount / 20)}
+            />
+          ))}
+          {nodes.map((n, i) => (
+            <g key={i}>
+              <circle cx={n.x} cy={n.y} r={n.r + 3} fill="rgba(255,254,178,0.08)" />
+              <circle cx={n.x} cy={n.y} r={n.r} fill={ACCENT}>
+                <animate attributeName="opacity" values="0.6;1;0.6" dur={`${2 + (i % 5) * 0.4}s`} repeatCount="indefinite" />
+              </circle>
+            </g>
+          ))}
+        </svg>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Job inspector (mini block explorer)                                */
+/* ------------------------------------------------------------------ */
+
+interface InspectorJob {
+  id: string;
+  pda: string | null;
+  status: string;
+  amount: number;
+  paymentToken: string;
+  category: string;
+  posterWallet: string;
+  takerWallet: string | null;
+  createdAt: string;
+  deliveredAt: string | null;
+  challengeEndAt: string | null;
+  txHash: string | null;
+  specJson?: Record<string, unknown>;
+  delivery?: { workHash?: string; deliveryUri?: string; txHash?: string | null } | null;
+  dispute?: { resolution?: string } | null;
+}
+
+function JobInspector() {
+  const [query, setQuery] = useState("");
+  const [job, setJob] = useState<InspectorJob | null>(null);
+  const [state, setState] = useState<"idle" | "loading" | "error" | "ok">("idle");
+  const [err, setErr] = useState("");
+
+  async function lookup() {
+    const id = query.trim();
+    if (!id) return;
+    setState("loading");
+    setErr("");
+    try {
+      const res = await fetch(`/api/jobs/${encodeURIComponent(id)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`not found (${res.status})`);
+      const data = await res.json();
+      const j: InspectorJob = data.job ?? data;
+      if (!j || !j.id) throw new Error("no job in response");
+      setJob(j);
+      setState("ok");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "lookup failed");
+      setState("error");
+    }
+  }
+
+  const steps = job
+    ? [
+        { label: "Created", at: job.createdAt, tx: job.txHash, on: true },
+        { label: "Accepted", at: null, tx: null, on: !!job.takerWallet },
+        { label: "Delivered", at: job.deliveredAt, tx: job.delivery?.txHash ?? null, on: !!job.deliveredAt },
+        {
+          label: job.status === "Disputed" ? "Disputed" : job.status === "Resolved" ? "Resolved" : "Finalized",
+          at: job.status === "Finalized" || job.status === "Resolved" ? job.challengeEndAt : null,
+          tx: null,
+          on: ["Finalized", "Resolved", "Disputed"].includes(job.status),
+        },
+      ]
+    : [];
+
+  return (
+    <div style={card}>
+      <div style={{ ...label, marginBottom: "12px" }}>Job inspector</div>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "14px" }}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && lookup()}
+          placeholder="Paste a job id and inspect its on-chain lifecycle..."
+          style={{
+            flex: 1,
+            fontFamily: "monospace",
+            fontSize: "12px",
+            padding: "10px 14px",
+            border: "1px solid rgba(255,255,255,0.15)",
+            borderRadius: "6px",
+            backgroundColor: "rgba(0,0,0,0.3)",
+            color: "#fff",
+            outline: "none",
+          }}
+        />
+        <button
+          onClick={lookup}
+          style={{
+            fontFamily: "inherit",
+            fontSize: "11px",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            padding: "10px 22px",
+            cursor: "pointer",
+            border: `1px solid ${ACCENT}80`,
+            borderRadius: "6px",
+            backgroundColor: "rgba(255,254,178,0.12)",
+            color: ACCENT,
+            fontWeight: 600,
+          }}
+        >
+          Inspect
+        </button>
+      </div>
+
+      {state === "error" && (
+        <div style={{ fontSize: "11px", color: "#ef4444" }}>Job {err}. Try a job id from the challenge or recent panels above.</div>
+      )}
+      {state === "idle" && (
+        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>
+          Every job is an on-chain state machine. Paste an id to walk its lifecycle: escrow lock, delivery commitment, challenge window, settlement.
+        </div>
+      )}
+
+      {state === "ok" && job && (
+        <div>
+          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "16px", fontSize: "11px" }}>
+            <Meta k="Status" v={job.status} accent />
+            <Meta k="Amount" v={job.paymentToken === "USDC" ? `$${job.amount.toFixed(2)}` : `${job.amount} ${job.paymentToken}`} />
+            <Meta k="Category" v={job.category} />
+            <Meta k="Poster" v={shortWallet(job.posterWallet)} mono />
+            <Meta k="Taker" v={shortWallet(job.takerWallet)} mono />
+            {job.pda && <Meta k="PDA" v={`${job.pda.slice(0, 6)}…${job.pda.slice(-4)}`} mono />}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
+            {steps.map((s, i) => (
+              <div key={i} style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div style={{ width: "12px", height: "12px", borderRadius: "50%", backgroundColor: s.on ? ACCENT : "rgba(255,255,255,0.12)", border: s.on ? "none" : "1px solid rgba(255,255,255,0.2)" }} />
+                  {i < steps.length - 1 && <div style={{ width: "2px", height: "28px", backgroundColor: s.on ? "rgba(255,254,178,0.3)" : "rgba(255,255,255,0.08)" }} />}
+                </div>
+                <div style={{ paddingBottom: "16px" }}>
+                  <div style={{ fontSize: "12px", color: s.on ? "#fff" : "rgba(255,255,255,0.4)", fontWeight: 600 }}>{s.label}</div>
+                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.45)" }}>
+                    {s.at ? new Date(s.at).toLocaleString() : s.on ? "completed" : "pending"}
+                    {s.tx && (
+                      <a href={SOLSCAN_TX(s.tx)} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(56,189,248,0.9)", textDecoration: "none", marginLeft: "8px" }}>
+                        tx{"↗"}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Meta({ k, v, mono, accent }: { k: string; v: string; mono?: boolean; accent?: boolean }) {
+  return (
+    <div>
+      <div style={{ fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.4)" }}>{k}</div>
+      <div style={{ fontSize: "12px", color: accent ? ACCENT : "#fff", fontWeight: 600, fontFamily: mono ? "monospace" : "inherit" }}>{v}</div>
     </div>
   );
 }
