@@ -100,8 +100,31 @@ interface SettlementStats {
 /* ------------------------------------------------------------------ */
 
 const ACCENT = "#fffeb2";
+const PROGRAM_ID = "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT";
 const SOLSCAN_TX = (h: string): string =>
   `https://solscan.io/tx/${h}?cluster=devnet`;
+const SOLSCAN_ADDR = (a: string): string =>
+  `https://solscan.io/account/${a}?cluster=devnet`;
+
+/** Smoothly animate a number toward `target` with a cubic ease-out. */
+function useCountUp(target: number, ms = 800): number {
+  const [shown, setShown] = useState(target);
+  useEffect(() => {
+    let raf = 0;
+    const start = performance.now();
+    const from = shown;
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - start) / ms);
+      const eased = 1 - Math.pow(1 - k, 3);
+      setShown(from + (target - from) * eased);
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+  return shown;
+}
 
 const CATEGORY_COLOR: Record<string, string> = {
   text_writing: "#fffeb2",
@@ -164,6 +187,7 @@ const label: React.CSSProperties = {
 export default function SettlementPage() {
   const [stats, setStats] = useState<SettlementStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState<number>(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,6 +198,7 @@ export default function SettlementPage() {
         if (!cancelled) {
           setStats(data);
           setLoading(false);
+          setUpdatedAt(Date.now());
         }
       } catch {
         if (!cancelled) setLoading(false);
@@ -213,18 +238,21 @@ export default function SettlementPage() {
 
         <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "28px 20px 96px" }}>
           {/* Hero line */}
-          <div style={{ marginBottom: "24px" }}>
-            <div
-              style={{
-                fontSize: "10px",
-                letterSpacing: "0.18em",
-                textTransform: "uppercase",
-                color: "rgba(255,254,178,0.7)",
-                marginBottom: "8px",
-                fontWeight: 600,
-              }}
-            >
-              Live · Solana Devnet · Settlement Terminal
+          <div style={{ marginBottom: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+              <LivePulse />
+              <span
+                style={{
+                  fontSize: "10px",
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                  color: "rgba(255,254,178,0.7)",
+                  fontWeight: 600,
+                }}
+              >
+                Live · Solana Devnet · Settlement Terminal
+              </span>
+              <FreshnessLabel updatedAt={updatedAt} />
             </div>
             <h1
               style={{
@@ -242,6 +270,9 @@ export default function SettlementPage() {
             </p>
           </div>
 
+          {/* On-chain proof strip */}
+          <ProofStrip />
+
           {/* Stat cards row */}
           <div
             style={{
@@ -251,11 +282,11 @@ export default function SettlementPage() {
               marginBottom: "16px",
             }}
           >
-            <Stat label="Settled volume" value={loading ? "—" : usd(stats?.totalSettledUsdc ?? 0)} sub="USDC released" accent="#22c55e" />
-            <Stat label="In escrow now" value={loading ? "—" : usd(stats?.totalEscrowLockedUsdc ?? 0)} sub="Locked across jobs" accent={ACCENT} />
-            <Stat label="Auto-release" value={loading ? "—" : pct(stats?.autoReleaseRate ?? 0)} sub={`Dispute ${stats ? pct(stats.disputeRate) : "—"}`} accent="#a855f7" />
-            <Stat label="Avg settle" value={loading ? "—" : dur(stats?.avgSettlementSeconds ?? 0)} sub="Delivered → final" accent="#38bdf8" />
-            <Stat label="Protocol fee" value={loading ? "—" : usd(stats?.protocolFeeUsdc ?? 0)} sub="20 bps accrued" accent="#14f195" />
+            <Stat label="Settled volume" target={stats?.totalSettledUsdc ?? 0} format={usd} sub="USDC released" accent="#22c55e" loading={loading} />
+            <Stat label="In escrow now" target={stats?.totalEscrowLockedUsdc ?? 0} format={usd} sub="Locked across jobs" accent={ACCENT} loading={loading} />
+            <Stat label="Auto-release" target={stats?.autoReleaseRate ?? 0} format={pct} sub={`Dispute ${stats ? pct(stats.disputeRate) : "—"}`} accent="#a855f7" loading={loading} />
+            <Stat label="Avg settle" target={stats?.avgSettlementSeconds ?? 0} format={dur} sub="Delivered → final" accent="#38bdf8" loading={loading} />
+            <Stat label="Protocol fee" target={stats?.protocolFeeUsdc ?? 0} format={(v) => `$${v.toFixed(4)}`} sub="20 bps accrued" accent="#14f195" loading={loading} />
           </div>
 
           {/* Top grid: volume chart (wide) + TVL gauge/donut */}
@@ -336,6 +367,9 @@ export default function SettlementPage() {
 
           {/* Job inspector (mini block explorer) */}
           <JobInspector />
+
+          {/* Closing wedge */}
+          <WedgeStrip />
         </div>
       </div>
     </div>
@@ -400,13 +434,96 @@ function SettlementTicker({ items }: { items: RecentSettlement[] }) {
 /*  Stat card                                                          */
 /* ------------------------------------------------------------------ */
 
-function Stat({ label: l, value, sub, accent }: { label: string; value: string; sub: string; accent: string }) {
+function Stat({
+  label: l,
+  target,
+  format,
+  sub,
+  accent,
+  loading,
+}: {
+  label: string;
+  target: number;
+  format: (v: number) => string;
+  sub: string;
+  accent: string;
+  loading: boolean;
+}) {
+  const shown = useCountUp(target);
   return (
     <div style={{ ...card, padding: "16px", position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: 0, left: 0, width: "28px", height: "2px", backgroundColor: accent }} />
       <div style={{ ...label, marginBottom: "8px" }}>{l}</div>
-      <div style={{ fontSize: "22px", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>{value}</div>
+      <div style={{ fontSize: "22px", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
+        {loading ? "—" : format(shown)}
+      </div>
       <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>{sub}</div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Hero live indicators + on-chain proof strip                        */
+/* ------------------------------------------------------------------ */
+
+function LivePulse() {
+  return (
+    <span style={{ position: "relative", display: "inline-flex", width: "8px", height: "8px" }}>
+      <span style={{ position: "absolute", inset: 0, borderRadius: "50%", backgroundColor: "#22c55e", animation: "covenant-ping 1.8s cubic-bezier(0,0,0.2,1) infinite" }} />
+      <span style={{ position: "relative", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
+    </span>
+  );
+}
+
+function FreshnessLabel({ updatedAt }: { updatedAt: number }) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  if (!updatedAt) return null;
+  const secs = Math.max(0, Math.round((Date.now() - updatedAt) / 1000));
+  return (
+    <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", fontFamily: "monospace" }}>
+      updated {secs}s ago · auto-refresh 10s
+    </span>
+  );
+}
+
+function ProofStrip() {
+  const items: { k: string; v: string; href?: string }[] = [
+    { k: "Program", v: `${PROGRAM_ID.slice(0, 6)}…${PROGRAM_ID.slice(-4)}`, href: SOLSCAN_ADDR(PROGRAM_ID) },
+    { k: "Network", v: "Solana Devnet" },
+    { k: "RPC", v: "Helius" },
+    { k: "Settlement", v: "Optimistic + 2/3 multisig" },
+    { k: "Proof", v: "Every number backed by on-chain state" },
+  ];
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "8px 20px",
+        alignItems: "center",
+        padding: "10px 16px",
+        marginBottom: "16px",
+        borderRadius: "10px",
+        border: "1px solid rgba(255,255,255,0.1)",
+        backgroundColor: "rgba(255,255,255,0.03)",
+      }}
+    >
+      {items.map((it) => (
+        <div key={it.k} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)" }}>{it.k}</span>
+          {it.href ? (
+            <a href={it.href} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "rgba(56,189,248,0.9)", textDecoration: "none", fontFamily: "monospace" }}>
+              {it.v}↗
+            </a>
+          ) : (
+            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.7)" }}>{it.v}</span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -421,6 +538,8 @@ function VolumeChart({ series, loading }: { series: VolumePoint[]; loading: bool
   const pad = { top: 20, right: 16, bottom: 28, left: 44 };
   const iw = W - pad.left - pad.right;
   const ih = H - pad.top - pad.bottom;
+
+  const [hover, setHover] = useState<number | null>(null);
 
   const data = series.length > 0 ? series : [];
   const maxV = Math.max(1, ...data.map((d) => d.usdc));
@@ -440,6 +559,16 @@ function VolumeChart({ series, loading }: { series: VolumePoint[]; loading: bool
 
   const totalSettled = data.reduce((a, b) => a + b.usdc, 0);
 
+  function onMove(e: React.MouseEvent<HTMLDivElement>) {
+    if (points.length === 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = (e.clientX - rect.left) / rect.width;
+    const idx = Math.max(0, Math.min(points.length - 1, Math.round(frac * (points.length - 1))));
+    setHover(idx);
+  }
+
+  const hp = hover !== null ? points[hover] : null;
+
   return (
     <div style={card}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
@@ -453,44 +582,68 @@ function VolumeChart({ series, loading }: { series: VolumePoint[]; loading: bool
           {loading ? "Loading volume..." : "No settled volume yet on this cluster."}
         </div>
       ) : (
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="volFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={ACCENT} stopOpacity="0.35" />
-              <stop offset="100%" stopColor={ACCENT} stopOpacity="0.02" />
-            </linearGradient>
-          </defs>
-          {/* gridlines */}
-          {[0, 0.25, 0.5, 0.75, 1].map((g) => {
-            const y = pad.top + ih - g * ih;
-            return (
-              <g key={g}>
-                <line x1={pad.left} y1={y} x2={W - pad.right} y2={y} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
-                <text x={pad.left - 8} y={y + 3} textAnchor="end" fontSize="9" fill="rgba(255,255,255,0.35)">
-                  {usd(g * maxV)}
-                </text>
-              </g>
-            );
-          })}
-          {areaPath && <path d={areaPath} fill="url(#volFill)" />}
-          {linePath && <path d={linePath} fill="none" stroke={ACCENT} strokeWidth="2" />}
-          {points.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={ACCENT} />
-          ))}
-          {/* x labels: first, mid, last */}
-          {points.length > 0 &&
-            [0, Math.floor(points.length / 2), points.length - 1]
-              .filter((v, idx, arr) => arr.indexOf(v) === idx)
-              .map((idx) => {
-                const p = points[idx];
-                const dt = new Date(p.d.date);
-                return (
-                  <text key={idx} x={p.x} y={H - 10} textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.4)">
-                    {dt.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+        <div style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+          <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="volFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={ACCENT} stopOpacity="0.35" />
+                <stop offset="100%" stopColor={ACCENT} stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+            {[0, 0.25, 0.5, 0.75, 1].map((g) => {
+              const y = pad.top + ih - g * ih;
+              return (
+                <g key={g}>
+                  <line x1={pad.left} y1={y} x2={W - pad.right} y2={y} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+                  <text x={pad.left - 8} y={y + 3} textAnchor="end" fontSize="9" fill="rgba(255,255,255,0.35)">
+                    {usd(g * maxV)}
                   </text>
-                );
-              })}
-        </svg>
+                </g>
+              );
+            })}
+            {areaPath && <path d={areaPath} fill="url(#volFill)" />}
+            {linePath && <path d={linePath} fill="none" stroke={ACCENT} strokeWidth="2" />}
+            {hp && <line x1={hp.x} y1={pad.top} x2={hp.x} y2={pad.top + ih} stroke="rgba(255,254,178,0.4)" strokeWidth="1" strokeDasharray="3 3" />}
+            {points.map((p, i) => (
+              <circle key={i} cx={p.x} cy={p.y} r={hover === i ? 4 : 2.5} fill={ACCENT} />
+            ))}
+            {points.length > 0 &&
+              [0, Math.floor(points.length / 2), points.length - 1]
+                .filter((v, idx, arr) => arr.indexOf(v) === idx)
+                .map((idx) => {
+                  const p = points[idx];
+                  const dt = new Date(p.d.date);
+                  return (
+                    <text key={idx} x={p.x} y={H - 10} textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.4)">
+                      {dt.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </text>
+                  );
+                })}
+          </svg>
+          {hp && (
+            <div
+              style={{
+                position: "absolute",
+                left: `${(hp.x / W) * 100}%`,
+                top: 0,
+                transform: "translateX(-50%)",
+                pointerEvents: "none",
+                backgroundColor: "rgba(10,10,26,0.95)",
+                border: "1px solid rgba(255,254,178,0.3)",
+                borderRadius: "6px",
+                padding: "6px 10px",
+                whiteSpace: "nowrap",
+                fontSize: "10px",
+              }}
+            >
+              <div style={{ color: "rgba(255,255,255,0.5)" }}>
+                {new Date(hp.d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              </div>
+              <div style={{ color: ACCENT, fontWeight: 700, fontSize: "12px" }}>{usd(hp.d.usdc)}</div>
+              <div style={{ color: "rgba(255,255,255,0.45)" }}>{hp.d.count} settlements</div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -1278,6 +1431,41 @@ function Meta({ k, v, mono, accent }: { k: string; v: string; mono?: boolean; ac
     <div>
       <div style={{ fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.4)" }}>{k}</div>
       <div style={{ fontSize: "12px", color: accent ? ACCENT : "#fff", fontWeight: 600, fontFamily: mono ? "monospace" : "inherit" }}>{v}</div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Closing wedge strip                                                */
+/* ------------------------------------------------------------------ */
+
+function WedgeStrip() {
+  return (
+    <div
+      style={{
+        ...card,
+        marginTop: "16px",
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: "0",
+        padding: 0,
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ padding: "24px", borderRight: "1px solid rgba(255,255,255,0.1)" }}>
+        <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", marginBottom: "8px" }}>x402</div>
+        <div style={{ fontSize: "18px", fontWeight: 700, color: "#fff", marginBottom: "6px" }}>Paid access</div>
+        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
+          An agent pays an API for data or compute. Request, response, done. No deliverable, no dispute, no settlement.
+        </div>
+      </div>
+      <div style={{ padding: "24px", background: "linear-gradient(135deg, rgba(255,254,178,0.06), transparent)" }}>
+        <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.1em", color: ACCENT, marginBottom: "8px" }}>Covenant</div>
+        <div style={{ fontSize: "18px", fontWeight: 700, color: "#fff", marginBottom: "6px" }}>Paid work</div>
+        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)", lineHeight: 1.6 }}>
+          An agent pays another agent for completed work. USDC locks in escrow, work is delivered, settlement is optimistic. This page is that loop, live.
+        </div>
+      </div>
     </div>
   );
 }
