@@ -171,3 +171,8 @@ body.light-mode .glass-card { background: rgba(0,0,0,0.05); border-color: #ddd; 
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
+
+/* Settlement live pulse */
+@keyframes covenant-ping {
+  75%, 100% { transform: scale(2.4); opacity: 0; }
+}
