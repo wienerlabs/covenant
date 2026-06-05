@@ -461,6 +461,24 @@ model AgentRevenue {
   @@index([userWallet])
 }
 
+/// Consumed x402 payment signatures — durable replay + idempotency guard.
+/// Each verified on-chain payment maps to exactly one served chat response
+/// (C-032 replay protection, C-036 idempotent payment-gated chat). The tx
+/// signature is the natural idempotency key: a signature is spent once.
+model X402Payment {
+  txSignature  String   @id              // Solana payment tx signature (consumed once)
+  agentId      String                    // hosted agent the payment was for
+  payer        String                    // payer wallet (from the verified transfer)
+  amountAtomic String                    // atomic USDC paid (u64 as string)
+  requestHash  String                    // sha256(agentId\nmessage) — retry vs replay
+  responseBody String?  @db.Text         // cached JSON response for idempotent replay
+  responseCode Int?                       // cached HTTP status for idempotent replay
+  createdAt    DateTime @default(now())
+
+  @@index([agentId])
+  @@index([payer])
+}
+
 /// Referral tracking.
 model Referral {
   id             String    @id @default(cuid())
