@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import {
   hashPaymentRequest,
   decidePaymentClaim,
+  reconcileRevenue,
 } from "../../lib/x402-payments";
 
 describe("hashPaymentRequest", () => {
@@ -91,5 +92,41 @@ describe("decidePaymentClaim", () => {
       otherHash,
     );
     assert.deepEqual(decision, { kind: "consumed" });
+  });
+});
+
+describe("reconcileRevenue (C-037)", () => {
+  test("reconciles when revenue equals verified payments", () => {
+    const r = reconcileRevenue([0.05, 0.1], ["50000", "100000"]);
+    assert.equal(r.reconciled, true);
+    assert.equal(r.driftAtomic, "0");
+    assert.equal(r.revenueAtomic, "150000");
+    assert.equal(r.verifiedAtomic, "150000");
+  });
+
+  test("detects drift when revenue exceeds verified payments", () => {
+    const r = reconcileRevenue([0.05, 0.05], ["50000"]);
+    assert.equal(r.reconciled, false);
+    assert.equal(r.driftAtomic, "50000");
+  });
+
+  test("detects drift when a verified payment recorded no revenue", () => {
+    const r = reconcileRevenue([0.05], ["50000", "50000"]);
+    assert.equal(r.reconciled, false);
+    assert.equal(r.driftAtomic, "-50000");
+  });
+
+  test("handles empty ledgers", () => {
+    const r = reconcileRevenue([], []);
+    assert.equal(r.reconciled, true);
+    assert.equal(r.revenueAtomic, "0");
+    assert.equal(r.verifiedAtomic, "0");
+  });
+
+  test("avoids float drift on fractional amounts", () => {
+    // 0.1 + 0.2 = 0.30000000000000004 in float; atomic rounding fixes it.
+    const r = reconcileRevenue([0.1, 0.2], ["100000", "200000"]);
+    assert.equal(r.reconciled, true);
+    assert.equal(r.revenueAtomic, "300000");
   });
 });

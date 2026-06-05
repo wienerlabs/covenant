@@ -449,12 +449,16 @@ model ChatMessage {
   @@index([userWallet])
 }
 
-/// Per-message revenue ledger for hosted agents.
+/// Per-message revenue ledger for hosted agents. Each paid row corresponds
+/// to exactly one verified on-chain x402 payment (C-037): `paymentTx` is the
+/// verified payment signature and `amount` is the amount actually paid, so
+/// the revenue total reconciles to the sum of verified payments.
 model AgentRevenue {
   id            String   @id @default(cuid())
   agentId       String
   userWallet    String
-  amount        Float    // USDC charged for this prompt
+  amount        Float    // USDC actually paid for this prompt
+  paymentTx     String?  @unique // verified x402 payment signature (C-037)
   createdAt     DateTime @default(now())
 
   @@index([agentId])

@@ -16,6 +16,7 @@ import {
   summarizeCreditsToRecipient,
   verifyTransfer,
   verifyPayment,
+  PAYMENT_COMMITMENT,
   type PaymentRequired,
   type TxMetaLike,
 } from "../../lib/x402-server";
@@ -328,5 +329,72 @@ describe("verifyPayment", () => {
     });
     assert.equal(res.valid, false);
     assert.match(res.reason ?? "", /no token transfer to the creator/);
+  });
+});
+
+/* ---- confirmation depth (C-034) ---------------------------------- */
+
+describe("PAYMENT_COMMITMENT (C-034)", () => {
+  test("requires confirmed, not processed", () => {
+    assert.equal(PAYMENT_COMMITMENT, "confirmed");
+  });
+});
+
+/* ---- facilitator path (C-035) ------------------------------------ */
+
+describe("verifyPayment via facilitator", () => {
+  test("accepts when the facilitator validates the payment", async () => {
+    const res = await verifyPayment(
+      envelope(SIG, { scheme: "exact", network: NET, asset: MINT }),
+      reqFor("50000"),
+      {
+        verifyViaFacilitator: async (parsed, pr) => {
+          assert.equal(parsed.txSignature, SIG);
+          assert.equal(pr.accepts[0].amount, "50000");
+          return { isValid: true, payer: PAYER, amountAtomic: "50000" };
+        },
+      },
+    );
+    assert.equal(res.valid, true);
+    assert.equal(res.payer, PAYER);
+    assert.equal(res.amountAtomic, "50000");
+  });
+
+  test("rejects with the facilitator's reason when it says invalid", async () => {
+    const res = await verifyPayment(envelope(SIG), reqFor(), {
+      verifyViaFacilitator: async () => ({ isValid: false, invalidReason: "underpaid" }),
+    });
+    assert.equal(res.valid, false);
+    assert.match(res.reason ?? "", /underpaid/);
+  });
+
+  test("falls back to the quoted amount when the facilitator omits it", async () => {
+    const res = await verifyPayment(envelope(SIG), reqFor("12345"), {
+      verifyViaFacilitator: async () => ({ isValid: true, payer: PAYER }),
+    });
+    assert.equal(res.valid, true);
+    assert.equal(res.amountAtomic, "12345");
+  });
+
+  test("rejects the bypass token before reaching the facilitator (C-030)", async () => {
+    let called = false;
+    const res = await verifyPayment(envelope("x402:1:wallet"), reqFor(), {
+      verifyViaFacilitator: async () => {
+        called = true;
+        return { isValid: true };
+      },
+    });
+    assert.equal(res.valid, false);
+    assert.equal(called, false);
+  });
+
+  test("reports a clear error when the facilitator is unreachable", async () => {
+    const res = await verifyPayment(envelope(SIG), reqFor(), {
+      verifyViaFacilitator: async () => {
+        throw new Error("ECONNREFUSED");
+      },
+    });
+    assert.equal(res.valid, false);
+    assert.match(res.reason ?? "", /facilitator/);
   });
 });

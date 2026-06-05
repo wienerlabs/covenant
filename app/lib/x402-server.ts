@@ -358,12 +358,36 @@ export interface VerifyPaymentResult {
   reason?: string;
 }
 
+/**
+ * Commitment required before a payment grants access (C-034). `confirmed`
+ * (not `processed`) means a dropped or forked transaction is not visible
+ * here yet and therefore cannot grant access.
+ */
+export const PAYMENT_COMMITMENT = "confirmed" as const;
+
+/** Result shape from an x402 facilitator's verify endpoint (C-035). */
+export interface FacilitatorVerifyResult {
+  isValid: boolean;
+  payer?: string;
+  amountAtomic?: string;
+  invalidReason?: string;
+}
+
 export interface VerifyPaymentDeps {
   /**
    * Fetch a transaction by signature at `confirmed` commitment. Injected
    * in tests; defaults to a failover RPC read.
    */
   fetchTransaction?: (sig: string) => Promise<TxMetaLike | null>;
+  /**
+   * Optional x402 facilitator verifier (C-035). When provided — or when
+   * `X402_FACILITATOR_URL` is set — payment validity is delegated to the
+   * facilitator instead of direct RPC parsing. Injected in tests.
+   */
+  verifyViaFacilitator?: (
+    parsed: ParsedPaymentSignature,
+    paymentRequired: PaymentRequired,
+  ) => Promise<FacilitatorVerifyResult>;
 }
 
 /**
@@ -372,9 +396,9 @@ export interface VerifyPaymentDeps {
  * is treated as not-found and does not grant access.
  */
 async function defaultFetchTransaction(sig: string): Promise<TxMetaLike | null> {
-  const connection = createFailoverConnection("confirmed");
+  const connection = createFailoverConnection(PAYMENT_COMMITMENT);
   const tx = await connection.getTransaction(sig, {
-    commitment: "confirmed",
+    commitment: PAYMENT_COMMITMENT,
     maxSupportedTransactionVersion: 0,
   });
   if (!tx) return null;
@@ -388,6 +412,47 @@ async function defaultFetchTransaction(sig: string): Promise<TxMetaLike | null> 
         | TokenBalanceLike[]
         | null,
     },
+  };
+}
+
+/**
+ * Build a facilitator verifier from `X402_FACILITATOR_URL` if set (C-035).
+ * Posts the payment to the facilitator's `/verify` endpoint and maps its
+ * verdict. Returns undefined when no facilitator is configured, in which
+ * case verifyPayment falls back to direct RPC parsing.
+ */
+function facilitatorFromEnv():
+  | VerifyPaymentDeps["verifyViaFacilitator"]
+  | undefined {
+  const base = process.env.X402_FACILITATOR_URL;
+  if (!base) return undefined;
+  const url = `${base.replace(/\/$/, "")}/verify`;
+  return async (parsed, paymentRequired): Promise<FacilitatorVerifyResult> => {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        x402Version: paymentRequired.x402Version,
+        paymentPayload: {
+          transaction: parsed.txSignature,
+          scheme: parsed.scheme,
+          network: parsed.network,
+        },
+        paymentRequirements: paymentRequired.accepts[0],
+      }),
+    });
+    if (!res.ok) {
+      return { isValid: false, invalidReason: `facilitator returned ${res.status}` };
+    }
+    const data = (await res.json()) as Record<string, unknown>;
+    return {
+      isValid: data.isValid === true,
+      payer: typeof data.payer === "string" ? data.payer : undefined,
+      amountAtomic:
+        typeof data.amountAtomic === "string" ? data.amountAtomic : undefined,
+      invalidReason:
+        typeof data.invalidReason === "string" ? data.invalidReason : undefined,
+    };
   };
 }
 
@@ -430,13 +495,49 @@ export async function verifyPayment(
     };
   }
 
-  // C-030: a real on-chain signature is mandatory — no bypass tokens.
+  // C-030: a real on-chain signature is mandatory — no bypass tokens. This
+  // also keeps the signature usable as the replay/idempotency key even on
+  // the facilitator path below.
   if (!isPlausibleTxSignature(parsed.txSignature)) {
     return {
       valid: false,
       txHash: parsed.txSignature,
       payer: "",
       reason: "not a valid Solana transaction signature",
+    };
+  }
+
+  // C-035: optional facilitator path — delegate validity to the facilitator
+  // instead of parsing the transfer ourselves. Off unless configured.
+  const facilitator = deps.verifyViaFacilitator ?? facilitatorFromEnv();
+  if (facilitator) {
+    let fres: FacilitatorVerifyResult;
+    try {
+      fres = await facilitator(parsed, paymentRequired);
+    } catch (err) {
+      console.error("[x402] facilitator verification failed:", err);
+      return {
+        valid: false,
+        txHash: parsed.txSignature,
+        payer: "",
+        reason: "could not reach the payment facilitator",
+      };
+    }
+    if (!fres.isValid) {
+      return {
+        valid: false,
+        txHash: parsed.txSignature,
+        payer: "",
+        reason: fres.invalidReason ?? "facilitator rejected the payment",
+      };
+    }
+    return {
+      valid: true,
+      txHash: parsed.txSignature,
+      payer: fres.payer ?? "",
+      // The facilitator validated the payment meets the requirement; fall
+      // back to the quoted amount when it doesn't echo the exact paid value.
+      amountAtomic: fres.amountAtomic ?? accept.amount,
     };
   }
 

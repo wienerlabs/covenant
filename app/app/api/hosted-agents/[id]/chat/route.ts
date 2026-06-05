@@ -88,6 +88,9 @@ export async function POST(
   // True once we hold a fresh (first-use) payment that this request must
   // finalize on success or release on failure (C-036).
   let paymentClaimed = false;
+  // Verified payment facts captured for revenue reconciliation (C-037).
+  let paidAmountUsdc = 0;
+  let paidPayer = "";
 
   if (agent.pricePerPrompt > 0) {
     const paymentRequired = buildPaymentRequired(
@@ -171,6 +174,8 @@ export async function POST(
 
     // claim.kind === "fresh" — we own this payment for this request.
     paymentClaimed = true;
+    paidAmountUsdc = Number(verification.amountAtomic ?? "0") / 1_000_000;
+    paidPayer = verification.payer;
   }
 
   /**
@@ -184,6 +189,26 @@ export async function POST(
     const res = NextResponse.json(payload);
     if (paymentClaimed) {
       await finalizePayment(paymentTxHash, JSON.stringify(payload), 200);
+      // C-037: one revenue row per verified payment, at the amount actually
+      // paid on chain, so the revenue total reconciles to verified payments.
+      try {
+        await prisma.$transaction([
+          prisma.agentRevenue.create({
+            data: {
+              agentId: id,
+              userWallet: walletAddress || paidPayer || "anonymous",
+              amount: paidAmountUsdc,
+              paymentTx: paymentTxHash,
+            },
+          }),
+          prisma.hostedAgent.update({
+            where: { id },
+            data: { totalRevenue: { increment: paidAmountUsdc } },
+          }),
+        ]);
+      } catch {
+        /* best effort — reconcileAgentRevenue surfaces any drift */
+      }
     }
     return res;
   };
@@ -245,26 +270,6 @@ export async function POST(
     await prisma.chatMessage.create({
       data: { agentId: id, userWallet, role: "agent", content: response },
     });
-
-    if (walletAddress && agent.pricePerPrompt > 0) {
-      try {
-        await prisma.$transaction([
-          prisma.agentRevenue.create({
-            data: {
-              agentId: id,
-              userWallet: walletAddress,
-              amount: agent.pricePerPrompt,
-            },
-          }),
-          prisma.hostedAgent.update({
-            where: { id },
-            data: { totalRevenue: { increment: agent.pricePerPrompt } },
-          }),
-        ]);
-      } catch {
-        /* best effort */
-      }
-    }
 
     return servePaid({
       response,
@@ -359,27 +364,6 @@ export async function POST(
     await prisma.chatMessage.create({
       data: { agentId: id, userWallet, role: "agent", content: response },
     });
-
-    // Record revenue (with real tx hash from x402 payment)
-    if (walletAddress && agent.pricePerPrompt > 0) {
-      try {
-        await prisma.$transaction([
-          prisma.agentRevenue.create({
-            data: {
-              agentId: id,
-              userWallet: walletAddress,
-              amount: agent.pricePerPrompt,
-            },
-          }),
-          prisma.hostedAgent.update({
-            where: { id },
-            data: { totalRevenue: { increment: agent.pricePerPrompt } },
-          }),
-        ]);
-      } catch {
-        /* best effort */
-      }
-    }
 
     return servePaid({
       response,

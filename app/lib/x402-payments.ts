@@ -172,3 +172,69 @@ export async function releasePayment(txSignature: string): Promise<void> {
     /* already gone or never reserved — fine */
   }
 }
+
+/* ------------------------------------------------------------------ */
+/*  C-037 — revenue reconciliation against verified payments           */
+/* ------------------------------------------------------------------ */
+
+export interface RevenueReconciliation {
+  /** Sum of recorded AgentRevenue, in atomic units. */
+  revenueAtomic: string;
+  /** Sum of verified on-chain payments, in atomic units. */
+  verifiedAtomic: string;
+  /** revenue − verified, in atomic units (0 when in sync). */
+  driftAtomic: string;
+  reconciled: boolean;
+}
+
+/**
+ * Compare recorded revenue against verified on-chain payments, in atomic
+ * units to avoid float drift (C-037). Pure — unit-tested in isolation.
+ */
+export function reconcileRevenue(
+  revenueAmounts: number[],
+  verifiedAtomic: string[],
+  decimals = 6,
+): RevenueReconciliation {
+  const factor = 10 ** decimals;
+  const rev = revenueAmounts.reduce(
+    (sum, a) => sum + BigInt(Math.round(a * factor)),
+    0n,
+  );
+  const ver = verifiedAtomic.reduce((sum, a) => sum + BigInt(a || "0"), 0n);
+  return {
+    revenueAtomic: rev.toString(),
+    verifiedAtomic: ver.toString(),
+    driftAtomic: (rev - ver).toString(),
+    reconciled: rev === ver,
+  };
+}
+
+/**
+ * Reconcile an agent's recorded revenue against its served verified
+ * payments (C-037). The revenue dashboard total (sum of AgentRevenue) must
+ * equal the sum of verified on-chain payments; this surfaces any drift.
+ */
+export async function reconcileAgentRevenue(
+  agentId: string,
+): Promise<RevenueReconciliation> {
+  const { prisma, retryable } = await db();
+  const [revenue, payments] = await Promise.all([
+    retryable(() =>
+      prisma.agentRevenue.findMany({
+        where: { agentId, paymentTx: { not: null } },
+        select: { amount: true },
+      }),
+    ),
+    retryable(() =>
+      prisma.x402Payment.findMany({
+        where: { agentId, responseBody: { not: null } },
+        select: { amountAtomic: true },
+      }),
+    ),
+  ]);
+  return reconcileRevenue(
+    revenue.map((r) => r.amount),
+    payments.map((p) => p.amountAtomic),
+  );
+}

@@ -153,6 +153,10 @@ const MIGRATION_SQL = [
   )`,
   `CREATE INDEX IF NOT EXISTS "X402Payment_agentId_idx" ON "X402Payment"("agentId")`,
   `CREATE INDEX IF NOT EXISTS "X402Payment_payer_idx" ON "X402Payment"("payer")`,
+
+  // AgentRevenue.paymentTx — ties each paid row to a verified payment (C-037).
+  `ALTER TABLE "AgentRevenue" ADD COLUMN IF NOT EXISTS "paymentTx" TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "AgentRevenue_paymentTx_key" ON "AgentRevenue"("paymentTx")`,
 ];
 
 export async function ensureSchema(): Promise<void> {
