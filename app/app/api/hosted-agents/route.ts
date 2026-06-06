@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
 import { prisma } from "@/lib/prisma";
 import { awardXP } from "@/lib/xp";
 import { sendMarkerTransaction } from "@/lib/solana";
@@ -39,6 +40,9 @@ export async function GET(req: NextRequest) {
  * Body: { walletAddress, name, category, systemPrompt, model, minPrice, maxPrice, webEnabled? }
  */
 export async function POST(req: NextRequest) {
+  const blocked = blockSimulatedRouteIfOnchain("POST /api/hosted-agents");
+  if (blocked) return blocked;
+
   try {
     const body = await req.json();
     const { walletAddress, name, category, systemPrompt, model, minPrice, maxPrice, avatarUrl, webEnabled } = body as {

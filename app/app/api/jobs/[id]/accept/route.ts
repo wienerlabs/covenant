@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 
@@ -19,6 +20,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const blocked = blockSimulatedRouteIfOnchain("POST /api/jobs/[id]/accept");
+  if (blocked) return blocked;
+
   try {
     const { id } = await params;
     const body = await request.json();

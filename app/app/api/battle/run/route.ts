@@ -17,6 +17,7 @@ import { executeCircuit } from "@/lib/work-metrics";
 import { generateDID } from "@/lib/aip/did";
 import { awardXP } from "@/lib/xp";
 import { NextRequest } from "next/server";
+import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 
@@ -65,6 +66,9 @@ async function callHaiku(client: Anthropic, prompt: string, maxTokens = 1024): P
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = blockSimulatedRouteIfOnchain("POST /api/battle/run");
+  if (blocked) return blocked;
+
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
   const { limit, windowMs } = getLimit("battle_run");
   const rl = rateLimit(`battle:${ip}`, limit, windowMs);

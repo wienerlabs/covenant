@@ -9,6 +9,7 @@ import { rateLimit, getLimit } from "@/lib/rateLimit";
 import { executeCircuit } from "@/lib/work-metrics";
 import crypto from "crypto";
 import { NextRequest } from "next/server";
+import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
 
 interface AgentConfig {
   category: string;
@@ -89,6 +90,9 @@ function sseEvent(step: string, message: string, data: unknown = null): string {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = blockSimulatedRouteIfOnchain("POST /api/agents/hire");
+  if (blocked) return blocked;
+
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
   const { limit, windowMs } = getLimit("agent_hire");
   const rl = rateLimit(`agents-hire:${ip}`, limit, windowMs);
