@@ -8,6 +8,12 @@ import {
   verifyPayment,
   encodePaymentRequiredHeader,
 } from "@/lib/x402-server";
+import {
+  hashPaymentRequest,
+  claimPayment,
+  finalizePayment,
+  releasePayment,
+} from "@/lib/x402-payments";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -79,6 +85,12 @@ export async function POST(
 
   const paymentSig = req.headers.get("payment-signature");
   let paymentTxHash = "";
+  // True once we hold a fresh (first-use) payment that this request must
+  // finalize on success or release on failure (C-036).
+  let paymentClaimed = false;
+  // Verified payment facts captured for revenue reconciliation (C-037).
+  let paidAmountUsdc = 0;
+  let paidPayer = "";
 
   if (agent.pricePerPrompt > 0) {
     const paymentRequired = buildPaymentRequired(
@@ -100,16 +112,17 @@ export async function POST(
       });
     }
 
-    // Payment signature provided — verify it
-    const { valid, txHash } = await verifyPayment(paymentSig, paymentRequired);
+    // Payment signature provided — verify it on chain (amount, mint,
+    // recipient, confirmed). No bypass tokens (C-030/C-031/C-033/C-034).
+    const verification = await verifyPayment(paymentSig, paymentRequired);
 
-    if (!valid) {
-      // Payment verification failed — return 402 again
+    if (!verification.valid) {
+      // Payment verification failed — return 402 again with the reason.
       const encodedHeader = encodePaymentRequiredHeader(paymentRequired);
       return new Response(
         JSON.stringify({
           ...paymentRequired,
-          error: "Payment verification failed. Please try again.",
+          error: `Payment verification failed: ${verification.reason ?? "invalid payment"}.`,
         }),
         {
           status: 402,
@@ -121,8 +134,84 @@ export async function POST(
       );
     }
 
-    paymentTxHash = txHash;
+    paymentTxHash = verification.txHash;
+
+    // C-032 / C-036: a verified payment is spent exactly once. An
+    // idempotent retry of the same prompt replays the cached response;
+    // the same payment for a different prompt is rejected as consumed.
+    const claim = await claimPayment({
+      txSignature: verification.txHash,
+      agentId: id,
+      payer: verification.payer,
+      amountAtomic: verification.amountAtomic ?? "0",
+      requestHash: hashPaymentRequest(id, message),
+    });
+
+    if (claim.kind === "replay") {
+      return new NextResponse(claim.body, {
+        status: claim.code,
+        headers: {
+          "Content-Type": "application/json",
+          "x-idempotent-replay": "true",
+        },
+      });
+    }
+    if (claim.kind === "consumed") {
+      return NextResponse.json(
+        {
+          error:
+            "This payment has already been used for a different prompt. Each payment is valid for one message.",
+        },
+        { status: 409 },
+      );
+    }
+    if (claim.kind === "pending") {
+      return NextResponse.json(
+        { error: "This payment is still being processed. Please retry in a moment." },
+        { status: 409 },
+      );
+    }
+
+    // claim.kind === "fresh" — we own this payment for this request.
+    paymentClaimed = true;
+    paidAmountUsdc = Number(verification.amountAtomic ?? "0") / 1_000_000;
+    paidPayer = verification.payer;
   }
+
+  /**
+   * Serve a paid response and finalize the payment so an idempotent
+   * retry replays it byte-for-byte (C-036). On the free path this is a
+   * plain JSON response.
+   */
+  const servePaid = async (
+    payload: Record<string, unknown>,
+  ): Promise<NextResponse> => {
+    const res = NextResponse.json(payload);
+    if (paymentClaimed) {
+      await finalizePayment(paymentTxHash, JSON.stringify(payload), 200);
+      // C-037: one revenue row per verified payment, at the amount actually
+      // paid on chain, so the revenue total reconciles to verified payments.
+      try {
+        await prisma.$transaction([
+          prisma.agentRevenue.create({
+            data: {
+              agentId: id,
+              userWallet: walletAddress || paidPayer || "anonymous",
+              amount: paidAmountUsdc,
+              paymentTx: paymentTxHash,
+            },
+          }),
+          prisma.hostedAgent.update({
+            where: { id },
+            data: { totalRevenue: { increment: paidAmountUsdc } },
+          }),
+        ]);
+      } catch {
+        /* best effort — reconcileAgentRevenue surfaces any drift */
+      }
+    }
+    return res;
+  };
 
   /* ---------------------------------------------------------------- */
   /*  Design agent fast path                                           */
@@ -182,27 +271,7 @@ export async function POST(
       data: { agentId: id, userWallet, role: "agent", content: response },
     });
 
-    if (walletAddress && agent.pricePerPrompt > 0) {
-      try {
-        await prisma.$transaction([
-          prisma.agentRevenue.create({
-            data: {
-              agentId: id,
-              userWallet: walletAddress,
-              amount: agent.pricePerPrompt,
-            },
-          }),
-          prisma.hostedAgent.update({
-            where: { id },
-            data: { totalRevenue: { increment: agent.pricePerPrompt } },
-          }),
-        ]);
-      } catch {
-        /* best effort */
-      }
-    }
-
-    return NextResponse.json({
+    return servePaid({
       response,
       imageUrl,
       mode: "image",
@@ -296,28 +365,7 @@ export async function POST(
       data: { agentId: id, userWallet, role: "agent", content: response },
     });
 
-    // Record revenue (with real tx hash from x402 payment)
-    if (walletAddress && agent.pricePerPrompt > 0) {
-      try {
-        await prisma.$transaction([
-          prisma.agentRevenue.create({
-            data: {
-              agentId: id,
-              userWallet: walletAddress,
-              amount: agent.pricePerPrompt,
-            },
-          }),
-          prisma.hostedAgent.update({
-            where: { id },
-            data: { totalRevenue: { increment: agent.pricePerPrompt } },
-          }),
-        ]);
-      } catch {
-        /* best effort */
-      }
-    }
-
-    return NextResponse.json({
+    return servePaid({
       response,
       wordCount: response.split(/\s+/).length,
       agentId: id,
@@ -326,6 +374,9 @@ export async function POST(
     });
   } catch (err) {
     console.error("[hosted-agents/chat] AI call error:", err);
+    // The payer was charged on chain but we produced nothing — release
+    // the payment so they can retry the same payment (C-036, one charge).
+    if (paymentClaimed) await releasePayment(paymentTxHash);
     return NextResponse.json(
       { error: "Failed to generate response" },
       { status: 500 }
