@@ -14,6 +14,7 @@ import crypto from "crypto";
 import { rateLimit, getLimit } from "@/lib/rateLimit";
 import { generateDID } from "@/lib/aip/did";
 import { NextRequest } from "next/server";
+import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 
@@ -22,6 +23,9 @@ function sseEvent(step: string, message: string, data: unknown = null): string {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = blockSimulatedRouteIfOnchain("POST /api/arena/fulfill");
+  if (blocked) return blocked;
+
   const ip =
     request.headers.get("x-forwarded-for") ??
     request.headers.get("x-real-ip") ??

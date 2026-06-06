@@ -6,6 +6,7 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { createFailoverConnection } from "@/lib/rpc-failover";
+import { assertSimulatedAllowed } from "@/lib/settlement";
 
 let _connection: Connection | null = null;
 let _deployerKeypair: Keypair | null = null;
@@ -29,8 +30,19 @@ export function getDeployerKeypair(): Keypair {
   return _deployerKeypair;
 }
 
-// Send a real marker transaction on devnet, returns tx signature
+/**
+ * Send a 1000-lamport self-transfer as a "marker" tx on devnet.
+ *
+ * @deprecated This is a SIMULATED settlement path (audit C-01 / H-02): it
+ * proves nothing about escrow — it just records a signature. Real lifecycle
+ * routes must call the Anchor program instead (see lib/program-server.ts /
+ * lib/anchor-browser.ts). Quarantined behind SETTLEMENT_MODE (C-003): it
+ * throws in onchain mode so a still-faked route fails loudly.
+ */
 export async function sendMarkerTransaction(memo: string): Promise<string> {
+  // C-003: a fake settlement path must not run when real settlement is required.
+  assertSimulatedAllowed("sendMarkerTransaction");
+
   const connection = getConnection();
   const deployer = getDeployerKeypair();
 

@@ -13,6 +13,7 @@ import { withCreditFallback } from "@/lib/anthropic-safe";
 import crypto from "crypto";
 import { executeCircuit } from "@/lib/work-metrics";
 import { NextRequest } from "next/server";
+import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 
@@ -39,6 +40,9 @@ function delay(ms: number) {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = blockSimulatedRouteIfOnchain("POST /api/autonomous/run");
+  if (blocked) return blocked;
+
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
   const { limit: autoLimit, windowMs: autoWindow } = getLimit("arena_run");
   const rl = rateLimit(`autonomous:${ip}`, Math.max(1, Math.floor(autoLimit / 3)), autoWindow);

@@ -25,6 +25,7 @@ import { executeCircuit } from "@/lib/work-metrics";
 import { generateDID } from "@/lib/aip/did";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { NextRequest } from "next/server";
+import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
 import BN from "bn.js";
 
 function getDeployerWallet(): string {
@@ -68,6 +69,9 @@ async function ensureAgentProfiles() {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = blockSimulatedRouteIfOnchain("POST /api/arena/run");
+  if (blocked) return blocked;
+
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
   // Devnet rate limit (per-table in lib/rateLimit.ts).
   const { limit, windowMs } = getLimit("arena_run");

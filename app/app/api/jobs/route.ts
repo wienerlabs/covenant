@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
 import { prisma, ensureSchema, retryable } from "@/lib/prisma";
 import { memoize } from "@/lib/cache";
 import { sendMarkerTransaction } from "@/lib/solana";
@@ -124,6 +125,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = blockSimulatedRouteIfOnchain("POST /api/jobs");
+  if (blocked) return blocked;
+
   await ensureSchema().catch(() => { /* non-fatal */ });
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
   // Devnet rate limit (per-table in lib/rateLimit.ts).
