@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { guardAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const ADMIN_SECRET = process.env.ADMIN_SECRET || process.env.CRON_SECRET;
-  if (!ADMIN_SECRET) {
-    console.error(
-      "[admin] ADMIN_SECRET/CRON_SECRET unset; admin endpoint will refuse all requests"
-    );
-  }
-  const auth = req.headers.get("authorization");
-  if (!ADMIN_SECRET || auth !== `Bearer ${ADMIN_SECRET}`) {
+  const auth = await guardAdmin(req, "admin.dump.read");
+  if (!auth.ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

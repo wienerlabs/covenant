@@ -27,6 +27,7 @@
  */
 
 import crypto from "node:crypto";
+import { checkUrlSync } from "./ssrf";
 
 export type WebhookEventType =
   | "job.created"
@@ -98,12 +99,17 @@ export function signWebhook(rawBody: string, opts: WebhookSignOptions): string {
  * `true` if valid AND within tolerance, `false` otherwise.
  *
  * Receivers should call this on every webhook delivery before
- * trusting the body.
+ * trusting the body. Stale timestamps (outside the tolerance window)
+ * and tampered bodies are rejected (C-094).
+ *
+ * Secret rotation (C-094): `secret` may be a single key or an array of
+ * keys. When rotating, configure `[newSecret, oldSecret]` so deliveries
+ * signed with either key keep verifying until the old key is retired.
  */
 export function verifyWebhookSignature(args: {
   header: string | null | undefined;
   body: string;
-  secret: string;
+  secret: string | string[];
   toleranceMs?: number;
 }): boolean {
   if (!args.header) return false;
@@ -119,14 +125,22 @@ export function verifyWebhookSignature(args: {
   if (!ts || !v1) return false;
   if (Math.abs(Date.now() - ts) > tolerance) return false;
 
-  const expected = crypto
-    .createHmac("sha256", args.secret)
-    .update(`${ts}.${args.body}`)
-    .digest("hex");
+  // Decode the presented MAC once; a malformed hex value yields a buffer
+  // whose length won't match the 32-byte digest, so it fails closed.
+  const presented = Buffer.from(v1, "hex");
 
-  // Constant-time comparison to avoid timing attacks.
-  if (expected.length !== v1.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(v1, "hex"));
+  const secrets = (Array.isArray(args.secret) ? args.secret : [args.secret]).filter(Boolean);
+  for (const secret of secrets) {
+    const expected = crypto
+      .createHmac("sha256", secret)
+      .update(`${ts}.${args.body}`)
+      .digest();
+    // Constant-time comparison to avoid timing attacks.
+    if (expected.length === presented.length && crypto.timingSafeEqual(expected, presented)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -176,6 +190,26 @@ export async function deliverWebhook(
   event: WebhookEvent,
   opts: DeliverOptions,
 ): Promise<WebhookDeliveryResult> {
+  // SSRF guard: never deliver to a private / internal / non-http(s) target,
+  // even if a malicious subscription URL was somehow stored (C-093).
+  const guard = checkUrlSync(opts.url);
+  if (!guard.ok) {
+    return {
+      event,
+      url: opts.url,
+      attempts: [
+        {
+          attempt: 1,
+          delivered_at: Date.now(),
+          ok: false,
+          duration_ms: 0,
+          error: `blocked target: ${guard.reason}`,
+        },
+      ],
+      final_ok: false,
+    };
+  }
+
   const fetcher = opts.fetch ?? globalThis.fetch.bind(globalThis);
   const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const timeout = opts.timeoutMs ?? 10_000;

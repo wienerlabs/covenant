@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mintTestUSDC, getTokenBalance } from "@/lib/escrow";
-import { rateLimit } from "@/lib/rateLimit";
+import {
+  rateLimitDurable,
+  rateLimited429,
+  compoundKey,
+  getLimit,
+  ipFromRequest,
+} from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
   // Devnet-only deployment — faucet is always live.
@@ -24,18 +30,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Rate limit: 1 per wallet per hour
-    const rl = rateLimit(`faucet:${walletAddress}`, 1, 60 * 60 * 1000);
-    if (!rl.allowed) {
-      const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
-      return NextResponse.json(
-        { error: `Rate limited. Try again in ${Math.ceil(retryAfter / 60)} minutes.` },
-        {
-          status: 429,
-          headers: { "Retry-After": String(retryAfter) },
-        }
-      );
-    }
+    // Rate limit (durable, distributed — H-04): 1/hour per wallet AND
+    // 10/hour per IP, so one IP can't drain the faucet across many wallets.
+    // The shared Postgres counter survives Vercel's per-container split.
+    const fWallet = getLimit("faucet");
+    const byWallet = await rateLimitDurable(
+      compoundKey({ op: "faucet", wallet: walletAddress }),
+      fWallet.limit,
+      fWallet.windowMs,
+    );
+    if (!byWallet.allowed) return rateLimited429(byWallet);
+
+    const fIp = getLimit("faucet_ip");
+    const byIp = await rateLimitDurable(
+      compoundKey({ op: "faucet_ip", ip: ipFromRequest(request) }),
+      fIp.limit,
+      fIp.windowMs,
+    );
+    if (!byIp.allowed) return rateLimited429(byIp);
 
     const amount = 100; // 100 test USDC per faucet request
 

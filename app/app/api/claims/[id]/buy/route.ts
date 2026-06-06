@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { enforceIpLimit } from "@/lib/rateLimit";
 import {
   fetchClaimListing,
   verifyTxInvokedCovenant,
@@ -21,6 +22,8 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    const limited = await enforceIpLimit(req, "buy_claim");
+    if (limited) return limited;
     const body = await req.json();
     const { buyerWallet, txSignature } = body as {
       buyerWallet?: string;

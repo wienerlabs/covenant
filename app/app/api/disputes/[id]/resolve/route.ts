@@ -6,6 +6,7 @@ import {
 } from "@/lib/program-server";
 import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
+import { enforceIpLimit } from "@/lib/rateLimit";
 
 /**
  * POST /api/disputes/[id]/resolve
@@ -34,6 +35,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const limited = await enforceIpLimit(request, "resolve_dispute");
+    if (limited) return limited;
+
     const { id } = await params;
     const body = await request.json();
     const {

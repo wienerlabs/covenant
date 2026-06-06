@@ -515,3 +515,37 @@ model Review {
   @@index([takerWallet])
   @@index([posterWallet])
 }
+
+// ============================================================================
+// Security: admin audit log
+// ============================================================================
+
+/// Append-only audit log of admin endpoint access (C-095). Every authorized
+/// admin action records a row so operator activity is reviewable after the
+/// fact. Denied attempts are logged to the console, not here, so bad
+/// credentials can't amplify into DB writes.
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  action     String   // logical action, e.g. "admin.db-stats.read"
+  method     String   // HTTP method
+  route      String   // request path
+  ip         String?
+  authorized Boolean  // whether the request passed auth
+  detail     String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+}
+
+/// Distributed fixed-window rate-limit counters (C-092 / H-04). Keyed by
+/// "<key>:<window-index>" so the limit is shared across all serverless
+/// instances instead of being per-container (and thus bypassable). Rows are
+/// disposable — an opportunistic sweep deletes expired buckets.
+model RateLimit {
+  bucket    String   @id // "<key>:<floor(now/windowMs)>"
+  count     Int      @default(0)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}

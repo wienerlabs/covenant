@@ -157,6 +157,28 @@ const MIGRATION_SQL = [
   // AgentRevenue.paymentTx — ties each paid row to a verified payment (C-037).
   `ALTER TABLE "AgentRevenue" ADD COLUMN IF NOT EXISTS "paymentTx" TEXT`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "AgentRevenue_paymentTx_key" ON "AgentRevenue"("paymentTx")`,
+
+  // AdminAuditLog — durable audit trail of admin endpoint access (C-095).
+  `CREATE TABLE IF NOT EXISTS "AdminAuditLog" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "action" TEXT NOT NULL,
+    "method" TEXT NOT NULL,
+    "route" TEXT NOT NULL,
+    "ip" TEXT,
+    "authorized" BOOLEAN NOT NULL,
+    "detail" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS "AdminAuditLog_action_idx" ON "AdminAuditLog"("action")`,
+  `CREATE INDEX IF NOT EXISTS "AdminAuditLog_createdAt_idx" ON "AdminAuditLog"("createdAt")`,
+
+  // RateLimit — distributed fixed-window counters (C-092 / H-04).
+  `CREATE TABLE IF NOT EXISTS "RateLimit" (
+    "bucket" TEXT NOT NULL PRIMARY KEY,
+    "count" INTEGER NOT NULL DEFAULT 0,
+    "expiresAt" TIMESTAMP(3) NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS "RateLimit_expiresAt_idx" ON "RateLimit"("expiresAt")`,
 ];
 
 export async function ensureSchema(): Promise<void> {

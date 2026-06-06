@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api-response";
 import { memoizeStats, memoizeClear, memoizeDelete } from "@/lib/cache";
+import { guardAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,14 +19,9 @@ export const runtime = "nodejs";
  *
  * Auth: Bearer ADMIN_SECRET.
  */
-function authorized(req: NextRequest): boolean {
-  const secret = process.env.ADMIN_SECRET || process.env.CRON_SECRET;
-  if (!secret) return false;
-  return req.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 export async function GET(req: NextRequest) {
-  if (!authorized(req)) return fail("unauthorized", "Bearer admin secret required.");
+  const auth = await guardAdmin(req, "admin.cache-stats.read");
+  if (!auth.ok) return fail("unauthorized", "Bearer admin secret required.");
   const stats = memoizeStats();
   const total = stats.hits + stats.misses + stats.staleHits;
   const hitRate = total > 0 ? (stats.hits + stats.staleHits) / total : 0;
@@ -38,7 +34,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!authorized(req)) return fail("unauthorized", "Bearer admin secret required.");
+  const auth = await guardAdmin(req, "admin.cache-stats.clear");
+  if (!auth.ok) return fail("unauthorized", "Bearer admin secret required.");
   const key = new URL(req.url).searchParams.get("key");
   if (key) {
     const found = memoizeDelete(key);

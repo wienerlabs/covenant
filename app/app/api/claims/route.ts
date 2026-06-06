@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma, ensureSchema } from "@/lib/prisma";
+import { enforceIpLimit } from "@/lib/rateLimit";
 import {
   fetchClaimListing,
   verifyTxInvokedCovenant,
@@ -195,6 +196,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await ensureSchema().catch(() => { /* non-fatal */ });
+    const limited = await enforceIpLimit(req, "list_claim");
+    if (limited) return limited;
     const body = await req.json();
     const { jobId, txSignature } = body as {
       jobId?: string;

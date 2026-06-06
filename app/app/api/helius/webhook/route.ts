@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
+import { constantTimeEqual } from "@/lib/secure-compare";
 
 /**
  * POST /api/helius/webhook
@@ -26,16 +27,21 @@ import crypto from "crypto";
 const HELIUS_WEBHOOK_SECRET = process.env.HELIUS_WEBHOOK_SECRET ?? "";
 
 function verifyAuth(req: NextRequest): boolean {
+  // Fail closed: an unset secret denies every request (C-094) rather than
+  // accepting all — an unconfigured webhook must not be an open door.
   if (!HELIUS_WEBHOOK_SECRET) {
-    console.warn("[helius-webhook] HELIUS_WEBHOOK_SECRET not set; accepting all");
-    return true;
+    console.error(
+      "[helius-webhook] HELIUS_WEBHOOK_SECRET not set; refusing all requests",
+    );
+    return false;
   }
-  const authHeader = req.headers.get("authorization");
-  if (authHeader === HELIUS_WEBHOOK_SECRET) return true;
-  if (authHeader === `Bearer ${HELIUS_WEBHOOK_SECRET}`) return true;
-  const url = new URL(req.url);
-  if (url.searchParams.get("auth") === HELIUS_WEBHOOK_SECRET) return true;
-  return false;
+  const authHeader = req.headers.get("authorization") ?? "";
+  const queryAuth = new URL(req.url).searchParams.get("auth") ?? "";
+  return (
+    constantTimeEqual(authHeader, HELIUS_WEBHOOK_SECRET) ||
+    constantTimeEqual(authHeader, `Bearer ${HELIUS_WEBHOOK_SECRET}`) ||
+    constantTimeEqual(queryAuth, HELIUS_WEBHOOK_SECRET)
+  );
 }
 
 interface ParsedEvent {

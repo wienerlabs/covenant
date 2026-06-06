@@ -5,6 +5,7 @@ import {
   clearErrorBuffer,
 } from "@/lib/error-buffer";
 import { ok, fail } from "@/lib/api-response";
+import { guardAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,14 +25,9 @@ export const runtime = "nodejs";
  * Auth: Bearer ADMIN_SECRET (or CRON_SECRET as fallback).
  */
 
-function authorized(req: NextRequest): boolean {
-  const secret = process.env.ADMIN_SECRET || process.env.CRON_SECRET;
-  if (!secret) return false;
-  return req.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 export async function GET(req: NextRequest) {
-  if (!authorized(req)) return fail("unauthorized", "Bearer admin secret required.");
+  const auth = await guardAdmin(req, "admin.error-buffer.read");
+  if (!auth.ok) return fail("unauthorized", "Bearer admin secret required.");
   const limit = Math.min(
     Number(new URL(req.url).searchParams.get("limit") ?? 100),
     100,
@@ -52,7 +48,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!authorized(req)) return fail("unauthorized", "Bearer admin secret required.");
+  const auth = await guardAdmin(req, "admin.error-buffer.clear");
+  if (!auth.ok) return fail("unauthorized", "Bearer admin secret required.");
   const cleared = clearErrorBuffer();
   return ok({ cleared });
 }

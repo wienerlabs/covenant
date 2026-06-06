@@ -3,6 +3,7 @@ import { prisma, retryable } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api-response";
 import { log } from "@/lib/logger";
 import { memoizeStats } from "@/lib/cache";
+import { guardAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,12 +22,6 @@ export const runtime = "nodejs";
  * Auth: Bearer ADMIN_SECRET. No rate limit — operator endpoint
  * meant to be hit by dashboards / monitors / on-call scripts.
  */
-function authorized(req: NextRequest): boolean {
-  const secret = process.env.ADMIN_SECRET || process.env.CRON_SECRET;
-  if (!secret) return false;
-  return req.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 interface DbStats {
   collected_at: string;
   duration_ms: number;
@@ -53,7 +48,8 @@ interface DbStats {
 }
 
 export async function GET(req: NextRequest) {
-  if (!authorized(req)) return fail("unauthorized", "Bearer admin secret required.");
+  const auth = await guardAdmin(req, "admin.db-stats.read");
+  if (!auth.ok) return fail("unauthorized", "Bearer admin secret required.");
 
   const reqLog = log.forRequest(req);
   const startedAt = Date.now();

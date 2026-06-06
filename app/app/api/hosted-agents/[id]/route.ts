@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { checkUrlSync } from "@/lib/ssrf";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,15 @@ export async function PATCH(
   if (updates.webEnabled !== undefined) allowed.webEnabled = Boolean(updates.webEnabled);
   if (updates.pricePerPrompt !== undefined) allowed.pricePerPrompt = Number(updates.pricePerPrompt);
   if (updates.active !== undefined) allowed.active = Boolean(updates.active);
-  if (updates.avatarUrl !== undefined) allowed.avatarUrl = updates.avatarUrl;
+  if (updates.avatarUrl !== undefined) {
+    if (updates.avatarUrl) {
+      const guard = checkUrlSync(String(updates.avatarUrl));
+      if (!guard.ok) {
+        return NextResponse.json({ error: `Invalid avatarUrl: ${guard.reason}` }, { status: 400 });
+      }
+    }
+    allowed.avatarUrl = updates.avatarUrl;
+  }
 
   const updated = await prisma.hostedAgent.update({ where: { id }, data: allowed });
   return NextResponse.json(updated);
