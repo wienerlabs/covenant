@@ -81,6 +81,76 @@ describe("signWebhook + verifyWebhookSignature", () => {
     assert.equal(r1, false);
     assert.equal(r2, false);
   });
+
+  test("rejects malformed hex signatures without throwing", () => {
+    const ok = verifyWebhookSignature({
+      header: `t=${Date.now()},v1=${"z".repeat(64)}`,
+      body: "x",
+      secret: "sk",
+    });
+    assert.equal(ok, false);
+  });
+
+  test("rejects replayed delivery ids when a replay cache is provided", () => {
+    const body = JSON.stringify({ id: "evt_replay", type: "job.finalized" });
+    const header = signWebhook(body, {
+      secret: "sk",
+      deliveryId: "evt_replay-1",
+    });
+    const replayCache = new Set<string>();
+    const first = verifyWebhookSignature({
+      header,
+      body,
+      secret: "sk",
+      replayCache,
+    });
+    const second = verifyWebhookSignature({
+      header,
+      body,
+      secret: "sk",
+      replayCache,
+    });
+    assert.equal(first, true);
+    assert.equal(second, false);
+  });
+
+  test("requires a signed delivery id when replay protection is enabled", () => {
+    const body = "x";
+    const header = signWebhook(body, { secret: "sk" });
+    const ok = verifyWebhookSignature({
+      header,
+      body,
+      secret: "sk",
+      replayCache: new Set<string>(),
+    });
+    assert.equal(ok, false);
+  });
+
+  test("rejects delivery-id tampering", () => {
+    const body = "x";
+    const header = signWebhook(body, {
+      secret: "sk",
+      deliveryId: "evt_abc-1",
+    });
+    const tampered = header.replace("d=evt_abc-1", "d=evt_abc-2");
+    const ok = verifyWebhookSignature({
+      header: tampered,
+      body,
+      secret: "sk",
+    });
+    assert.equal(ok, false);
+  });
+
+  test("accepts any active secret during rotation", () => {
+    const body = "x";
+    const header = signWebhook(body, { secret: "previous-secret" });
+    const ok = verifyWebhookSignature({
+      header,
+      body,
+      secret: ["current-secret", "previous-secret"],
+    });
+    assert.equal(ok, true);
+  });
 });
 
 describe("generateEventId", () => {
@@ -148,7 +218,10 @@ describe("deliverWebhook", () => {
     assert.equal(result.attempts[0].status_code, 200);
     assert.ok(receivedHeaders);
     assert.equal(receivedHeaders!["x-covenant-event"], "job.created");
-    assert.match(receivedHeaders!["x-covenant-signature"], /^t=\d+,v1=[a-f0-9]+$/);
+    assert.match(
+      receivedHeaders!["x-covenant-signature"],
+      /^t=\d+,d=evt_.+-1,v1=[a-f0-9]+$/,
+    );
     assert.match(receivedHeaders!["x-covenant-delivery"], /^evt_.+-1$/);
     assert.equal(JSON.parse(receivedBody!).id, event.id);
   });
