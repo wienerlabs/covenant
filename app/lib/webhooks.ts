@@ -99,17 +99,12 @@ export function signWebhook(rawBody: string, opts: WebhookSignOptions): string {
  * `true` if valid AND within tolerance, `false` otherwise.
  *
  * Receivers should call this on every webhook delivery before
- * trusting the body. Stale timestamps (outside the tolerance window)
- * and tampered bodies are rejected (C-094).
- *
- * Secret rotation (C-094): `secret` may be a single key or an array of
- * keys. When rotating, configure `[newSecret, oldSecret]` so deliveries
- * signed with either key keep verifying until the old key is retired.
+ * trusting the body.
  */
 export function verifyWebhookSignature(args: {
   header: string | null | undefined;
   body: string;
-  secret: string | string[];
+  secret: string;
   toleranceMs?: number;
 }): boolean {
   if (!args.header) return false;
@@ -125,22 +120,14 @@ export function verifyWebhookSignature(args: {
   if (!ts || !v1) return false;
   if (Math.abs(Date.now() - ts) > tolerance) return false;
 
-  // Decode the presented MAC once; a malformed hex value yields a buffer
-  // whose length won't match the 32-byte digest, so it fails closed.
-  const presented = Buffer.from(v1, "hex");
+  const expected = crypto
+    .createHmac("sha256", args.secret)
+    .update(`${ts}.${args.body}`)
+    .digest("hex");
 
-  const secrets = (Array.isArray(args.secret) ? args.secret : [args.secret]).filter(Boolean);
-  for (const secret of secrets) {
-    const expected = crypto
-      .createHmac("sha256", secret)
-      .update(`${ts}.${args.body}`)
-      .digest();
-    // Constant-time comparison to avoid timing attacks.
-    if (expected.length === presented.length && crypto.timingSafeEqual(expected, presented)) {
-      return true;
-    }
-  }
-  return false;
+  // Constant-time comparison to avoid timing attacks.
+  if (expected.length !== v1.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(v1, "hex"));
 }
 
 /**
