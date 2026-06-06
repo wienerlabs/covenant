@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
+import { PublicKey } from "@solana/web3.js";
+import {
+  fetchJobEscrow,
+  deriveJobPda,
+  verifyTxInvokedCovenant,
+} from "@/lib/program-server";
+import { checkAcceptJob } from "@/lib/onchain-verify";
+import { classifySolanaError } from "@/lib/solana-errors";
 
 /**
  * POST /api/jobs/[id]/accept
@@ -22,7 +30,7 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { takerWallet } = body;
+    const { takerWallet, txHash: acceptTxHash } = body;
 
     if (!takerWallet || typeof takerWallet !== "string") {
       return NextResponse.json(
@@ -69,6 +77,40 @@ export async function POST(
         { error: "You already accepted this job", interest: existing },
         { status: 409 },
       );
+    }
+
+    // C-012b: when the taker signed accept_job on chain (passes a txHash),
+    // mirror only after confirming the on-chain JobEscrow binds them as taker
+    // and is Accepted. A mismatched submitter is rejected — no DB row written.
+    if (acceptTxHash && typeof acceptTxHash === "string") {
+      try {
+        await verifyTxInvokedCovenant(acceptTxHash);
+        const jobPda = job.pda
+          ? new PublicKey(job.pda)
+          : deriveJobPda(
+              new PublicKey(job.posterWallet),
+              Buffer.from(job.specHash, "hex"),
+            )[0];
+        const escrow = await fetchJobEscrow(jobPda);
+        const verdict = checkAcceptJob(escrow, takerWallet);
+        if (!verdict.ok) {
+          return NextResponse.json(
+            { error: `accept_job verification failed: ${verdict.reason}` },
+            { status: 400 },
+          );
+        }
+      } catch (err) {
+        const cls = classifySolanaError(err);
+        return NextResponse.json(
+          {
+            error: "accept_job verification failed. No DB row written.",
+            detail: err instanceof Error ? err.message : String(err),
+            failureMode: cls.mode,
+            retryable: cls.retryable,
+          },
+          { status: cls.mode === "rate_limited" ? 503 : 400 },
+        );
+      }
     }
 
     // Create interest + update job status atomically

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { PublicKey } from "@solana/web3.js";
 import { prisma } from "@/lib/prisma";
+import { fetchJobEscrow } from "@/lib/program-server";
+import { reconcileJobRow } from "@/lib/onchain-verify";
 
 export async function GET(
   _request: NextRequest,
@@ -24,6 +27,26 @@ export async function GET(
 
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    // C-021: chain is the source of truth — heal any DB drift on read. If the
+    // RPC is unreachable, fall back to the DB mirror (non-fatal).
+    if (job.pda) {
+      try {
+        const escrow = await fetchJobEscrow(new PublicKey(job.pda));
+        if (escrow) {
+          const { drifted, updates } = reconcileJobRow(
+            { status: job.status, takerWallet: job.takerWallet, amount: job.amount },
+            escrow,
+          );
+          if (drifted) {
+            await prisma.job.update({ where: { id: job.id }, data: updates });
+            Object.assign(job, updates);
+          }
+        }
+      } catch (err) {
+        console.error("[jobs/[id]] on-read reconcile (non-fatal):", err);
+      }
     }
 
     return NextResponse.json(job);

@@ -13,6 +13,9 @@ import {
   verifyTxInvokedCovenant,
   keypairFromEnv,
 } from "@/lib/program-server";
+import { checkCreateJob } from "@/lib/onchain-verify";
+import { classifySolanaError } from "@/lib/solana-errors";
+import { USDC_MINT } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
@@ -418,16 +421,17 @@ export async function POST(request: NextRequest) {
           `Tx may have been for a different spec hash.`,
         );
       }
-      if (onchain.poster !== posterWallet) {
-        throw new Error(
-          `JobEscrow.poster mismatch (on-chain ${onchain.poster.slice(0, 8)}… vs ` +
-          `claimed ${posterWallet.slice(0, 8)}…)`,
-        );
-      }
-      if (Math.abs(onchain.amount - amount) > 1e-6) {
-        throw new Error(
-          `JobEscrow.amount mismatch (on-chain ${onchain.amount} vs claimed ${amount})`,
-        );
+      // C-011: the escrow must be ours, hold the stated amount AND the required
+      // USDC mint (not a forged worthless token), at the PDA derived from
+      // [b"job", poster, spec_hash]. Reject mismatches — no DB row is written.
+      const verdict = checkCreateJob(onchain, {
+        poster: posterWallet,
+        specHashHex: specHash,
+        minAmountAtomic: BigInt(Math.round(amount * 1_000_000)),
+        mint: USDC_MINT.toBase58(),
+      });
+      if (!verdict.ok) {
+        throw new Error(verdict.reason);
       }
 
       // 3) Mirror to DB. Replay protection: txHash is unique per Job row.
@@ -470,13 +474,18 @@ export async function POST(request: NextRequest) {
       );
     } catch (err) {
       console.error("[create_job] on-chain verification failed:", err);
+      // C-023: classify the failure so the caller gets a clear, actionable
+      // error (and retryable RPC blips read as 503). No DB row was written —
+      // verification happens before any create.
+      const cls = classifySolanaError(err);
       return NextResponse.json(
         {
-          error:
-            "On-chain create_job verification failed. No DB row written. " +
-            (err instanceof Error ? err.message : String(err)),
+          error: "On-chain create_job verification failed. No DB row written.",
+          detail: err instanceof Error ? err.message : String(err),
+          failureMode: cls.mode,
+          retryable: cls.retryable,
         },
-        { status: 400 },
+        { status: cls.mode === "rate_limited" ? 503 : 400 },
       );
     }
   } catch (error) {
