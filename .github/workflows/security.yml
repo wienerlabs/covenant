@@ -1,0 +1,55 @@
+name: Security Scan
+
+# Software-composition analysis (C-096).
+#
+# The `npm-audit` job is a HARD GATE: a CRITICAL advisory anywhere in the
+# app's dependency tree fails the job and blocks the merge. Lower-severity
+# advisories are reported but do not block, so day-to-day noise (moderate/
+# high transitive issues) never wedges the pipeline while still being visible.
+#
+# The `cargo-audit` job is INFORMATIONAL (continue-on-error): it surfaces
+# RUSTSEC advisories for the on-chain Anchor program — e.g. H-06's
+# curve25519-dalek / ed25519-dalek — without blocking, until those crate
+# bumps land in their own on-chain PR.
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Weekly re-scan so newly-disclosed advisories are caught on a clean tree
+    # even when no code changed.
+    - cron: "0 6 * * 1"
+
+jobs:
+  npm-audit:
+    name: npm audit (criticals block merge)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Regenerate the lockfile from package.json (no install, no scripts) so
+      # the audit reflects the current manifest. --legacy-peer-deps matches how
+      # the app is actually installed (a known upstream peer conflict).
+      - name: Refresh lockfile
+        run: cd app && npm install --package-lock-only --legacy-peer-deps --ignore-scripts
+      - name: Audit app dependencies (fail on critical)
+        run: cd app && npm audit --audit-level=critical
+      - name: Report high-severity advisories (informational)
+        if: always()
+        run: cd app && npm audit --audit-level=high || true
+
+  cargo-audit:
+    name: cargo audit (Anchor program, informational)
+    runs-on: ubuntu-latest
+    # Does not block: the program's RUSTSEC advisories (H-06) are tracked for
+    # a dedicated crate-bump PR. This job keeps them visible in the meantime.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Audit Rust dependencies (RUSTSEC)
+        run: cargo audit

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { awardXP } from "@/lib/xp";
 import { unlockAchievement } from "@/lib/achievements";
+import { assertPublicUrl } from "@/lib/ssrf";
 
 const VALID_CAPABILITIES = [
   "writing",
@@ -11,31 +12,6 @@ const VALID_CAPABILITIES = [
   "bug_bounty",
   "design",
 ] as const;
-
-function isValidUrl(str: string): boolean {
-  try {
-    const url = new URL(str);
-    return url.protocol === "https:" || url.protocol === "http:";
-  } catch {
-    return false;
-  }
-}
-
-function isPrivateUrl(urlStr: string): boolean {
-  try {
-    const url = new URL(urlStr);
-    const hostname = url.hostname;
-    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") return true;
-    if (hostname.startsWith("10.")) return true;
-    if (hostname.startsWith("192.168.")) return true;
-    if (hostname.startsWith("169.254.")) return true;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true;
-    if (hostname.endsWith(".internal") || hostname.endsWith(".local")) return true;
-    return false;
-  } catch {
-    return true;
-  }
-}
 
 // ── POST: Register a new agent ──────────────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -60,10 +36,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Endpoint URL ──────────────────────────────────────────────────────
-    if (!isValidUrl(endpointUrl)) {
+    // ── Endpoint URL: SSRF guard (protocol + private ranges + DNS) ────────
+    const urlGuard = await assertPublicUrl(String(endpointUrl));
+    if (!urlGuard.ok) {
       return NextResponse.json(
-        { error: "endpointUrl must be a valid HTTP or HTTPS URL" },
+        { error: `Invalid endpointUrl: ${urlGuard.reason}` },
         { status: 400 },
       );
     }
@@ -97,15 +74,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── SSRF protection: block private/internal URLs ──────────────────────
-    if (isPrivateUrl(endpointUrl)) {
-      return NextResponse.json(
-        { error: "Private/internal URLs not allowed" },
-        { status: 400 },
-      );
-    }
-
-    // ── Test the endpoint ─────────────────────────────────────────────────
+    // ── Test the endpoint (URL already SSRF-screened above) ───────────────
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10_000);

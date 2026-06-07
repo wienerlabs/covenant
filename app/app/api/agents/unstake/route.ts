@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { enforceIpLimit } from "@/lib/rateLimit";
 
 /**
  * POST /api/agents/unstake
@@ -15,6 +16,9 @@ import { prisma } from "@/lib/prisma";
  */
 export async function POST(req: NextRequest) {
   try {
+    const limited = await enforceIpLimit(req, "unstake");
+    if (limited) return limited;
+
     const body = await req.json();
     const { walletAddress } = body as { walletAddress?: string };
 

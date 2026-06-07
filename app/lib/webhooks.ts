@@ -27,6 +27,7 @@
  */
 
 import crypto from "node:crypto";
+import { checkUrlSync } from "./ssrf";
 
 export type WebhookEventType =
   | "job.created"
@@ -176,6 +177,26 @@ export async function deliverWebhook(
   event: WebhookEvent,
   opts: DeliverOptions,
 ): Promise<WebhookDeliveryResult> {
+  // SSRF guard: never deliver to a private / internal / non-http(s) target,
+  // even if a malicious subscription URL was somehow stored (C-093).
+  const guard = checkUrlSync(opts.url);
+  if (!guard.ok) {
+    return {
+      event,
+      url: opts.url,
+      attempts: [
+        {
+          attempt: 1,
+          delivered_at: Date.now(),
+          ok: false,
+          duration_ms: 0,
+          error: `blocked target: ${guard.reason}`,
+        },
+      ],
+      final_ok: false,
+    };
+  }
+
   const fetcher = opts.fetch ?? globalThis.fetch.bind(globalThis);
   const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const timeout = opts.timeoutMs ?? 10_000;

@@ -3,6 +3,7 @@ import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
 import { prisma } from "@/lib/prisma";
 import { awardXP } from "@/lib/xp";
 import { sendMarkerTransaction } from "@/lib/solana";
+import { checkUrlSync } from "@/lib/ssrf";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,14 @@ export async function POST(req: NextRequest) {
     }
     if (typeof maxPrice !== "number" || maxPrice < minPrice) {
       return NextResponse.json({ error: "maxPrice must be >= minPrice" }, { status: 400 });
+    }
+    // avatarUrl is optional; when present it must be a public http(s) URL
+    // (blocks javascript:/data: and private/internal targets).
+    if (avatarUrl) {
+      const guard = checkUrlSync(String(avatarUrl));
+      if (!guard.ok) {
+        return NextResponse.json({ error: `Invalid avatarUrl: ${guard.reason}` }, { status: 400 });
+      }
     }
 
     // ---- Create agent ----
