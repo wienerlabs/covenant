@@ -9,6 +9,8 @@ jobs:
         with:
           node-version: 20
       - run: cd app && yarn install --frozen-lockfile
+      - name: Third-party license compliance (C-107)
+        run: cd app && npx tsx scripts/license-inventory.ts --check
       - run: cd app && npx prisma generate
       - run: cd app && npx next build
         env:

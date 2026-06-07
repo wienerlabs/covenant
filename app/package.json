@@ -2,6 +2,7 @@
   "name": "app-new",
   "version": "0.1.0",
   "private": true,
+  "license": "LGPL-2.1-only",
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && prisma db push --accept-data-loss --skip-generate && next build",
@@ -9,7 +10,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "npx --yes tsx --test tests/unit/*.test.ts",
-    "test:x402": "npx --yes tsx --test tests/unit/x402-server.test.ts tests/unit/x402-payments.test.ts tests/unit/x402-flow.test.ts"
+    "test:x402": "npx --yes tsx --test tests/unit/x402-server.test.ts tests/unit/x402-payments.test.ts tests/unit/x402-flow.test.ts",
+    "license:check": "npx --yes tsx scripts/license-inventory.ts --check"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
