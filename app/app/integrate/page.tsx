@@ -93,19 +93,29 @@ connection.onLogs(COVENANT_PROGRAM_ID, (logs) => {
     label: "Webhook",
     lang: "typescript",
     code: `// Register a webhook so Covenant pings your server when state changes.
-// HMAC-signed Stripe-style: t=<unix>,v1=<hex>
+// HMAC-signed Stripe-style: t=<unix>,d=<delivery>,v1=<hex>
 import crypto from "node:crypto";
 
-function verifyCovenantSignature(req: Request, secret: string): boolean {
-  const header = req.headers.get("covenant-signature") ?? "";
-  const [tPart, vPart] = header.split(",");
-  const t = tPart.split("=")[1];
-  const v1 = vPart.split("=")[1];
+const seenDeliveries = new Set<string>(); // Replace with durable storage in production.
+
+async function verifyCovenantSignature(req: Request, secret: string): Promise<boolean> {
+  const header = req.headers.get("x-covenant-signature") ?? "";
+  const parts = Object.fromEntries(header.split(",").map((p) => p.split("=")));
+  const t = parts.t;
+  const d = parts.d;
+  const v1 = parts.v1;
+  if (!t || !d || !v1 || seenDeliveries.has(d)) return false;
+  if (Math.abs(Date.now() - Number(t)) > 5 * 60_000) return false;
+  const body = await req.text();
   const expected = crypto
     .createHmac("sha256", secret)
-    .update(\`\${t}.\${req.body}\`)
+    .update(\`\${t}.\${d}.\${body}\`)
     .digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected));
+  const ok =
+    expected.length === v1.length &&
+    crypto.timingSafeEqual(Buffer.from(v1, "hex"), Buffer.from(expected, "hex"));
+  if (ok) seenDeliveries.add(d);
+  return ok;
 }
 
 // Subscribe via POST /api/webhooks { url, events: ["job.delivered","job.finalized"] }`,
