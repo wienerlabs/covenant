@@ -6,6 +6,8 @@ import {
   verifyTxInvokedCovenant,
 } from "@/lib/credit-server";
 import { PublicKey } from "@solana/web3.js";
+import { requireAuth } from "@/lib/require-auth";
+import { log } from "@/lib/logger";
 
 /**
  * POST /api/claims/[id]/buy
@@ -24,7 +26,11 @@ export async function POST(
     const { id } = await params;
     const limited = await enforceIpLimit(req, "buy_claim");
     if (limited) return limited;
-    const body = await req.json();
+    const __raw = await req.text();
+    const __auth = await requireAuth(req, { rawBody: __raw });
+    if (!__auth.ok)
+      return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
+    const body = __raw ? JSON.parse(__raw) : {};
     const { buyerWallet, txSignature } = body as {
       buyerWallet?: string;
       txSignature?: string;
@@ -88,6 +94,12 @@ export async function POST(
         boughtAt: onchain.boughtAt > 0 ? new Date(onchain.boughtAt * 1000) : new Date(),
         buyTxHash: txSignature,
       },
+    });
+
+    log.forRequest(req).info("claim bought", {
+      claimId: id,
+      buyer: buyerWallet,
+      txHash: txSignature,
     });
 
     return NextResponse.json({ claim: updated });

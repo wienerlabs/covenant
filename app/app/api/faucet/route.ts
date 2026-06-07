@@ -8,11 +8,17 @@ import {
   getLimit,
   ipFromRequest,
 } from "@/lib/rateLimit";
+import { requireAuth } from "@/lib/require-auth";
+import { log } from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
   // Devnet-only deployment — faucet is always live.
   try {
-    const body = await request.json();
+    const __raw = await request.text();
+    const __auth = await requireAuth(request, { rawBody: __raw });
+    if (!__auth.ok)
+      return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
+    const body = __raw ? JSON.parse(__raw) : {};
     const { walletAddress } = body;
 
     if (!walletAddress || typeof walletAddress !== "string") {
@@ -52,6 +58,11 @@ export async function POST(request: NextRequest) {
     const amount = 100; // 100 test USDC per faucet request
 
     const result = await mintTestUSDC(walletAddress, amount);
+    log.forRequest(request).info("faucet mint", {
+      wallet: walletAddress,
+      amount,
+      txHash: result.txHash,
+    });
 
     // Store the faucet transaction
     try {

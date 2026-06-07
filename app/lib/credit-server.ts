@@ -119,8 +119,12 @@ export interface OnChainClaimListing {
   status: ClaimStatus;
 }
 
+/**
+ * Map an Anchor enum object (e.g. `{ bought: {} }`) to a ClaimStatus.
+ * Exported for unit tests (C-085).
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function statusKey(status: any): ClaimStatus {
+export function parseClaimStatus(status: any): ClaimStatus {
   if (!status || typeof status !== "object") return "Unknown";
   const k = Object.keys(status)[0];
   if (!k) return "Unknown";
@@ -166,7 +170,7 @@ export async function fetchClaimListing(
     faceValueAtomic,
     listedAt: Number(raw.listedAt.toString()),
     boughtAt: Number(raw.boughtAt.toString()),
-    status: statusKey(raw.status),
+    status: parseClaimStatus(raw.status),
   };
 }
 
@@ -289,6 +293,40 @@ export function deriveReputationPda(wallet: PublicKey): [PublicKey, number] {
   );
 }
 
+export interface BeneficiaryDecision {
+  /** The wallet whose USDC ATA receives the escrow on finalize. */
+  beneficiary: PublicKey;
+  /** True when proceeds were routed to a claim buyer instead of the taker. */
+  routedToBuyer: boolean;
+  /** The buyer wallet (base58) when routed, else null. */
+  buyer: string | null;
+}
+
+/**
+ * Decide who a `finalize_payment` pays: the original taker, or — when the job's
+ * receivable was *sold* via Covenant Credit (claim status `Bought` with a
+ * buyer) — the buyer who factored it. A claim that is merely Listed, Cancelled,
+ * Settled, or absent routes to the taker.
+ *
+ * This is also the guard for the "dispute-loss-after-buy" case: a job that
+ * loses a dispute ends up `Resolved` (refunded to the poster), never
+ * `Finalized`, so it never reaches this routing — a buyer is never paid on a
+ * lost claim and carries the credit risk. Pure + exported for tests (C-085).
+ */
+export function resolveClaimBeneficiary(
+  listing: Pick<OnChainClaimListing, "status" | "buyer"> | null,
+  taker: PublicKey,
+): BeneficiaryDecision {
+  if (listing && listing.status === "Bought" && listing.buyer) {
+    return {
+      beneficiary: new PublicKey(listing.buyer),
+      routedToBuyer: true,
+      buyer: listing.buyer,
+    };
+  }
+  return { beneficiary: taker, routedToBuyer: false, buyer: null };
+}
+
 /**
  * Permissionless finalize crank that correctly routes payment when a
  * claim has been sold.
@@ -321,14 +359,11 @@ export async function finalizeWithClaim(params: {
 
   // Discover who the beneficiary should be.
   const listing = await fetchClaimListing(claimPda);
-  let beneficiaryWallet: PublicKey = taker;
-  let routedToBuyer = false;
-  let buyerStr: string | null = null;
-  if (listing && listing.status === "Bought" && listing.buyer) {
-    beneficiaryWallet = new PublicKey(listing.buyer);
-    routedToBuyer = true;
-    buyerStr = listing.buyer;
-  }
+  const {
+    beneficiary: beneficiaryWallet,
+    routedToBuyer,
+    buyer: buyerStr,
+  } = resolveClaimBeneficiary(listing, taker);
 
   const beneficiaryAta = await getAssociatedTokenAddress(
     USDC_MINT,
