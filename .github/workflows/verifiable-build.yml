@@ -1,0 +1,77 @@
+# C-047 — Deterministic + verifiable build.
+#
+# Reproduces the Anchor program with a pinned, Docker-based toolchain
+# (solana-verify) and asserts the reproduced binary hash equals the program
+# currently deployed on chain. No committed hash constant: both sides are
+# recomputed every run and compared, so the chain stays the source of truth.
+#
+# Not part of the per-PR `ci` workflow — it is slow and Docker-bound. Run it
+# from the Actions tab or by pushing a `v*` / `program-v*` tag.
+name: Verifiable build (C-047)
+
+on:
+  workflow_dispatch:
+    inputs:
+      program_id:
+        description: Program ID to verify against
+        default: 5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT
+      rpc_url:
+        description: RPC endpoint of the cluster the program is deployed on
+        default: https://api.devnet.solana.com
+  push:
+    tags:
+      - "v*"
+      - "program-v*"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PROGRAM_ID: ${{ github.event.inputs.program_id || '5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT' }}
+      RPC_URL: ${{ github.event.inputs.rpc_url || 'https://api.devnet.solana.com' }}
+      LIBRARY_NAME: covenant
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+          key: solana-verify-${{ runner.os }}
+
+      - name: Install solana-verify
+        run: cargo install solana-verify --locked || cargo install solana-verify
+
+      - name: Reproduce the build (deterministic, Docker)
+        run: solana-verify build --library-name "$LIBRARY_NAME"
+
+      - name: Hash the reproduced artifact
+        id: built
+        run: |
+          HASH=$(solana-verify get-executable-hash "target/deploy/${LIBRARY_NAME}.so")
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "reproduced build hash: $HASH"
+
+      - name: Hash the deployed program
+        id: onchain
+        run: |
+          HASH=$(solana-verify get-program-hash -u "$RPC_URL" "$PROGRAM_ID")
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "on-chain program hash: $HASH"
+
+      - name: Compare hashes (fail on mismatch)
+        run: |
+          echo "reproduced : ${{ steps.built.outputs.hash }}"
+          echo "on-chain   : ${{ steps.onchain.outputs.hash }}"
+          if [ "${{ steps.built.outputs.hash }}" != "${{ steps.onchain.outputs.hash }}" ]; then
+            echo "::error::Reproduced build hash does NOT match the deployed program (C-047)."
+            echo "See docs/VERIFIABLE_BUILD.md → 'If the hashes do NOT match'."
+            exit 1
+          fi
+          echo "::notice::Verifiable build OK — reproduced hash matches the deployed program."
