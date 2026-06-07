@@ -13,3 +13,15 @@ jobs:
       - run: cd app && npx next build
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+  # C-006 — block merges that reintroduce a reachable simulated settlement path.
+  # Fast static scan; no build/DB needed, so it runs independently of `build`.
+  fakes-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Block reintroduced simulated settlement (C-006)
+        run: cd app && npx --yes tsx scripts/check-onchain-fakes.ts
