@@ -5,6 +5,7 @@ import { memoize } from "@/lib/cache";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { rateLimit, getLimit } from "@/lib/rateLimit";
 import { buildJobSpec, hashJobSpec } from "@/lib/spec";
+import { moderateJobContent } from "@/lib/moderation";
 import type { Prisma } from "@prisma/client";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
@@ -211,6 +212,13 @@ export async function POST(request: NextRequest) {
       typeof clientCreatedAt === "string" && clientCreatedAt.length > 0
         ? clientCreatedAt
         : new Date().toISOString();
+
+    // C-103: reject prohibited content (Acceptable Use Policy) before
+    // persisting anything to the DB or chain.
+    const moderation = moderateJobContent({ title, description, requirements });
+    if (!moderation.allowed) {
+      return NextResponse.json({ error: moderation.reason }, { status: 400 });
+    }
 
     const specJsonRaw = buildJobSpec({
       posterWallet,
