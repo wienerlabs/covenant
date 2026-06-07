@@ -11,7 +11,7 @@ import { getCategoryById } from "@/lib/categories";
 import Anthropic from "@anthropic-ai/sdk";
 import { withCreditFallback } from "@/lib/anthropic-safe";
 import crypto from "crypto";
-import { rateLimit, getLimit } from "@/lib/rateLimit";
+import { rateLimitDurable, getLimit } from "@/lib/rateLimit";
 import { generateDID } from "@/lib/aip/did";
 import { NextRequest } from "next/server";
 import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     request.headers.get("x-real-ip") ??
     "global";
   const { limit, windowMs } = getLimit("arena_run");
-  const rl = rateLimit(`arena-fulfill:${ip}`, limit, windowMs);
+  const rl = await rateLimitDurable(`arena-fulfill:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return new Response(
       JSON.stringify({

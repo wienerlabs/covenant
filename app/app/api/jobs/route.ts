@@ -3,7 +3,7 @@ import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
 import { prisma, ensureSchema, retryable } from "@/lib/prisma";
 import { memoize } from "@/lib/cache";
 import { sendMarkerTransaction } from "@/lib/solana";
-import { rateLimit, getLimit } from "@/lib/rateLimit";
+import { rateLimitDurable, getLimit } from "@/lib/rateLimit";
 import { buildJobSpec, hashJobSpec } from "@/lib/spec";
 import { moderateJobContent } from "@/lib/moderation";
 import type { Prisma } from "@prisma/client";
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
   // Devnet rate limit (per-table in lib/rateLimit.ts).
   const { limit, windowMs } = getLimit("create_job");
-  const rl = rateLimit(`jobs:${ip}`, limit, windowMs);
+  const rl = await rateLimitDurable(`jobs:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Max 20 job creations per minute." },

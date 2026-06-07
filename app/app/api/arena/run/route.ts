@@ -3,7 +3,7 @@ import { sendMarkerTransaction } from "@/lib/solana";
 import { sendX402Payment, getAgentKeypair } from "@/lib/x402";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
-import { rateLimit, getLimit } from "@/lib/rateLimit";
+import { rateLimitDurable, getLimit } from "@/lib/rateLimit";
 // arena/run is a head-less DEMO route. Real settlement runs on chain
 // via the standard create_job → submit_work → finalize_payment pipeline
 // (see lib/program-server.ts botCreateJob / botFinalizePayment for the
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
   // Devnet rate limit (per-table in lib/rateLimit.ts).
   const { limit, windowMs } = getLimit("arena_run");
-  const rl = rateLimit(`arena:${ip}`, limit, windowMs);
+  const rl = await rateLimitDurable(`arena:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return new Response(
       JSON.stringify({ error: "Rate limit exceeded. Max 5 requests per minute." }),

@@ -5,7 +5,7 @@ import { sendMarkerTransaction } from "@/lib/solana";
 // (see lib/program-server.ts for the bot-signed equivalent). The
 // previous custodial calls were removed in the on-chain refactor
 // (audit C-01); demo runs no longer move USDC.
-import { rateLimit, getLimit } from "@/lib/rateLimit";
+import { rateLimitDurable, getLimit } from "@/lib/rateLimit";
 import { executeCircuit } from "@/lib/work-metrics";
 import crypto from "crypto";
 import { NextRequest } from "next/server";
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
 
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
   const { limit, windowMs } = getLimit("agent_hire");
-  const rl = rateLimit(`agents-hire:${ip}`, limit, windowMs);
+  const rl = await rateLimitDurable(`agents-hire:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return new Response(
       JSON.stringify({ error: "Rate limit exceeded. Max 10 hires per minute." }),

@@ -2,7 +2,7 @@ import { prisma, ensureSchema } from "@/lib/prisma";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { AGENT_ALPHA, AGENT_OMEGA } from "@/lib/agents";
 import { getCategoryById } from "@/lib/categories";
-import { rateLimit, getLimit } from "@/lib/rateLimit";
+import { rateLimitDurable, getLimit } from "@/lib/rateLimit";
 // NOTE: battle/run is a head-less DEMO route. Real fund movement is
 // handled on chain via the standard create_job → submit_work →
 // finalize_payment flow (see lib/program-server.ts botCreateJob /
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
   const { limit, windowMs } = getLimit("battle_run");
-  const rl = rateLimit(`battle:${ip}`, limit, windowMs);
+  const rl = await rateLimitDurable(`battle:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return new Response(
       JSON.stringify({ error: "Rate limit exceeded. Max 5 requests per minute." }),
