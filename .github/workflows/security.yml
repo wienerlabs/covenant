@@ -65,10 +65,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Gitleaks scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Use the gitleaks BINARY (MIT, no license gate) rather than the
+      # gitleaks-action wrapper, which requires a paid GITLEAKS_LICENSE on
+      # organization repos.
+      - name: Install gitleaks
+        run: |
+          VERSION=8.18.4
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Gitleaks scan (full history)
+        run: gitleaks detect --source . --redact --no-banner
       - name: Grep guard for Solana keypair arrays + token prefixes
         if: always()
         run: |
