@@ -4,6 +4,8 @@ import { memoizeStats } from "@/lib/cache";
 import { getQueryStats } from "@/lib/prisma-observe";
 import { idempotencyStats } from "@/lib/idempotency";
 import { bufferStats } from "@/lib/error-buffer";
+import { getServerConnection } from "@/lib/program-server";
+import { PROTOCOL_FEE_BPS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,6 +28,14 @@ export const runtime = "nodejs";
  *   covenant_claims_active_tvl_usdc                   gauge
  *   covenant_claims_by_status{status}                 gauge
  *   covenant_arena_battles_total                      gauge
+ *   covenant_settlement_volume_usdc                   gauge
+ *   covenant_fees_accrued_usdc                        gauge
+ *   covenant_disputes_total                           counter
+ *   covenant_disputes_by_resolution{resolution}       gauge
+ *   covenant_dispute_rate                             gauge
+ *   covenant_rpc_up                                   gauge=1|0
+ *   covenant_rpc_slot                                 gauge
+ *   covenant_rpc_latency_ms                           gauge
  *   covenant_cache_hits_total                         counter
  *   covenant_cache_misses_total                       counter
  *   covenant_cache_stale_hits_total                   counter
@@ -117,6 +127,7 @@ export async function GET(req: NextRequest) {
   let jobCounts: Array<{ status: string; _count: { _all: number }; _sum: { amount: number | null } }> = [];
   let claimCounts: Array<{ status: string; _count: { _all: number }; _sum: { faceValue: number | null } }> = [];
   let arenaCount = 0;
+  let disputeGroups: Array<{ resolution: string | null; _count: { _all: number } }> = [];
   const tableMetric: Metric = {
     name: "covenant_db_table_rows",
     help: "Row count per table.",
@@ -158,7 +169,7 @@ export async function GET(req: NextRequest) {
       });
     });
 
-    [jobCounts, claimCounts, arenaCount] = await Promise.all([
+    [jobCounts, claimCounts, arenaCount, disputeGroups] = await Promise.all([
       retryable(() =>
         prisma.job.groupBy({
           by: ["status"],
@@ -174,6 +185,9 @@ export async function GET(req: NextRequest) {
         }),
       ).catch(() => []),
       retryable(() => prisma.arenaBattle.count()).catch(() => 0),
+      retryable(() =>
+        prisma.dispute.groupBy({ by: ["resolution"], _count: { _all: true } }),
+      ).catch(() => []),
     ]);
 
     let amountSum = 0;
@@ -225,6 +239,57 @@ export async function GET(req: NextRequest) {
     values: [{ value: arenaCount }],
   });
 
+  // ---- Settlement volume + protocol fee accrual (Finalized jobs only) ----
+  // Settlement volume mirrors real on-chain settlement: only jobs that reached
+  // Finalized count. Fees are derived from that settled volume at the protocol
+  // rate (not a fabricated figure) — when settlement is 0, both read 0.
+  let finalizedVolume = 0;
+  for (const g of jobCounts) {
+    if (g.status === "Finalized") finalizedVolume += g._sum.amount ?? 0;
+  }
+  finalizedVolume = Math.round(finalizedVolume * 100) / 100;
+  metrics.push({
+    name: "covenant_settlement_volume_usdc",
+    help: "Sum of job amounts that reached Finalized (settled) state, in USDC.",
+    type: "gauge",
+    values: [{ value: finalizedVolume }],
+  });
+  metrics.push({
+    name: "covenant_fees_accrued_usdc",
+    help: `Protocol fees accrued on settled volume (settlement_volume * ${PROTOCOL_FEE_BPS}bps), in USDC.`,
+    type: "gauge",
+    values: [{ value: Math.round((finalizedVolume * PROTOCOL_FEE_BPS) / 10000 * 100) / 100 }],
+  });
+
+  // ---- Dispute volume + rate ----
+  const disputesTotal = disputeGroups.reduce((s, g) => s + g._count._all, 0);
+  const jobsTotal = jobCounts.reduce((s, g) => s + g._count._all, 0);
+  metrics.push({
+    name: "covenant_disputes_total",
+    help: "Total disputes ever raised.",
+    type: "counter",
+    values: [{ value: disputesTotal }],
+  });
+  metrics.push({
+    name: "covenant_disputes_by_resolution",
+    help: "Dispute count by resolution (Pending/FavorTaker/FavorPoster/Split).",
+    type: "gauge",
+    values: disputeGroups.length
+      ? disputeGroups.map((g) => ({
+          labels: { resolution: g.resolution ?? "Pending" },
+          value: g._count._all,
+        }))
+      : [{ labels: { resolution: "none" }, value: 0 }],
+  });
+  metrics.push({
+    name: "covenant_dispute_rate",
+    help: "Disputes as a fraction of all jobs (0..1).",
+    type: "gauge",
+    values: [
+      { value: jobsTotal > 0 ? Math.round((disputesTotal / jobsTotal) * 10000) / 10000 : 0 },
+    ],
+  });
+
   // ---- Cache ----
   const c = memoizeStats();
   metrics.push({ name: "covenant_cache_hits_total", help: "Cache hit count.", type: "counter", values: [{ value: c.hits }] });
@@ -249,6 +314,25 @@ export async function GET(req: NextRequest) {
   // ---- Error buffer ----
   const eb = bufferStats();
   metrics.push({ name: "covenant_error_buffer_count", help: "Error log entries in the in-memory ring buffer.", type: "gauge", values: [{ value: eb.count }] });
+
+  // ---- RPC health (live getSlot probe) ----
+  const rpcUp: Metric = { name: "covenant_rpc_up", help: "1 if the Solana RPC responded to getSlot, 0 otherwise.", type: "gauge", values: [{ value: 0 }] };
+  const rpcSlot: Metric = { name: "covenant_rpc_slot", help: "Current Solana slot reported by the RPC (0 if unreachable).", type: "gauge", values: [{ value: 0 }] };
+  const rpcLatency: Metric = { name: "covenant_rpc_latency_ms", help: "RPC getSlot round-trip latency in ms (0 if unreachable).", type: "gauge", values: [{ value: 0 }] };
+  try {
+    const conn = getServerConnection();
+    const t0 = Date.now();
+    const slot = await Promise.race([
+      conn.getSlot(),
+      new Promise<number>((_, reject) => setTimeout(() => reject(new Error("timeout")), 4000)),
+    ]);
+    rpcUp.values[0].value = 1;
+    rpcSlot.values[0].value = slot;
+    rpcLatency.values[0].value = Date.now() - t0;
+  } catch {
+    /* rpcUp stays 0 */
+  }
+  metrics.push(rpcUp, rpcSlot, rpcLatency);
 
   return new Response(renderPrometheus(metrics), {
     status: 200,
