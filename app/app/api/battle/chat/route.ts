@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/rateLimit";
+import { rateLimitDurable } from "@/lib/rateLimit";
 
 export async function GET() {
   const messages = await prisma.battleChat.findMany({
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 30 messages / minute per (ip, session) pair.
-  const rl = rateLimit(`battle-chat:${ip}:${sessionId}`, 30, 60_000);
+  const rl = await rateLimitDurable(`battle-chat:${ip}:${sessionId}`, 30, 60_000);
   if (!rl.allowed) {
     const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
     return NextResponse.json(

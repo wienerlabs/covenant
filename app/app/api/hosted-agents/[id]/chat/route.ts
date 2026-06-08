@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { webSearch } from "@/lib/web-search";
 import { getSolanaContext } from "@/lib/solana-agent";
-import { rateLimit } from "@/lib/rateLimit";
+import { rateLimitDurable } from "@/lib/rateLimit";
 import {
   buildPaymentRequired,
   verifyPayment,
@@ -53,7 +53,7 @@ export async function POST(
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     req.headers.get("x-real-ip") ||
     "unknown";
-  const { allowed, resetAt } = rateLimit(`chat:${ip}`, 30);
+  const { allowed, resetAt } = await rateLimitDurable(`chat:${ip}`, 30);
   if (!allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Try again later.", resetAt },

@@ -3,8 +3,9 @@ import { blockSimulatedRouteIfOnchain } from "@/lib/settlement";
 import { prisma, ensureSchema, retryable } from "@/lib/prisma";
 import { memoize } from "@/lib/cache";
 import { sendMarkerTransaction } from "@/lib/solana";
-import { rateLimit, getLimit } from "@/lib/rateLimit";
+import { rateLimitDurable, getLimit } from "@/lib/rateLimit";
 import { buildJobSpec, hashJobSpec } from "@/lib/spec";
+import { moderateJobContent } from "@/lib/moderation";
 import type { Prisma } from "@prisma/client";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
   // Devnet rate limit (per-table in lib/rateLimit.ts).
   const { limit, windowMs } = getLimit("create_job");
-  const rl = rateLimit(`jobs:${ip}`, limit, windowMs);
+  const rl = await rateLimitDurable(`jobs:${ip}`, limit, windowMs);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Max 20 job creations per minute." },
@@ -211,6 +212,13 @@ export async function POST(request: NextRequest) {
       typeof clientCreatedAt === "string" && clientCreatedAt.length > 0
         ? clientCreatedAt
         : new Date().toISOString();
+
+    // C-103: reject prohibited content (Acceptable Use Policy) before
+    // persisting anything to the DB or chain.
+    const moderation = moderateJobContent({ title, description, requirements });
+    if (!moderation.allowed) {
+      return NextResponse.json({ error: moderation.reason }, { status: 400 });
+    }
 
     const specJsonRaw = buildJobSpec({
       posterWallet,
