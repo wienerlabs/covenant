@@ -75,7 +75,7 @@ jobs:
             | tar -xz -C /usr/local/bin gitleaks
           gitleaks version
       - name: Gitleaks scan (full history)
-        run: gitleaks detect --source . --redact --no-banner
+        run: gitleaks detect --source . --config .gitleaks.toml --redact --no-banner
       - name: Grep guard for Solana keypair arrays + token prefixes
         if: always()
         run: |

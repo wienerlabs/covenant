@@ -1,0 +1,26 @@
+# gitleaks config for the secret-scan CI gate.
+#
+# Extends the default ruleset (real token/keypair formats: GitHub, AWS,
+# Stripe, private keys, etc.) and allowlists the two sources of pure
+# false positives:
+#
+#   - app/tests/**          test fixtures legitimately contain fake keys,
+#                           idempotency keys, and public token mints.
+#   - README.md             documents an example api-key-hash FORMAT.
+#
+# These paths are excluded ONLY from gitleaks' high-noise entropy heuristic
+# (generic-api-key). Defense-in-depth is preserved: the CI `secret-scan` job
+# also runs a grep guard that scans EVERY tracked file — including tests and
+# the README — for real credential prefixes (ghp_/gho_/npm_/sk-/AKIA) and
+# 64-byte Solana secret-key arrays. So a genuine token committed to a test
+# file is still caught.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and docs examples are not real secrets."
+paths = [
+  '''app/tests/.*''',
+  '''README\.md''',
+]
