@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 import { enforceIpLimit } from "@/lib/rateLimit";
+import { requireAuth } from "@/lib/require-auth";
 
 const DEFAULT_BOND_BPS = 1_000; // 10%
 const DEFAULT_MIN_BOND_ABSOLUTE = 1; // 1 USDC
@@ -56,7 +57,11 @@ export async function POST(request: NextRequest) {
     const limited = await enforceIpLimit(request, "raise_dispute_ip");
     if (limited) return limited;
 
-    const body = await request.json();
+    const __raw = await request.text();
+    const __auth = await requireAuth(request, { rawBody: __raw });
+    if (!__auth.ok)
+      return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
+    const body = __raw ? JSON.parse(__raw) : {};
     const { jobId, posterWallet, reasonText, bond, txHash } = body as {
       jobId?: string;
       posterWallet?: string;

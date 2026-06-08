@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { enforceIpLimit } from "@/lib/rateLimit";
+import { requireAuth } from "@/lib/require-auth";
 
 /**
  * POST /api/agents/stake
@@ -13,7 +14,11 @@ export async function POST(req: NextRequest) {
     const limited = await enforceIpLimit(req, "stake");
     if (limited) return limited;
 
-    const body = await req.json();
+    const __raw = await req.text();
+    const __auth = await requireAuth(req, { rawBody: __raw });
+    if (!__auth.ok)
+      return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
+    const body = __raw ? JSON.parse(__raw) : {};
     const { walletAddress, amount } = body as {
       walletAddress?: string;
       amount?: number;
