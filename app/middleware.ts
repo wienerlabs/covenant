@@ -65,11 +65,44 @@ export function middleware(req: NextRequest) {
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   res.headers.set(
     "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+    "camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=(), usb=()",
   );
-  // Block framing only on non-marketing routes; embeddable widgets
-  // (faucet pill on partner sites, etc.) are not in scope yet.
   res.headers.set("X-Frame-Options", "SAMEORIGIN");
+
+  // Force HTTPS for two years incl. subdomains; eligible for preload.
+  // Transparent to users (the app is already HTTPS-only on Vercel) and
+  // blocks SSL-strip / downgrade attacks.
+  res.headers.set(
+    "Strict-Transport-Security",
+    "max-age=63072000; includeSubDomains; preload",
+  );
+
+  // Cross-origin isolation hardening. COOP severs the opener relationship
+  // so a popup can't reach back into the page (popup-phishing / tab-nabbing
+  // class). CORP keeps our responses from being embedded cross-origin.
+  res.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  res.headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  res.headers.set("X-DNS-Prefetch-Control", "off");
+
+  // Content Security Policy in REPORT-ONLY mode. The app leans heavily on
+  // inline styles + styled-jsx and loads wallet adapters / RPC / image
+  // CDNs, so an enforcing CSP could break real users. Report-Only gives us
+  // the violation telemetry to tighten toward an enforcing policy later
+  // (C-091 follow-up) without affecting anyone today.
+  const csp = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+    "img-src 'self' data: blob: https:",
+    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "font-src 'self' data:",
+    "connect-src 'self' https: wss:",
+    "upgrade-insecure-requests",
+  ].join("; ");
+  res.headers.set("Content-Security-Policy-Report-Only", csp);
 
   // CORS for the public spec endpoint.
   if (pathname === "/api/openapi") {
