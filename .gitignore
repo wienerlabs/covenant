@@ -11,3 +11,24 @@ sdk/dist
 circuits/word_count/target
 circuits/word_count/script/target
 sdk/bin
+
+# ── Secrets & keys — NEVER commit ──────────────────────────────────
+# Env files (keep only the example).
+.env
+.env.*
+!.env.example
+# Solana / signer keypairs in any directory.
+*-keypair.json
+*_keypair.json
+keypair*.json
+deployer*.json
+crank*.json
+arbitrator*.json
+id.json
+# Generic credential material.
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+.secrets/
