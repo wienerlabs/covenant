@@ -37,6 +37,7 @@ import {
   USDC_DECIMALS,
 } from "./constants";
 import { createFailoverConnection } from "./rpc-failover";
+import { computeBudgetInstructions } from "./compute-budget";
 
 // ---------- Connection ----------
 
@@ -353,6 +354,7 @@ export async function botCreateJob(params: {
       new BN(deadline),
       new BN(challengePeriod),
     )
+    .preInstructions(computeBudgetInstructions())
     .accounts({
       poster: botKeypair.publicKey,
       config: configPda,
@@ -396,6 +398,7 @@ export async function botAcceptJob(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (await (program.methods as any)
     .acceptJob(Array.from(specHash))
+    .preInstructions(computeBudgetInstructions())
     .accounts({
       taker: takerBotKeypair.publicKey,
       jobEscrow: jobPda,
@@ -421,6 +424,7 @@ export async function botSubmitWork(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (await (program.methods as any)
     .submitWork(Array.from(workHash), deliveryUri)
+    .preInstructions(computeBudgetInstructions())
     .accounts({
       taker: takerBotKeypair.publicKey,
       jobEscrow: jobPda,
@@ -450,6 +454,7 @@ export async function botFinalizePayment(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (await (program.methods as any)
     .finalizePayment()
+    .preInstructions(computeBudgetInstructions())
     .accounts({
       crank: crankKeypair.publicKey,
       jobEscrow: jobPda,

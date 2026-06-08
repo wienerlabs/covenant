@@ -78,20 +78,30 @@ export interface WebhookSignOptions {
   secret: string;
   /** Defaults to Date.now() — override for deterministic tests. */
   timestampMs?: number;
+  /** Stable delivery attempt id, signed so receivers can reject replays. */
+  deliveryId?: string;
+}
+
+export interface WebhookReplayCache {
+  has(deliveryId: string): boolean;
+  add(deliveryId: string): void;
 }
 
 /**
  * Build a signed `X-Covenant-Signature` header value for a given
- * payload. Format mirrors Stripe's: `t=<unix>,v1=<hex>`.
+ * payload. Format mirrors Stripe's: `t=<unix>,d=<delivery>,v1=<hex>`.
  *
- * The signed string is `${timestampMs}.${rawBody}` so a receiver
- * who only has the rendered text can verify without re-serializing.
+ * If a delivery id is provided, the signed string is
+ * `${timestampMs}.${deliveryId}.${rawBody}` so receivers can reject
+ * replays without allowing an attacker to swap the delivery id.
  */
 export function signWebhook(rawBody: string, opts: WebhookSignOptions): string {
   const ts = opts.timestampMs ?? Date.now();
-  const payload = `${ts}.${rawBody}`;
+  const payload = opts.deliveryId
+    ? `${ts}.${opts.deliveryId}.${rawBody}`
+    : `${ts}.${rawBody}`;
   const mac = crypto.createHmac("sha256", opts.secret).update(payload).digest("hex");
-  return `t=${ts},v1=${mac}`;
+  return opts.deliveryId ? `t=${ts},d=${opts.deliveryId},v1=${mac}` : `t=${ts},v1=${mac}`;
 }
 
 /**
@@ -104,8 +114,9 @@ export function signWebhook(rawBody: string, opts: WebhookSignOptions): string {
 export function verifyWebhookSignature(args: {
   header: string | null | undefined;
   body: string;
-  secret: string;
+  secret: string | readonly string[];
   toleranceMs?: number;
+  replayCache?: WebhookReplayCache;
 }): boolean {
   if (!args.header) return false;
   const tolerance = args.toleranceMs ?? 5 * 60_000;
@@ -117,17 +128,34 @@ export function verifyWebhookSignature(args: {
   }, {});
   const ts = Number(parts.t);
   const v1 = parts.v1;
+  const deliveryId = parts.d;
   if (!ts || !v1) return false;
   if (Math.abs(Date.now() - ts) > tolerance) return false;
+  if (args.replayCache) {
+    if (!deliveryId) return false;
+    if (args.replayCache.has(deliveryId)) return false;
+  }
 
-  const expected = crypto
-    .createHmac("sha256", args.secret)
-    .update(`${ts}.${args.body}`)
-    .digest("hex");
+  const payload = deliveryId ? `${ts}.${deliveryId}.${args.body}` : `${ts}.${args.body}`;
+  const secrets = Array.isArray(args.secret) ? args.secret : [args.secret];
 
-  // Constant-time comparison to avoid timing attacks.
-  if (expected.length !== v1.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(v1, "hex"));
+  for (const secret of secrets) {
+    const expected = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+    const expectedBytes = Buffer.from(expected, "hex");
+    const actualBytes = Buffer.from(v1, "hex");
+
+    // Constant-time comparison to avoid timing attacks.
+    if (
+      expected.length === v1.length &&
+      expectedBytes.length === actualBytes.length &&
+      crypto.timingSafeEqual(expectedBytes, actualBytes)
+    ) {
+      args.replayCache?.add(deliveryId!);
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -211,8 +239,11 @@ export async function deliverWebhook(
       await sleep(Math.min(125_000, 1000 * Math.pow(5, attempt - 2)));
     }
 
-    const signature = signWebhook(rawBody, { secret: opts.secret });
     const deliveryId = `${event.id}-${attempt}`;
+    const signature = signWebhook(rawBody, {
+      secret: opts.secret,
+      deliveryId,
+    });
     const t0 = Date.now();
     const controller = new AbortController();
     const tHandle = setTimeout(() => controller.abort(), timeout);
