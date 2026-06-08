@@ -6,6 +6,7 @@ import { sendMarkerTransaction } from "@/lib/solana";
 import { rateLimitDurable, getLimit } from "@/lib/rateLimit";
 import { buildJobSpec, hashJobSpec } from "@/lib/spec";
 import { moderateJobContent } from "@/lib/moderation";
+import { screenWallet } from "@/lib/sanctions";
 import type { Prisma } from "@prisma/client";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
@@ -176,6 +177,12 @@ export async function POST(request: NextRequest) {
         { error: "posterWallet is required" },
         { status: 400 }
       );
+    }
+
+    // C-105: block sanctioned (OFAC) wallets at the on-ramp.
+    const sanctioned = screenWallet(posterWallet);
+    if (sanctioned.blocked) {
+      return NextResponse.json({ error: sanctioned.reason }, { status: 403 });
     }
     if (!amount || typeof amount !== "number" || amount <= 0) {
       return NextResponse.json(
