@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { constantTimeEqual } from "@/lib/secure-compare";
 import { Connection, PublicKey } from "@solana/web3.js";
 
 // Always dynamic — talks to Prisma + Solana RPC per request.
@@ -30,12 +31,10 @@ const PROGRAM_ID = new PublicKey(
 const SCAN_LIMIT = parseInt(process.env.RECONCILE_SCAN_LIMIT ?? "500", 10);
 
 function authorized(req: NextRequest): boolean {
+  // Header-only, constant-time, fail-closed. No `?auth=` query secret.
   if (!CRON_SECRET) return false;
-  const header = req.headers.get("authorization");
-  return (
-    header === `Bearer ${CRON_SECRET}` ||
-    new URL(req.url).searchParams.get("auth") === CRON_SECRET
-  );
+  const header = req.headers.get("authorization") ?? "";
+  return constantTimeEqual(header, `Bearer ${CRON_SECRET}`);
 }
 
 function rpcUrl(): string {

@@ -117,6 +117,21 @@ export function verifyWebhookSignature(args: {
   secret: string | readonly string[];
   toleranceMs?: number;
   replayCache?: WebhookReplayCache;
+  /**
+   * Require a signed delivery id (`d=`) in the header. Defaults to `true`
+   * whenever a `replayCache` is supplied. This closes a downgrade hole: a
+   * sender that always signs a delivery id (we do, see `deliverWebhook`)
+   * must not be silently accepted via the legacy no-`d=` payload form, or
+   * an attacker who captured one delivery could strip `d=` and replay it
+   * past a cache that only keys on delivery id.
+   *
+   * NOTE on the cache: `WebhookReplayCache.has`/`add` MUST be atomic
+   * (e.g. a unique-constraint INSERT) to be replay-safe under concurrency.
+   * A non-atomic check-then-add (a bare in-memory Set) has a TOCTOU window
+   * where two concurrent replays both pass `has` before either `add`s, and
+   * a per-instance Set provides no protection across serverless instances.
+   */
+  requireDeliveryId?: boolean;
 }): boolean {
   if (!args.header) return false;
   const tolerance = args.toleranceMs ?? 5 * 60_000;
@@ -131,6 +146,8 @@ export function verifyWebhookSignature(args: {
   const deliveryId = parts.d;
   if (!ts || !v1) return false;
   if (Math.abs(Date.now() - ts) > tolerance) return false;
+  const requireDeliveryId = args.requireDeliveryId ?? !!args.replayCache;
+  if (requireDeliveryId && !deliveryId) return false;
   if (args.replayCache) {
     if (!deliveryId) return false;
     if (args.replayCache.has(deliveryId)) return false;

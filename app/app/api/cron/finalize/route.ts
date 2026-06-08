@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { finalizeWithClaim, keypairFromEnv } from "@/lib/credit-server";
+import { constantTimeEqual } from "@/lib/secure-compare";
 import { PublicKey } from "@solana/web3.js";
 
 // Always dynamic — this route talks to Prisma on every request.
@@ -34,12 +35,13 @@ export const revalidate = 0;
 const CRON_SECRET = process.env.CRON_SECRET ?? "";
 
 function authorized(req: NextRequest): boolean {
+  // Fail closed when unconfigured, header-only (no `?auth=` query secret
+  // that would leak into logs), constant-time compare. Vercel Cron sends
+  // `Authorization: Bearer <CRON_SECRET>` automatically when CRON_SECRET
+  // is set, so header auth is the supported and only path.
   if (!CRON_SECRET) return false;
-  const header = req.headers.get("authorization");
-  return (
-    header === `Bearer ${CRON_SECRET}` ||
-    new URL(req.url).searchParams.get("auth") === CRON_SECRET
-  );
+  const header = req.headers.get("authorization") ?? "";
+  return constantTimeEqual(header, `Bearer ${CRON_SECRET}`);
 }
 
 export async function GET(req: NextRequest) {

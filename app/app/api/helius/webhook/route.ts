@@ -35,12 +35,15 @@ function verifyAuth(req: NextRequest): boolean {
     );
     return false;
   }
+  // Header-only. The secret is NEVER read from the query string: query
+  // params leak into access logs, proxies, Referer headers, and browser
+  // history, so a `?auth=<secret>` fallback is a standing secret-leak
+  // vector. Configure the Helius webhook to send the secret in the
+  // Authorization header (raw or `Bearer <secret>`).
   const authHeader = req.headers.get("authorization") ?? "";
-  const queryAuth = new URL(req.url).searchParams.get("auth") ?? "";
   return (
     constantTimeEqual(authHeader, HELIUS_WEBHOOK_SECRET) ||
-    constantTimeEqual(authHeader, `Bearer ${HELIUS_WEBHOOK_SECRET}`) ||
-    constantTimeEqual(queryAuth, HELIUS_WEBHOOK_SECRET)
+    constantTimeEqual(authHeader, `Bearer ${HELIUS_WEBHOOK_SECRET}`)
   );
 }
 
