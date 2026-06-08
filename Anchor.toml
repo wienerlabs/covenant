@@ -15,7 +15,13 @@ url = "https://api.apr.dev"
 
 [provider]
 cluster = "Devnet"
-wallet = "/tmp/deployer-keypair.json"
+# Deploy signer. Defaults to the Solana CLI's per-user keypair, which lives
+# under the user's home dir with 0600 perms. NEVER point this at /tmp:
+# /tmp is world-traversable and ephemeral, so a deploy key there can be read
+# by other local users and is trivially lost. For mainnet, override with a
+# hardware wallet or a Squads multisig signer (see docs/SECRETS.md), e.g.:
+#   anchor deploy --provider.wallet ~/.config/solana/mainnet-deployer.json
+wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
