@@ -7,6 +7,8 @@ import {
   verifyTxInvokedCovenant,
 } from "@/lib/program-server";
 import { PublicKey } from "@solana/web3.js";
+import { requireAuth } from "@/lib/require-auth";
+import { log } from "@/lib/logger";
 
 /**
  * POST /api/jobs/[id]/cancel
@@ -29,6 +31,11 @@ export async function POST(
 ) {
   const blocked = blockSimulatedRouteIfOnchain("POST /api/jobs/[id]/cancel");
   if (blocked) return blocked;
+
+  const reqLog = log.forRequest(request); // C-110: correlate this request
+  const __auth = await requireAuth(request); // C-091: verified signature or API key
+  if (!__auth.ok)
+    return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
 
   try {
     const { id } = await params;
@@ -122,6 +129,8 @@ export async function POST(
 
       return updated;
     });
+
+    reqLog.info("cancel_job tx", { jobId: id, txHash }); // C-110: on-chain tx sig logged
 
     // Best-effort marker (non-blocking, advisory only).
     try {

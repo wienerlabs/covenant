@@ -6,6 +6,8 @@ import { sendMarkerTransaction } from "@/lib/solana";
 import { rateLimitDurable, getLimit } from "@/lib/rateLimit";
 import { buildJobSpec, hashJobSpec } from "@/lib/spec";
 import { moderateJobContent } from "@/lib/moderation";
+import { requireAuth } from "@/lib/require-auth";
+import { log } from "@/lib/logger";
 import type { Prisma } from "@prisma/client";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
@@ -131,6 +133,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const blocked = blockSimulatedRouteIfOnchain("POST /api/jobs");
   if (blocked) return blocked;
+
+  const reqLog = log.forRequest(request); // C-110: correlate this request
+  const __auth = await requireAuth(request); // C-091: verified signature or API key
+  if (!__auth.ok)
+    return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
 
   await ensureSchema().catch(() => { /* non-fatal */ });
   const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "global";
@@ -286,6 +293,7 @@ export async function POST(request: NextRequest) {
       let markerTxHash: string | null = null;
       try {
         markerTxHash = await sendMarkerTransaction("create_job:" + job.id);
+        reqLog.info("create_job tx", { jobId: job.id, txHash: markerTxHash }); // C-110: tx sig logged
         await prisma.job.update({ where: { id: job.id }, data: { txHash: markerTxHash } });
       } catch { /* non-blocking */ }
       return NextResponse.json(
@@ -477,7 +485,8 @@ export async function POST(request: NextRequest) {
 
       // Optional human-readable marker (non-blocking).
       try {
-        await sendMarkerTransaction("create_job:" + job.id);
+        const __createSig = await sendMarkerTransaction("create_job:" + job.id);
+        reqLog.info("create_job tx", { jobId: job.id, txHash: __createSig }); // C-110: tx sig logged
       } catch { /* non-blocking */ }
 
       return NextResponse.json(

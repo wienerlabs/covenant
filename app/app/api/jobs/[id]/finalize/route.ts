@@ -9,6 +9,9 @@ import { fetchJobEscrow, verifyTxInvokedCovenant } from "@/lib/program-server";
 import { finalizeWithClaim, keypairFromEnv } from "@/lib/credit-server";
 import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
+import { requireAuth } from "@/lib/require-auth";
+import { log } from "@/lib/logger";
+import { alertCrankFailure } from "@/lib/alerts";
 
 /**
  * POST /api/jobs/[id]/finalize
@@ -29,6 +32,15 @@ export async function POST(
 ) {
   const blocked = blockSimulatedRouteIfOnchain("POST /api/jobs/[id]/finalize");
   if (blocked) return blocked;
+
+  // C-110: correlate this request. C-091: finalize is permissionless by design
+  // (anyone may settle after the challenge period), so auth is opt-in — a no-op
+  // unless the operator sets AUTH_ENFORCED, in which case the frontend signs and
+  // a keeper bot presents an API key.
+  const reqLog = log.forRequest(request);
+  const __auth = await requireAuth(request);
+  if (!__auth.ok)
+    return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
 
   try {
     const { id } = await params;
@@ -150,10 +162,12 @@ export async function POST(
           escrowTokenAccount: new PublicKey(job.escrowAta),
         });
         paymentTxHash = result.sig;
+        reqLog.info("finalize_payment settled", { jobId: id, txHash: paymentTxHash }); // C-110: on-chain tx sig logged
         routedToBuyer = result.routedToBuyer;
         settlementBuyer = result.buyer;
       } catch (err) {
         console.error("[finalize] server crank failed:", err);
+        void alertCrankFailure(id, err instanceof Error ? err.message : String(err)); // C-112
         return NextResponse.json(
           {
             error:

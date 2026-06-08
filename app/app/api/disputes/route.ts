@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 import { enforceIpLimit } from "@/lib/rateLimit";
 import { requireAuth } from "@/lib/require-auth";
+import { log } from "@/lib/logger";
+import { alertDisputeSpike } from "@/lib/alerts";
 
 const DEFAULT_BOND_BPS = 1_000; // 10%
 const DEFAULT_MIN_BOND_ABSOLUTE = 1; // 1 USDC
@@ -61,6 +63,7 @@ export async function POST(request: NextRequest) {
     const __auth = await requireAuth(request, { rawBody: __raw });
     if (!__auth.ok)
       return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
+    const reqLog = log.forRequest(request); // C-110: correlate this request
     const body = __raw ? JSON.parse(__raw) : {};
     const { jobId, posterWallet, reasonText, bond, txHash } = body as {
       jobId?: string;
@@ -166,6 +169,20 @@ export async function POST(request: NextRequest) {
       });
       return d;
     });
+
+    reqLog.info("dispute raised", { jobId, bond: providedBond, txHash }); // C-110: tx sig logged
+
+    // C-112: dispute-spike detection. Gated on ALERT_WEBHOOK_URL so the extra
+    // COUNT only runs when alerting is actually configured.
+    if (process.env.ALERT_WEBHOOK_URL) {
+      const WINDOW_MIN = 10;
+      const since = new Date(Date.now() - WINDOW_MIN * 60_000);
+      const recent = await prisma.dispute
+        .count({ where: { raisedAt: { gte: since } } })
+        .catch(() => 0);
+      const threshold = Number(process.env.ALERT_DISPUTE_SPIKE ?? 5);
+      if (recent >= threshold) void alertDisputeSpike(recent, WINDOW_MIN);
+    }
 
     return NextResponse.json(dispute, { status: 201 });
   } catch (error) {

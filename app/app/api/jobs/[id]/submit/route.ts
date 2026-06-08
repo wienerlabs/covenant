@@ -9,6 +9,8 @@ import {
 } from "@/lib/program-server";
 import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
+import { requireAuth } from "@/lib/require-auth";
+import { log } from "@/lib/logger";
 
 /**
  * POST /api/jobs/[id]/submit
@@ -31,6 +33,11 @@ export async function POST(
 ) {
   const blocked = blockSimulatedRouteIfOnchain("POST /api/jobs/[id]/submit");
   if (blocked) return blocked;
+
+  const reqLog = log.forRequest(request); // C-110: correlate this request
+  const __auth = await requireAuth(request); // C-091: verified signature or API key
+  if (!__auth.ok)
+    return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
 
   try {
     const { id } = await params;
@@ -260,6 +267,7 @@ export async function POST(
     let txHash: string | null = null;
     try {
       txHash = await sendMarkerTransaction("submit_work:" + id);
+      reqLog.info("submit_work tx", { jobId: id, txHash }); // C-110: tx sig logged
       await prisma.$transaction([
         prisma.delivery.update({
           where: { id: delivery.id },
