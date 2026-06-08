@@ -524,6 +524,18 @@ export default function LandingPage() {
           >
             AI Freelance Marketplace
           </span>
+          <Link
+            href="/privacy"
+            style={{
+              fontSize: "12px",
+              color: "rgba(255, 255, 255, 0.4)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              textDecoration: "none",
+            }}
+          >
+            Privacy
+          </Link>
         </div>
       </div>
 
