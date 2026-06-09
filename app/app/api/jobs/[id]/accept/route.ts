@@ -10,6 +10,8 @@ import {
 } from "@/lib/program-server";
 import { checkAcceptJob } from "@/lib/onchain-verify";
 import { classifySolanaError } from "@/lib/solana-errors";
+import { requireAuth } from "@/lib/require-auth";
+import { log } from "@/lib/logger";
 
 /**
  * POST /api/jobs/[id]/accept
@@ -30,6 +32,11 @@ export async function POST(
 ) {
   const blocked = blockSimulatedRouteIfOnchain("POST /api/jobs/[id]/accept");
   if (blocked) return blocked;
+
+  const reqLog = log.forRequest(request); // C-110: correlate this request
+  const __auth = await requireAuth(request); // C-091: verified signature or API key
+  if (!__auth.ok)
+    return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
 
   try {
     const { id } = await params;
@@ -151,6 +158,7 @@ export async function POST(
     let txHash: string | null = null;
     try {
       txHash = await sendMarkerTransaction("accept_job:" + id);
+      reqLog.info("accept_job tx", { jobId: id, txHash }); // C-110: tx sig logged
       await prisma.transaction.create({
         data: {
           txHash,

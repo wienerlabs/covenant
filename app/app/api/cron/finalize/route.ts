@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { finalizeWithClaim, keypairFromEnv } from "@/lib/credit-server";
 import { constantTimeEqual } from "@/lib/secure-compare";
 import { PublicKey } from "@solana/web3.js";
+import { alertCrankFailure } from "@/lib/alerts";
 
 // Always dynamic — this route talks to Prisma on every request.
 export const dynamic = "force-dynamic";
@@ -171,6 +172,7 @@ export async function GET(req: NextRequest) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[cron/finalize] failed for ${job.id}:`, msg);
+      void alertCrankFailure(job.id, msg); // C-112: fire-and-forget alert
       results.push({ jobId: job.id, ok: false, error: msg });
     }
   }
