@@ -52,3 +52,15 @@ export type {
   ClaimListingAccount,
   ClaimStatus,
 } from "./types";
+
+// C-122 — typed errors + RPC retry/backoff
+export {
+  CovenantError,
+  CovenantRpcError,
+  CovenantProgramError,
+  CovenantValidationError,
+  classifyError,
+  isRetriableError,
+} from "./errors";
+export { withRetry, backoffDelayMs, DEFAULT_RETRY_OPTIONS } from "./retry";
+export type { RetryOptions } from "./retry";
