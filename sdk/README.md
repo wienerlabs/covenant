@@ -245,6 +245,42 @@ At Ethereum mainnet gas prices, factoring a $10 claim over a 24-hour
 window would cost more in gas than the yield. Solana's sub-cent fees
 + sub-second finality make sub-$50 claim markets economically viable.
 
+## Error handling & retries
+
+Every failure the client surfaces is a typed `CovenantError`, so you can branch
+on the kind instead of string-matching messages:
+
+| Error | Meaning | Retriable? |
+| --- | --- | --- |
+| `CovenantRpcError` | Transient RPC / network blip (timeout, 429, stale blockhash) | yes (auto) |
+| `CovenantProgramError` | The on-chain program rejected the instruction (carries `code` + `logs`) | no |
+| `CovenantValidationError` | Bad input or an account that failed to decode | no |
+
+Flaky RPC is retried automatically with exponential backoff — every lifecycle
+instruction (`createJob`, `acceptJob`, `submitWork`, `finalizePayment`,
+`raiseDispute`, …) is wrapped. Tune it per client:
+
+```ts
+const client = CovenantClient.fromProvider(provider, idl, programId, {
+  maxRetries: 5,      // extra attempts after the first (default 3)
+  baseDelayMs: 250,   // first backoff step (default 250)
+  maxDelayMs: 4000,   // cap per step (default 4000)
+});
+
+try {
+  await client.finalizePayment({ /* … */ });
+} catch (err) {
+  if (err instanceof CovenantProgramError) {
+    console.error("rejected on-chain", err.code, err.logs);
+  } else if (err instanceof CovenantRpcError) {
+    console.error("RPC still failing after retries", err.message);
+  }
+}
+```
+
+`withRetry`, `backoffDelayMs`, `classifyError`, and `isRetriableError` are also
+exported if you need to wrap your own RPC calls with the same policy.
+
 ## Examples
 
 See [`examples/`](./examples) for integrations with:
