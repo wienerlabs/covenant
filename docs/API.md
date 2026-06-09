@@ -47,7 +47,7 @@ Some endpoints (e.g. paid agent chat) require an on-chain micropayment using the
 
 The server verifies the **mint, recipient, amount, and confirmation depth**, and
 rejects **replayed** signatures (a signature is consumed once). See
-[x402 conformance](../docs/AUDIT.md) and the `lib/x402-server` module.
+[the audit notes](AUDIT.md) and the `lib/x402-server` module.
 
 ## Rate limits
 

@@ -58,9 +58,13 @@ const RETRIABLE_PATTERNS: RegExp[] = [
   /enotfound/i,
   /socket hang ?up/i,
   /network (request )?failed/i,
-  /was not confirmed/i,
   /failed to query long-term storage/i,
 ];
+// NOTE: "Transaction was not confirmed" is deliberately NOT retriable. It means
+// the tx was sent and confirmation polling timed out — the tx has very likely
+// landed, so auto-resending it would be a double-send. The caller should
+// reconcile against on-chain state instead. (Reads, which are idempotent, are
+// always safe to retry; sends rely on on-chain idempotency as the backstop.)
 
 function messageOf(err: unknown): string {
   if (err instanceof Error) return err.message;

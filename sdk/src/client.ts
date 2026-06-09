@@ -134,6 +134,19 @@ export class CovenantClient {
   }
 
   /**
+   * Run a read (account fetch) with the same retry policy. Reads are idempotent,
+   * so retrying a transient RPC failure is always safe; an account-not-found
+   * error is non-retriable and surfaces (callers that tolerate it catch it).
+   */
+  private async query<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await withRetry(fn, this.retryOptions);
+    } catch (err) {
+      throw classifyError(err);
+    }
+  }
+
+  /**
    * Convenience: build a CovenantClient from a provider and IDL.
    *
    * Anchor 0.30+ takes `(idl, provider)` — the program ID lives inside the
@@ -560,8 +573,8 @@ export class CovenantClient {
   async fetchClaim(jobPda: PublicKey): Promise<ClaimListingAccount | null> {
     const claimPda = this.claimPda(jobPda);
     try {
-      const raw = (await (this.program.account as any)["claimListing"].fetch(
-        claimPda,
+      const raw = (await this.query(() =>
+        (this.program.account as any)["claimListing"].fetch(claimPda),
       )) as RawAccount;
       return {
         job: raw.job,
@@ -582,8 +595,8 @@ export class CovenantClient {
   // ---- Account fetchers ----
 
   async fetchJob(jobPda: PublicKey): Promise<JobEscrowAccount> {
-    const raw = (await (this.program.account as any)["jobEscrow"].fetch(
-      jobPda,
+    const raw = (await this.query(() =>
+      (this.program.account as any)["jobEscrow"].fetch(jobPda),
     )) as RawAccount;
     return {
       poster: raw.poster,
@@ -606,8 +619,8 @@ export class CovenantClient {
     wallet: PublicKey,
   ): Promise<AgentReputationAccount | null> {
     try {
-      const raw = (await (this.program.account as any)["agentReputation"].fetch(
-        this.reputationPda(wallet),
+      const raw = (await this.query(() =>
+        (this.program.account as any)["agentReputation"].fetch(this.reputationPda(wallet)),
       )) as RawAccount;
       return {
         address: raw.address,
@@ -624,8 +637,8 @@ export class CovenantClient {
 
   async fetchConfig(): Promise<ProtocolConfigAccount | null> {
     try {
-      const raw = (await (this.program.account as any)["protocolConfig"].fetch(
-        this.configPda(),
+      const raw = (await this.query(() =>
+        (this.program.account as any)["protocolConfig"].fetch(this.configPda()),
       )) as RawAccount;
       return {
         admin: raw.admin,

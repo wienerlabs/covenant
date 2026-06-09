@@ -36,10 +36,11 @@ describe("C-122 · isRetriableError", () => {
     "503 Service Unavailable",
     "request timed out",
     "fetch failed",
-    "Transaction was not confirmed in 30s",
   ]) {
     test(`retriable: "${msg}"`, () => assert.equal(isRetriableError(new Error(msg)), true));
   }
+  test("SAFETY: 'was not confirmed' is NOT retriable (avoid double-send)", () =>
+    assert.equal(isRetriableError(new Error("Transaction was not confirmed in 30.00 seconds")), false));
   test("CovenantRpcError is retriable", () => assert.equal(isRetriableError(new CovenantRpcError("x")), true));
   test("program error is NOT retriable", () =>
     assert.equal(isRetriableError(new CovenantProgramError("x", { code: 6000 })), false));
