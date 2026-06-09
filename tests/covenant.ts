@@ -17,6 +17,18 @@ import {
 import { assert } from "chai";
 
 /**
+ * C-048: derive the escrow_token PDA. The program owns this account
+ * (`seeds = [b"escrow_token", job_escrow]`, init'd as a PDA token account) — it
+ * is NOT a random keypair the client generates and signs for.
+ */
+function escrowTokenPda(jobPda: PublicKey, programId: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("escrow_token"), jobPda.toBuffer()],
+    programId,
+  )[0];
+}
+
+/**
  * Integration tests for the Covenant optimistic settlement protocol.
  *
  * Covers:
@@ -150,14 +162,14 @@ describe("covenant — optimistic settlement", () => {
         poster: poster.publicKey,
         config: configPda,
         jobEscrow: happyJobPda,
-        escrowTokenAccount: happyEscrowKp.publicKey,
+        escrowTokenAccount: escrowTokenPda(happyJobPda, program.programId),
         posterTokenAccount: posterAta,
         tokenMint: mint,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: SYSVAR_RENT_PUBKEY,
       })
-      .signers([poster, happyEscrowKp])
+      .signers([poster])
       .rpc();
 
     const job = await (program.account as any).jobEscrow.fetch(happyJobPda);
@@ -212,7 +224,7 @@ describe("covenant — optimistic settlement", () => {
           crank: crank.publicKey,
           jobEscrow: happyJobPda,
           poster: poster.publicKey,
-          escrowTokenAccount: happyEscrowKp.publicKey,
+          escrowTokenAccount: escrowTokenPda(happyJobPda, program.programId),
           takerTokenAccount: takerAta,
           taker: taker.publicKey,
           takerReputation: repPda,
@@ -256,14 +268,14 @@ describe("covenant — optimistic settlement", () => {
         poster: poster.publicKey,
         config: configPda,
         jobEscrow: disputeJobPda,
-        escrowTokenAccount: disputeEscrowKp.publicKey,
+        escrowTokenAccount: escrowTokenPda(disputeJobPda, program.programId),
         posterTokenAccount: posterAta,
         tokenMint: mint,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: SYSVAR_RENT_PUBKEY,
       })
-      .signers([poster, disputeEscrowKp])
+      .signers([poster])
       .rpc();
 
     await program.methods
@@ -336,7 +348,7 @@ describe("covenant — optimistic settlement", () => {
         config: configPda,
         jobEscrow: disputeJobPda,
         poster: poster.publicKey,
-        escrowTokenAccount: disputeEscrowKp.publicKey,
+        escrowTokenAccount: escrowTokenPda(disputeJobPda, program.programId),
         bondTokenAccount: bondPda,
         posterTokenAccount: posterAta,
         takerTokenAccount: takerAta,
@@ -375,7 +387,7 @@ describe("covenant — optimistic settlement", () => {
         config: configPda,
         jobEscrow: disputeJobPda,
         poster: poster.publicKey,
-        escrowTokenAccount: disputeEscrowKp.publicKey,
+        escrowTokenAccount: escrowTokenPda(disputeJobPda, program.programId),
         bondTokenAccount: bondPda,
         posterTokenAccount: posterAta,
         takerTokenAccount: takerAta,
@@ -496,9 +508,17 @@ describe("covenant — negative paths (M-06)", () => {
       [Buffer.from("config")],
       program.programId,
     );
-    // Config is initialized by the happy-path describe; if these tests
-    // run standalone, that init must already have happened (admin / arbs
-    // are reused across describes by design — same on-chain singleton).
+    // The config is a singleton initialized by the happy-path describe with its
+    // own arbitrator keypairs. This describe generates fresh arbitrators, so
+    // register them on the shared config (admin-only) — otherwise resolve_dispute
+    // here is rejected with NotArbitrator. (C-048)
+    await program.methods
+      .updateArbitrators(
+        [arb1.publicKey, arb2.publicKey, Keypair.generate().publicKey],
+        2,
+      )
+      .accounts({ admin: admin.publicKey, config: configPda })
+      .rpc();
   });
 
   /** Helper: create + return a job in `Open` state with the given spec byte. */
@@ -522,14 +542,14 @@ describe("covenant — negative paths (M-06)", () => {
         poster: poster.publicKey,
         config: configPda,
         jobEscrow: jobPda,
-        escrowTokenAccount: escrowKp.publicKey,
+        escrowTokenAccount: escrowTokenPda(jobPda, program.programId),
         posterTokenAccount: posterAta,
         tokenMint: mint,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: SYSVAR_RENT_PUBKEY,
       })
-      .signers([poster, escrowKp])
+      .signers([poster])
       .rpc();
 
     return { specHash, jobPda, escrowKp };
@@ -553,9 +573,14 @@ describe("covenant — negative paths (M-06)", () => {
       assert.fail("accept should have failed — spec hash mismatch");
     } catch (err) {
       const msg = String(err);
+      // The job_escrow PDA is seeded by the spec hash, so a mismatched hash is
+      // rejected at the account-seeds layer (ConstraintSeeds) before the
+      // in-handler SpecHashMismatch check — either is a valid rejection.
       assert.ok(
-        msg.includes("SpecHashMismatch") || msg.includes("custom program error"),
-        `expected SpecHashMismatch, got: ${msg}`,
+        msg.includes("SpecHashMismatch") ||
+          msg.includes("ConstraintSeeds") ||
+          msg.includes("custom program error"),
+        `expected a spec-hash-mismatch rejection, got: ${msg}`,
       );
     }
   });
@@ -980,14 +1005,14 @@ describe("covenant — credit marketplace (BNPL)", () => {
         poster: poster.publicKey,
         config: configPda,
         jobEscrow: jobPda,
-        escrowTokenAccount: escrowKp.publicKey,
+        escrowTokenAccount: escrowTokenPda(jobPda, program.programId),
         posterTokenAccount: posterAta,
         tokenMint: mint,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: SYSVAR_RENT_PUBKEY,
       })
-      .signers([poster, escrowKp])
+      .signers([poster])
       .rpc();
 
     await program.methods
@@ -1296,7 +1321,7 @@ describe("covenant — credit marketplace (BNPL)", () => {
         crank: crank.publicKey,
         jobEscrow: jobPda,
         poster: poster.publicKey,
-        escrowTokenAccount: escrowKp.publicKey,
+        escrowTokenAccount: escrowTokenPda(jobPda, program.programId),
         takerTokenAccount: buyerAta,
         taker: taker.publicKey,
         takerReputation: repPda,
