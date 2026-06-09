@@ -1,4 +1,8 @@
 [toolchain]
+# Pin to the program's anchor-lang version (0.30.1). Building/IDL-generating with
+# a mismatched CLI (e.g. 0.32.x) produces an IDL whose account resolution doesn't
+# match the deployed program, which breaks the test client (C-048).
+anchor_version = "0.30.1"
 
 [features]
 resolution = true
