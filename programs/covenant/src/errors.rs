@@ -64,3 +64,4 @@ pub enum CovError {
     NotClaimSeller,
     #[msg("Buyer may not be the same wallet as the seller")]
     BuyerIsSeller,
+}
