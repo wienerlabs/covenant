@@ -1,0 +1,5 @@
+{
+  "source": "OFAC Specially Designated Nationals (SDN) list — digital currency addresses. Authoritative feed: https://sanctionslist.ofac.treas.gov/ (SDN.XML / sdn_advanced). This file must be populated + kept current by the operator; see docs/SANCTIONS.md.",
+  "updatedAt": null,
+  "addresses": []
+}

@@ -36,6 +36,8 @@ import type {
   ClaimListingAccount,
   ClaimStatus,
 } from "./types";
+import { withRetry, type RetryOptions } from "./retry";
+import { classifyError, CovenantValidationError } from "./errors";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyProgram = Program<any>;
@@ -50,7 +52,7 @@ function parseStatus(raw: RawAccount): JobStatus {
   if ("finalized" in raw) return "Finalized";
   if ("resolved" in raw) return "Resolved";
   if ("cancelled" in raw) return "Cancelled";
-  throw new Error(`Unknown job status: ${JSON.stringify(raw)}`);
+  throw new CovenantValidationError(`Unknown job status: ${JSON.stringify(raw)}`);
 }
 
 function parseResolution(raw: RawAccount): DisputeResolutionKind {
@@ -101,7 +103,7 @@ function parseClaimStatus(raw: RawAccount): ClaimStatus {
   if ("bought" in raw) return "Bought";
   if ("cancelled" in raw) return "Cancelled";
   if ("settled" in raw) return "Settled";
-  throw new Error(`Unknown claim status: ${JSON.stringify(raw)}`);
+  throw new CovenantValidationError(`Unknown claim status: ${JSON.stringify(raw)}`);
 }
 
 /**
@@ -114,7 +116,35 @@ export class CovenantClient {
   constructor(
     private readonly program: AnyProgram,
     public readonly connection: Connection,
+    private readonly retryOptions: Partial<RetryOptions> = {},
   ) {}
+
+  /**
+   * Send an Anchor instruction with C-122 resilience: flaky RPC is retried with
+   * exponential backoff, and any failure is rethrown as a typed CovenantError
+   * (CovenantRpcError for transient RPC, CovenantProgramError for an on-chain
+   * rejection). Configure retries via the constructor's `retryOptions`.
+   */
+  private async send(builder: { rpc: () => Promise<TransactionSignature> }): Promise<TransactionSignature> {
+    try {
+      return await withRetry(() => builder.rpc(), this.retryOptions);
+    } catch (err) {
+      throw classifyError(err);
+    }
+  }
+
+  /**
+   * Run a read (account fetch) with the same retry policy. Reads are idempotent,
+   * so retrying a transient RPC failure is always safe; an account-not-found
+   * error is non-retriable and surfaces (callers that tolerate it catch it).
+   */
+  private async query<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await withRetry(fn, this.retryOptions);
+    } catch (err) {
+      throw classifyError(err);
+    }
+  }
 
   /**
    * Convenience: build a CovenantClient from a provider and IDL.
@@ -128,6 +158,7 @@ export class CovenantClient {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     idl: any,
     programId: PublicKey = COVENANT_PROGRAM_ID,
+    retryOptions: Partial<RetryOptions> = {},
   ): CovenantClient {
     // Anchor 0.30 reads the address from the IDL; mirror our default in
     // case the caller passed an IDL that's missing it.
@@ -135,7 +166,7 @@ export class CovenantClient {
       ? idl
       : { ...idl, address: programId.toBase58() };
     const program = new Program(idlWithAddress, provider) as AnyProgram;
-    return new CovenantClient(program, provider.connection);
+    return new CovenantClient(program, provider.connection, retryOptions);
   }
 
   get programId(): PublicKey {
@@ -178,7 +209,7 @@ export class CovenantClient {
     minBondAbsolute?: BN | number;
   }): Promise<TransactionSignature> {
     const [configPda] = deriveConfigPda(this.programId);
-    return (this.program.methods as any)
+    return this.send((this.program.methods as any)
       .initConfig(
         params.arbitrators,
         params.threshold ?? 2,
@@ -193,7 +224,7 @@ export class CovenantClient {
         systemProgram: SystemProgram.programId,
       })
       .signers([params.admin])
-      .rpc();
+      );
   }
 
   /**
@@ -205,14 +236,14 @@ export class CovenantClient {
     threshold?: number;
   }): Promise<TransactionSignature> {
     const [configPda] = deriveConfigPda(this.programId);
-    return (this.program.methods as any)
+    return this.send((this.program.methods as any)
       .updateArbitrators(params.arbitrators, params.threshold ?? 2)
       .accounts({
         admin: params.admin.publicKey,
         config: configPda,
       })
       .signers([params.admin])
-      .rpc();
+      );
   }
 
   // ---- Job lifecycle ----
@@ -242,7 +273,7 @@ export class CovenantClient {
       params.challengePeriodSeconds ?? DEFAULT_CHALLENGE_PERIOD_SECONDS,
     );
 
-    const txSig = await (this.program.methods as any)
+    const txSig = await this.send((this.program.methods as any)
       .createJob(amount, Array.from(specHash), deadline, challengePeriod)
       .accounts({
         poster: params.poster.publicKey,
@@ -256,7 +287,7 @@ export class CovenantClient {
         rent: SYSVAR_RENT_PUBKEY,
       })
       .signers([params.poster, escrowTokenAccount])
-      .rpc();
+      );
 
     return { txSig, jobPda, specHash };
   }
@@ -272,7 +303,7 @@ export class CovenantClient {
     const { bytes: specHash } = hashSpec(params.spec);
     const job = await this.fetchJob(params.jobPda);
 
-    const txSig = await (this.program.methods as any)
+    const txSig = await this.send((this.program.methods as any)
       .acceptJob(Array.from(specHash))
       .accounts({
         taker: params.taker.publicKey,
@@ -280,7 +311,7 @@ export class CovenantClient {
         poster: job.poster,
       })
       .signers([params.taker])
-      .rpc();
+      );
 
     return { txSig };
   }
@@ -298,7 +329,7 @@ export class CovenantClient {
     validateDeliveryUri(params.deliveryUri);
     const job = await this.fetchJob(params.jobPda);
 
-    const txSig = await (this.program.methods as any)
+    const txSig = await this.send((this.program.methods as any)
       .submitWork(Array.from(params.workHash), params.deliveryUri)
       .accounts({
         taker: params.taker.publicKey,
@@ -306,7 +337,7 @@ export class CovenantClient {
         poster: job.poster,
       })
       .signers([params.taker])
-      .rpc();
+      );
 
     return { txSig };
   }
@@ -324,7 +355,7 @@ export class CovenantClient {
     const job = await this.fetchJob(params.jobPda);
     const reputationPda = this.reputationPda(job.taker);
 
-    const txSig = await (this.program.methods as any)
+    const txSig = await this.send((this.program.methods as any)
       .finalizePayment()
       .accounts({
         crank: params.crank.publicKey,
@@ -338,7 +369,7 @@ export class CovenantClient {
         systemProgram: SystemProgram.programId,
       })
       .signers([params.crank])
-      .rpc();
+      );
 
     return { txSig };
   }
@@ -359,7 +390,7 @@ export class CovenantClient {
     const [bondPda] = deriveBondPda(params.jobPda, this.programId);
     const bond = new BN(params.bond);
 
-    const txSig = await (this.program.methods as any)
+    const txSig = await this.send((this.program.methods as any)
       .raiseDispute(Array.from(params.reasonHash), bond)
       .accounts({
         poster: params.poster.publicKey,
@@ -373,7 +404,7 @@ export class CovenantClient {
         rent: SYSVAR_RENT_PUBKEY,
       })
       .signers([params.poster])
-      .rpc();
+      );
 
     return { txSig, bondPda };
   }
@@ -395,7 +426,7 @@ export class CovenantClient {
     const job = await this.fetchJob(params.jobPda);
     const reputationPda = this.reputationPda(job.taker);
 
-    const txSig = await (this.program.methods as any)
+    const txSig = await this.send((this.program.methods as any)
       .resolveDispute(encodeResolution(params.resolution))
       .accounts({
         arbitrator: params.arbitrator.publicKey,
@@ -412,7 +443,7 @@ export class CovenantClient {
         systemProgram: SystemProgram.programId,
       })
       .signers([params.arbitrator])
-      .rpc();
+      );
 
     return { txSig };
   }
@@ -429,7 +460,7 @@ export class CovenantClient {
       job.taker.equals(PublicKey.default) ? params.signer.publicKey : job.taker,
     );
 
-    const txSig = await (this.program.methods as any)
+    const txSig = await this.send((this.program.methods as any)
       .cancelJob()
       .accounts({
         signer: params.signer.publicKey,
@@ -442,7 +473,7 @@ export class CovenantClient {
         systemProgram: SystemProgram.programId,
       })
       .signers([params.signer])
-      .rpc();
+      );
 
     return { txSig };
   }
@@ -470,7 +501,7 @@ export class CovenantClient {
     const job = await this.fetchJob(params.jobPda);
     const claimPda = this.claimPda(params.jobPda);
 
-    const txSig = await (this.program.methods as any)
+    const txSig = await this.send((this.program.methods as any)
       .listClaim(params.price)
       .accounts({
         seller: params.seller.publicKey,
@@ -480,7 +511,7 @@ export class CovenantClient {
         systemProgram: SystemProgram.programId,
       })
       .signers([params.seller])
-      .rpc();
+      );
 
     return { txSig, claimPda };
   }
@@ -499,7 +530,7 @@ export class CovenantClient {
     const job = await this.fetchJob(params.jobPda);
     const claimPda = this.claimPda(params.jobPda);
 
-    const txSig = await (this.program.methods as any)
+    const txSig = await this.send((this.program.methods as any)
       .buyClaim()
       .accounts({
         buyer: params.buyer.publicKey,
@@ -511,7 +542,7 @@ export class CovenantClient {
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([params.buyer])
-      .rpc();
+      );
 
     return { txSig };
   }
@@ -524,14 +555,14 @@ export class CovenantClient {
     jobPda: PublicKey;
   }): Promise<{ txSig: TransactionSignature }> {
     const claimPda = this.claimPda(params.jobPda);
-    const txSig = await (this.program.methods as any)
+    const txSig = await this.send((this.program.methods as any)
       .cancelClaim()
       .accounts({
         seller: params.seller.publicKey,
         claimListing: claimPda,
       })
       .signers([params.seller])
-      .rpc();
+      );
     return { txSig };
   }
 
@@ -542,8 +573,8 @@ export class CovenantClient {
   async fetchClaim(jobPda: PublicKey): Promise<ClaimListingAccount | null> {
     const claimPda = this.claimPda(jobPda);
     try {
-      const raw = (await (this.program.account as any)["claimListing"].fetch(
-        claimPda,
+      const raw = (await this.query(() =>
+        (this.program.account as any)["claimListing"].fetch(claimPda),
       )) as RawAccount;
       return {
         job: raw.job,
@@ -564,8 +595,8 @@ export class CovenantClient {
   // ---- Account fetchers ----
 
   async fetchJob(jobPda: PublicKey): Promise<JobEscrowAccount> {
-    const raw = (await (this.program.account as any)["jobEscrow"].fetch(
-      jobPda,
+    const raw = (await this.query(() =>
+      (this.program.account as any)["jobEscrow"].fetch(jobPda),
     )) as RawAccount;
     return {
       poster: raw.poster,
@@ -588,8 +619,8 @@ export class CovenantClient {
     wallet: PublicKey,
   ): Promise<AgentReputationAccount | null> {
     try {
-      const raw = (await (this.program.account as any)["agentReputation"].fetch(
-        this.reputationPda(wallet),
+      const raw = (await this.query(() =>
+        (this.program.account as any)["agentReputation"].fetch(this.reputationPda(wallet)),
       )) as RawAccount;
       return {
         address: raw.address,
@@ -606,8 +637,8 @@ export class CovenantClient {
 
   async fetchConfig(): Promise<ProtocolConfigAccount | null> {
     try {
-      const raw = (await (this.program.account as any)["protocolConfig"].fetch(
-        this.configPda(),
+      const raw = (await this.query(() =>
+        (this.program.account as any)["protocolConfig"].fetch(this.configPda()),
       )) as RawAccount;
       return {
         admin: raw.admin,
