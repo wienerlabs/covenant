@@ -55,6 +55,7 @@ model Job {
   @@index([takerWallet])
   @@index([status])
   @@index([challengeEndAt])
+  @@index([updatedAt]) // C-115: hot "recent activity" ordering (settlement/stats, activity, notifications, …)
 }
 
 // ============================================================================
