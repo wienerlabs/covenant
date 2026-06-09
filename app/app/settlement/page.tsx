@@ -205,7 +205,7 @@ export default function SettlementPage() {
       }
     }
     load();
-    const t = setInterval(load, 10_000);
+    const t = setInterval(load, 30_000); // C-115: >=30s to cut DB transfer cost
     return () => {
       cancelled = true;
       clearInterval(t);

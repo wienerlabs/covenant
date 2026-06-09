@@ -84,7 +84,7 @@ export default function LandingPage() {
       }
     }
     fetchStats();
-    const poll = setInterval(fetchStats, 15000);
+    const poll = setInterval(fetchStats, 30000); // C-115: >=30s to cut DB transfer cost
     return () => clearInterval(poll);
   }, []);
 
