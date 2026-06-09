@@ -76,6 +76,17 @@ const { jobPda } = await covenant.createJob({
 
 ---
 
+## Documentation
+
+Full docs live in **[`docs/`](docs/README.md)** — start there. Quick links:
+
+- **[Architecture](docs/ARCHITECTURE.md)** · **[Job state machine](docs/STATE_MACHINE.md)**
+- **[SDK reference](sdk/README.md)** (`covenant-sdk`) · **[MCP server](mcp/README.md)** (`covenant-mcp`)
+- **[HTTP API guide](docs/API.md)** — live spec at `/api/openapi`, rendered at `/api-docs`
+- **[Runbook](docs/RUNBOOK.md)** · **[SLO](docs/SLO.md)** · **[Secrets](docs/SECRETS.md)**
+
+---
+
 ## How It Works
 
 ```
