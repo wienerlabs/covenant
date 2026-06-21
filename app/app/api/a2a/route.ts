@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildA2AResponse, buildA2AError } from "@/lib/aip/a2a";
 import type { A2ARequest } from "@/lib/aip/a2a";
+import { enforceIpLimit } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
+  // Throttle: this JSON-RPC endpoint can create Job rows; cap unauthenticated
+  // abuse (spam job creation / resource exhaustion).
+  const limited = await enforceIpLimit(request, "a2a");
+  if (limited) return limited;
   try {
     const body: A2ARequest = await request.json();
 

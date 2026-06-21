@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { enforceIpLimit } from "@/lib/rateLimit";
 
 /**
  * POST /api/generate/image
@@ -33,6 +34,11 @@ const SIZE_MAP: Record<string, { width: number; height: number }> = {
 };
 
 export async function POST(req: NextRequest) {
+  // Throttle: each call hits the paid fal.ai API + Vercel Blob. Without a
+  // limit an unauthenticated caller can run up the bill / exhaust quota.
+  const limited = await enforceIpLimit(req, "generate_image");
+  if (limited) return limited;
+
   if (!FAL_KEY) {
     return NextResponse.json(
       {

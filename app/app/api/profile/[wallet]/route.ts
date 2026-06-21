@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 export async function GET(
   _request: NextRequest,
@@ -35,7 +36,15 @@ export async function PATCH(
 ) {
   try {
     const { wallet } = await params;
-    const body = await request.json();
+    const raw = await request.text();
+    const auth = await requireAuth(request, { rawBody: raw });
+    if (!auth.ok)
+      return NextResponse.json({ error: auth.reason }, { status: auth.status });
+    // IDOR guard: you may only edit the profile of the wallet you control.
+    const guard = requireWalletMatch(auth, wallet);
+    if (!guard.ok)
+      return NextResponse.json({ error: guard.reason }, { status: guard.status });
+    const body = raw ? JSON.parse(raw) : {};
     const { displayName, bio, role } = body as {
       displayName?: string;
       bio?: string;

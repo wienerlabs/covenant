@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const raw = await request.text();
+    const auth = await requireAuth(request, { rawBody: raw });
+    if (!auth.ok)
+      return NextResponse.json({ error: auth.reason }, { status: auth.status });
+    const body = raw ? JSON.parse(raw) : {};
     const { walletAddress, displayName, bio, role } = body;
 
     if (!walletAddress || !displayName) {
@@ -12,6 +17,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // IDOR guard: a profile may only be created for the wallet you control.
+    const guard = requireWalletMatch(auth, walletAddress);
+    if (!guard.ok)
+      return NextResponse.json({ error: guard.reason }, { status: guard.status });
 
     // Check if profile already exists
     const existing = await prisma.profile.findUnique({
