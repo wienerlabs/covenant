@@ -7,7 +7,7 @@ import {
   verifyTxInvokedCovenant,
 } from "@/lib/program-server";
 import { PublicKey } from "@solana/web3.js";
-import { requireAuth } from "@/lib/require-auth";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 import { log } from "@/lib/logger";
 
 /**
@@ -33,13 +33,14 @@ export async function POST(
   if (blocked) return blocked;
 
   const reqLog = log.forRequest(request); // C-110: correlate this request
-  const __auth = await requireAuth(request); // C-091: verified signature or API key
+  const __raw = await request.text();
+  const __auth = await requireAuth(request, { rawBody: __raw }); // C-091
   if (!__auth.ok)
     return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
 
   try {
     const { id } = await params;
-    const body = await request.json();
+    const body = __raw ? JSON.parse(__raw) : {};
     const { signerWallet, txHash } = body as {
       signerWallet?: string;
       txHash?: string;
@@ -51,6 +52,13 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    // IDOR bind: the signer must control the wallet they cancel as. (The
+    // on-chain program is the source of truth for who may cancel; this stops
+    // a forged DB-mirror under someone else's wallet once enforced.)
+    const __guard = requireWalletMatch(__auth, signerWallet);
+    if (!__guard.ok)
+      return NextResponse.json({ error: __guard.reason }, { status: __guard.status });
     if (!txHash) {
       return NextResponse.json(
         {

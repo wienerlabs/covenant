@@ -6,7 +6,7 @@ import {
 } from "@/lib/program-server";
 import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
-import { requireAuth } from "@/lib/require-auth";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 import { log } from "@/lib/logger";
 import { alertDisputeSpike } from "@/lib/alerts";
 
@@ -29,11 +29,12 @@ export async function POST(
 ) {
   try {
     const reqLog = log.forRequest(request); // C-110: correlate this request
-    const __auth = await requireAuth(request); // C-091: verified signature or API key
+    const __raw = await request.text();
+    const __auth = await requireAuth(request, { rawBody: __raw }); // C-091
     if (!__auth.ok)
       return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
     const { id } = await params;
-    const body = await request.json();
+    const body = __raw ? JSON.parse(__raw) : {};
     const {
       posterWallet,
       reasonText,
@@ -52,6 +53,11 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    // IDOR bind: the signer must control the poster wallet raising the dispute.
+    const __guard = requireWalletMatch(__auth, posterWallet);
+    if (!__guard.ok)
+      return NextResponse.json({ error: __guard.reason }, { status: __guard.status });
     if (!reasonText || reasonText.length < 10) {
       return NextResponse.json(
         { error: "reasonText must be at least 10 characters" },

@@ -7,6 +7,7 @@ import {
 import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
 import { enforceIpLimit } from "@/lib/rateLimit";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 /**
  * POST /api/disputes/[id]/resolve
@@ -39,7 +40,11 @@ export async function POST(
     if (limited) return limited;
 
     const { id } = await params;
-    const body = await request.json();
+    const __raw = await request.text();
+    const __auth = await requireAuth(request, { rawBody: __raw });
+    if (!__auth.ok)
+      return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
+    const body = __raw ? JSON.parse(__raw) : {};
     const {
       arbitratorWallet,
       resolution,
@@ -70,6 +75,12 @@ export async function POST(
         { status: 403 },
       );
     }
+
+    // Bind the vote to the signer: an arbitrator's vote cannot be forged under
+    // their address by another caller (body-supplied identity was spoofable).
+    const __guard = requireWalletMatch(__auth, arbitratorWallet);
+    if (!__guard.ok)
+      return NextResponse.json({ error: __guard.reason }, { status: __guard.status });
     if (!resolution || !["FavorTaker", "FavorPoster", "Split"].includes(resolution)) {
       return NextResponse.json(
         { error: "resolution must be one of: FavorTaker, FavorPoster, Split" },

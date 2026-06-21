@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 import { enforceIpLimit } from "@/lib/rateLimit";
-import { requireAuth } from "@/lib/require-auth";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 import { log } from "@/lib/logger";
 import { alertDisputeSpike } from "@/lib/alerts";
 
@@ -81,6 +81,11 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    // IDOR bind: the signer must control the poster wallet raising the dispute.
+    const __guard = requireWalletMatch(__auth, posterWallet);
+    if (!__guard.ok)
+      return NextResponse.json({ error: __guard.reason }, { status: __guard.status });
 
     const job = await prisma.job.findUnique({
       where: { id: jobId },

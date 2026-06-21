@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { awardXP } from "@/lib/xp";
 import { unlockAchievement } from "@/lib/achievements";
 import { assertPublicUrl } from "@/lib/ssrf";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 const VALID_CAPABILITIES = [
   "writing",
@@ -16,7 +17,11 @@ const VALID_CAPABILITIES = [
 // ── POST: Register a new agent ──────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const raw = await req.text();
+    const auth = await requireAuth(req, { rawBody: raw });
+    if (!auth.ok)
+      return NextResponse.json({ error: auth.reason }, { status: auth.status });
+    const body = raw ? JSON.parse(raw) : {};
     const { walletAddress, name, description, endpointUrl, capabilities } = body;
 
     // ── Field presence ────────────────────────────────────────────────────
@@ -26,6 +31,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // ── IDOR bind: only the wallet owner may register agents under it ──────
+    const guard = requireWalletMatch(auth, walletAddress);
+    if (!guard.ok)
+      return NextResponse.json({ error: guard.reason }, { status: guard.status });
 
     // ── Name length ───────────────────────────────────────────────────────
     const trimmedName = String(name).trim();

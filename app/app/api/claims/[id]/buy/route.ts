@@ -6,7 +6,7 @@ import {
   verifyTxInvokedCovenant,
 } from "@/lib/credit-server";
 import { PublicKey } from "@solana/web3.js";
-import { requireAuth } from "@/lib/require-auth";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 import { log } from "@/lib/logger";
 
 /**
@@ -41,6 +41,12 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    // IDOR bind: the signer must control the buyer wallet (the on-chain buyer
+    // check below is the primary proof; this binds it to the signer too).
+    const __guard = requireWalletMatch(__auth, buyerWallet);
+    if (!__guard.ok)
+      return NextResponse.json({ error: __guard.reason }, { status: __guard.status });
 
     const claim = await prisma.claimListing.findUnique({
       where: { id },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkUrlSync } from "@/lib/ssrf";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,16 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const body = await req.json();
+  const raw = await req.text();
+  const auth = await requireAuth(req, { rawBody: raw });
+  if (!auth.ok)
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  const body = raw ? JSON.parse(raw) : {};
   const { walletAddress, ...updates } = body;
+
+  const guard = requireWalletMatch(auth, walletAddress);
+  if (!guard.ok)
+    return NextResponse.json({ error: guard.reason }, { status: guard.status });
 
   const agent = await prisma.hostedAgent.findUnique({ where: { id } });
   if (!agent) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -58,14 +67,26 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const body = await req.json().catch(() => ({}));
-  const { walletAddress } = body as { walletAddress?: string };
+  const raw = await req.text();
+  const auth = await requireAuth(req, { rawBody: raw });
+  if (!auth.ok)
+    return NextResponse.json({ error: auth.reason }, { status: auth.status });
+  let body: { walletAddress?: string } = {};
+  try {
+    body = raw ? JSON.parse(raw) : {};
+  } catch {
+    body = {};
+  }
+  const { walletAddress } = body;
 
   const agent = await prisma.hostedAgent.findUnique({ where: { id } });
   if (!agent) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!walletAddress) {
     return NextResponse.json({ error: "walletAddress required" }, { status: 400 });
   }
+  const guard = requireWalletMatch(auth, walletAddress);
+  if (!guard.ok)
+    return NextResponse.json({ error: guard.reason }, { status: guard.status });
   if (agent.walletAddress !== walletAddress) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }

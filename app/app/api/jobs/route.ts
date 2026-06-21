@@ -6,7 +6,7 @@ import { sendMarkerTransaction } from "@/lib/solana";
 import { rateLimitDurable, getLimit } from "@/lib/rateLimit";
 import { buildJobSpec, hashJobSpec } from "@/lib/spec";
 import { moderateJobContent } from "@/lib/moderation";
-import { requireAuth } from "@/lib/require-auth";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 import { log } from "@/lib/logger";
 import { screenWallet } from "@/lib/sanctions";
 import type { Prisma } from "@prisma/client";
@@ -136,7 +136,8 @@ export async function POST(request: NextRequest) {
   if (blocked) return blocked;
 
   const reqLog = log.forRequest(request); // C-110: correlate this request
-  const __auth = await requireAuth(request); // C-091: verified signature or API key
+  const __raw = await request.text();
+  const __auth = await requireAuth(request, { rawBody: __raw }); // C-091
   if (!__auth.ok)
     return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
 
@@ -153,7 +154,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    const body = __raw ? JSON.parse(__raw) : {};
     const {
       posterWallet,
       amount,
@@ -185,6 +186,12 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // IDOR bind: the signer must control the poster wallet the job is created
+    // under (no posting jobs as someone else once enforced).
+    const __guard = requireWalletMatch(__auth, posterWallet);
+    if (!__guard.ok)
+      return NextResponse.json({ error: __guard.reason }, { status: __guard.status });
 
     // C-105: block sanctioned (OFAC) wallets at the on-ramp.
     const sanctioned = screenWallet(posterWallet);
