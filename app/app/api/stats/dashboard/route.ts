@@ -66,22 +66,29 @@ export async function GET(req: NextRequest) {
     }));
 
     // ── 3. Category distribution ─────────────────────────────────────
-    const allUserJobs = await prisma.job.findMany({
+    // Aggregate in the DB (groupBy) rather than loading every job row for the
+    // wallet into memory — the previous unbounded findMany grew with a
+    // wallet's lifetime job count and could be used to exhaust memory.
+    const catGroups = await prisma.job.groupBy({
+      by: ["category"],
       where: {
         OR: [
           { posterWallet: wallet },
           { takerWallet: wallet },
         ],
       },
-      select: { category: true },
+      _count: { _all: true },
     });
 
     const catMap = new Map<string, number>();
-    for (const j of allUserJobs) {
-      const cat = j.category || "text_writing";
-      catMap.set(cat, (catMap.get(cat) ?? 0) + 1);
+    let totalCatJobsRaw = 0;
+    for (const g of catGroups) {
+      const cat = g.category || "text_writing";
+      const n = g._count?._all ?? 0;
+      catMap.set(cat, (catMap.get(cat) ?? 0) + n);
+      totalCatJobsRaw += n;
     }
-    const totalCatJobs = allUserJobs.length || 1;
+    const totalCatJobs = totalCatJobsRaw || 1;
     const categoryDistribution = Array.from(catMap.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([category, count]) => ({

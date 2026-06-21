@@ -27,6 +27,15 @@
           }
         },
         {
+          "name": "program",
+          "address": "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT"
+        },
+        {
+          "name": "program_data",
+          "writable": false,
+          "signer": false
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         }

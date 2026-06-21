@@ -137,9 +137,20 @@ export async function POST(
         { status: 400 },
       );
     }
+    // Disputes are only meaningful against a real on-chain escrow. A job with
+    // no PDA has no locked funds and no bond to verify, so accepting a
+    // "dispute" on it would just flip status to Disputed and permanently block
+    // finalize — a free griefing vector. Require the escrow PDA and verify the
+    // on-chain raise_dispute unconditionally (not only when job.pda is set).
+    if (!job.pda) {
+      return NextResponse.json(
+        { error: "This job has no on-chain escrow and cannot be disputed." },
+        { status: 400 },
+      );
+    }
     try {
       await verifyTxInvokedCovenant(txHash);
-      if (job.pda) {
+      {
         const onchain = await fetchJobEscrow(new PublicKey(job.pda));
         if (!onchain) {
           throw new Error(

@@ -130,6 +130,11 @@ describe("covenant — optimistic settlement", () => {
       .accounts({
         admin: admin.publicKey,
         config: configPda,
+        program: program.programId,
+        programData: PublicKey.findProgramAddressSync(
+          [program.programId.toBuffer()],
+          new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111"),
+        )[0],
         systemProgram: SystemProgram.programId,
       })
       .rpc();

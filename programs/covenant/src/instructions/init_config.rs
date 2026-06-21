@@ -17,6 +17,25 @@ pub struct InitConfig<'info> {
     )]
     pub config: Box<Account<'info, ProtocolConfig>>,
 
+    /// The Covenant program itself. `programdata_address()?` ties it to the
+    /// `program_data` account below so neither can be spoofed.
+    #[account(
+        constraint = program.programdata_address()? == Some(program_data.key())
+            @ CovError::Unauthorized,
+    )]
+    pub program: Program<'info, crate::program::Covenant>,
+
+    /// The program's ProgramData account. Only the program's upgrade
+    /// authority (the deployer) may initialize the protocol config. Without
+    /// this, `init_config` is first-call-wins on a fresh deployment: anyone
+    /// could front-run the operator, seize `admin`, and install their own
+    /// arbitrator multisig — handing themselves every disputed escrow + bond.
+    #[account(
+        constraint = program_data.upgrade_authority_address == Some(admin.key())
+            @ CovError::Unauthorized,
+    )]
+    pub program_data: Account<'info, ProgramData>,
+
     pub system_program: Program<'info, System>,
 }
 

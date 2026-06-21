@@ -120,13 +120,26 @@ export async function POST(
       // program + the JobEscrow status is now Finalized.
       try {
         await verifyTxInvokedCovenant(callerTxSig);
-        if (job.pda) {
-          const onchain = await fetchJobEscrow(new PublicKey(job.pda));
-          if (onchain && onchain.status !== "Finalized") {
-            throw new Error(
-              `On-chain JobEscrow status is ${onchain.status}; expected Finalized after the crank tx.`,
-            );
-          }
+        // Bind the verification to THIS job. A job with no PDA has no escrow
+        // to inspect, so an arbitrary confirmed Covenant tx must not be able to
+        // satisfy finalize for it (it would book reputation/revenue/fees off an
+        // unrelated tx). Require the PDA and assert it actually reached
+        // Finalized — a null fetch or any other status is a hard failure.
+        if (!job.pda) {
+          throw new Error(
+            "Client-cranked finalize requires an on-chain escrow PDA for this job.",
+          );
+        }
+        const onchain = await fetchJobEscrow(new PublicKey(job.pda));
+        if (!onchain) {
+          throw new Error(
+            `JobEscrow PDA ${job.pda.slice(0, 8)}… not found on chain.`,
+          );
+        }
+        if (onchain.status !== "Finalized") {
+          throw new Error(
+            `On-chain JobEscrow status is ${onchain.status}; expected Finalized after the crank tx.`,
+          );
         }
         paymentTxHash = callerTxSig;
       } catch (err) {
@@ -228,19 +241,24 @@ export async function POST(
     // Update related DB records.
     const updated = await prisma.$transaction(async (tx) => {
       const j = await tx.job.findUnique({ where: { id } });
-      await tx.reputation.upsert({
-        where: { walletAddress: job.takerWallet as string },
-        create: {
-          walletAddress: job.takerWallet as string,
-          jobsCompleted: 1,
-          totalEarned: job.amount,
-          firstJobAt: new Date(),
-        },
-        update: {
-          jobsCompleted: { increment: 1 },
-          totalEarned: { increment: job.amount },
-        },
-      });
+      // Reputation self-dealing guard: a wallet that posts a job to itself
+      // must not inflate its own jobsCompleted / totalEarned by finalizing.
+      // Only credit reputation when the poster and taker are distinct wallets.
+      if (job.posterWallet !== job.takerWallet) {
+        await tx.reputation.upsert({
+          where: { walletAddress: job.takerWallet as string },
+          create: {
+            walletAddress: job.takerWallet as string,
+            jobsCompleted: 1,
+            totalEarned: job.amount,
+            firstJobAt: new Date(),
+          },
+          update: {
+            jobsCompleted: { increment: 1 },
+            totalEarned: { increment: job.amount },
+          },
+        });
+      }
       await tx.jobEvent.create({
         data: {
           jobId: id,

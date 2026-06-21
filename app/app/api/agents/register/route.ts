@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { awardXP } from "@/lib/xp";
 import { unlockAchievement } from "@/lib/achievements";
-import { assertPublicUrl } from "@/lib/ssrf";
+import { assertPublicUrl, safeFetch } from "@/lib/ssrf";
 import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 const VALID_CAPABILITIES = [
@@ -54,6 +54,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    // Pin the validated addresses for the test fetch below so DNS can't be
+    // rebound to a private IP between this check and the request (TOCTOU).
+    const validatedAddresses = urlGuard.addresses;
 
     // ── Capabilities ──────────────────────────────────────────────────────
     if (!Array.isArray(capabilities) || capabilities.length === 0) {
@@ -89,15 +92,19 @@ export async function POST(req: NextRequest) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10_000);
 
-      const testRes = await fetch(endpointUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: "Hello, please respond with 'OK' to confirm you are operational.",
-          test: true,
-        }),
-        signal: controller.signal,
-      });
+      const testRes = await safeFetch(
+        endpointUrl,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: "Hello, please respond with 'OK' to confirm you are operational.",
+            test: true,
+          }),
+          signal: controller.signal,
+        },
+        validatedAddresses,
+      );
 
       clearTimeout(timeout);
 

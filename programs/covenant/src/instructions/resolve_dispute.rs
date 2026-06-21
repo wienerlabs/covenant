@@ -41,8 +41,13 @@ pub struct ResolveDispute<'info> {
     )]
     pub poster: AccountInfo<'info>,
 
+    /// Pinned to the canonical escrow PDA `[b"escrow_token", job_escrow]`
+    /// that `create_job` derives, matching the bond account's seed
+    /// constraint below — no attacker-supplied decoy can be substituted.
     #[account(
         mut,
+        seeds = [b"escrow_token", job_escrow.key().as_ref()],
+        bump,
         constraint = escrow_token_account.owner == job_escrow.key(),
         constraint = escrow_token_account.mint == job_escrow.token_mint @ CovError::MintMismatch,
     )]

@@ -66,6 +66,15 @@ pub fn handler(ctx: Context<BuyClaim>) -> Result<()> {
         CovError::BuyerIsSeller,
     );
 
+    // The poster funds the escrow, so letting them buy the claim is
+    // self-dealing: they would route the escrow payout back to themselves
+    // and could then grief the taker via a dispute. Block it, mirroring the
+    // buyer≠seller guard above.
+    require!(
+        ctx.accounts.buyer.key() != ctx.accounts.job_escrow.poster,
+        CovError::Unauthorized,
+    );
+
     let price = ctx.accounts.claim_listing.price;
 
     // 1. Transfer price from buyer → seller (atomic payment).

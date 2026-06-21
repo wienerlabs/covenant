@@ -62,6 +62,14 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    // Upper bound — the prompt is forwarded to the paid fal.ai API; cap it so
+    // a caller can't push a megabyte prompt through on every request.
+    if (prompt.length > 2000) {
+      return NextResponse.json(
+        { error: "prompt is too long (max 2000 chars)" },
+        { status: 400 },
+      );
+    }
 
     const dimensions = SIZE_MAP[size] ?? SIZE_MAP.square;
 
