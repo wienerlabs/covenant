@@ -5,6 +5,7 @@ import { AppProvider } from "@solana/connector/react";
 import { getDefaultConfig } from "@solana/connector/headless";
 import { DEVNET_ENDPOINT } from "@/lib/constants";
 import ProfileGate from "./ProfileGate";
+import SessionGate from "./SessionGate";
 import OnboardingTour from "./OnboardingTour";
 import FaucetWidget from "./FaucetWidget";
 import TransactionTicker from "./TransactionTicker";
@@ -53,6 +54,7 @@ export default function Providers({ children }: ProvidersProps) {
       <ProfileGate>{children}</ProfileGate>
       {mounted && (
         <>
+          <SessionGate />
           <NavigationProgress />
           <OnboardingTour />
           <FaucetWidget />

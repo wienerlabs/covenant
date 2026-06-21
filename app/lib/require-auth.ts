@@ -20,6 +20,12 @@
  */
 import crypto from "node:crypto";
 import { verifyWalletSignature } from "./wallet-auth";
+import {
+  SESSION_COOKIE,
+  readCookie,
+  verifySession,
+  sessionConfigured,
+} from "./session";
 
 /**
  * Whether mutating-endpoint auth is enforced.
@@ -33,15 +39,52 @@ import { verifyWalletSignature } from "./wallet-auth";
  */
 let warnedAuthOff = false;
 export function authEnforced(): boolean {
-  const on = process.env.AUTH_ENFORCED === "true";
+  const flag = process.env.AUTH_ENFORCED;
+  if (flag === "true") return true; // explicit operator override
+  if (flag === "false") return false; // explicit opt-out
+  // Default: enforce automatically once a session secret is configured. This
+  // makes activation a single env var (SESSION_SECRET) and, crucially, means a
+  // missing secret can never leave endpoints "enforced" while the browser
+  // login flow can't actually authenticate — it stays open (with a warning)
+  // until session auth is wired.
+  const on = sessionConfigured();
   if (!on && process.env.NODE_ENV === "production" && !warnedAuthOff) {
     warnedAuthOff = true;
     console.error(
-      "[security] AUTH_ENFORCED is not 'true' in production: mutating endpoints " +
-        "accept unauthenticated requests. Enable wallet signing then set AUTH_ENFORCED=true.",
+      "[security] mutating-endpoint auth is OFF in production: set SESSION_SECRET " +
+        "(>=16 chars) to activate wallet-session auth, or AUTH_ENFORCED=true to force it.",
     );
   }
   return on;
+}
+
+/**
+ * CSRF guard for cookie-authenticated requests. A session cookie is sent on
+ * cross-site requests too, so a cookie-authenticated mutation must come from
+ * our own origin. Browsers attach `Origin` on cross-origin and on same-origin
+ * non-GET requests; we fall back to `Referer`, and fail closed if neither is
+ * present on a request that reached this guard.
+ */
+function isSameOrigin(req: Request): boolean {
+  const host = req.headers.get("host");
+  if (!host) return false;
+  const origin = req.headers.get("origin");
+  if (origin) {
+    try {
+      return new URL(origin).host === host;
+    } catch {
+      return false;
+    }
+  }
+  const referer = req.headers.get("referer");
+  if (referer) {
+    try {
+      return new URL(referer).host === host;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 /**
@@ -151,7 +194,20 @@ export async function requireAuth(
       : { ok: false, status: 401, reason: "invalid api key" };
   }
 
-  // 2. Wallet-signature path.
+  // 1.5 Session-cookie path (browser). The user proved wallet control once
+  // via /api/auth/login; the httpOnly cookie now rides along automatically, so
+  // no per-request wallet popup is needed.
+  const sessionToken = readCookie(req, SESSION_COOKIE);
+  if (sessionToken) {
+    if (!isSameOrigin(req)) {
+      return { ok: false, status: 403, reason: "cross-origin request blocked" };
+    }
+    const sess = verifySession(sessionToken, Date.now());
+    if (sess) return { ok: true, mode: "signature", wallet: sess.wallet };
+    return { ok: false, status: 401, reason: "session expired — sign in again" };
+  }
+
+  // 2. Per-request wallet-signature path (SDK / bots that sign each request).
   const wallet = req.headers.get("x-wallet");
   const signature = req.headers.get("x-signature");
   const ts = req.headers.get("x-timestamp");
@@ -159,7 +215,8 @@ export async function requireAuth(
     return {
       ok: false,
       status: 401,
-      reason: "missing auth: x-api-key, or x-wallet + x-signature + x-timestamp",
+      reason:
+        "missing auth: session cookie, x-api-key, or x-wallet + x-signature + x-timestamp",
     };
   }
 

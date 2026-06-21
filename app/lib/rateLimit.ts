@@ -30,6 +30,7 @@ const LIMIT_TABLE: Record<string, { limit: number; windowMs: number }> = {
   unstake:       { limit: 10, windowMs: 60_000 },
   cancel_claim:  { limit: 30, windowMs: 60_000 },
   faucet_ip:     { limit: 10, windowMs: 60 * 60_000 },
+  auth_login:    { limit: 20, windowMs: 60_000 },
 };
 
 /** Returns the (limit, windowMs) for a named op. Falls back to a sane default. */
