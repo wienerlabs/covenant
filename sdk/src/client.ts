@@ -39,6 +39,11 @@ import type {
 import { withRetry, type RetryOptions } from "./retry";
 import { classifyError, CovenantValidationError } from "./errors";
 
+/** BPF upgradeable loader — owner of every program's ProgramData account. */
+const BPF_UPGRADEABLE_LOADER = new PublicKey(
+  "BPFLoaderUpgradeab1e11111111111111111111111",
+);
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyProgram = Program<any>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -209,6 +214,13 @@ export class CovenantClient {
     minBondAbsolute?: BN | number;
   }): Promise<TransactionSignature> {
     const [configPda] = deriveConfigPda(this.programId);
+    // The program gates init_config on its upgrade authority, so the call
+    // must include the program + its ProgramData account. ProgramData is the
+    // canonical PDA [programId] under the BPF upgradeable loader.
+    const [programData] = PublicKey.findProgramAddressSync(
+      [this.programId.toBuffer()],
+      BPF_UPGRADEABLE_LOADER,
+    );
     return this.send((this.program.methods as any)
       .initConfig(
         params.arbitrators,
@@ -221,6 +233,8 @@ export class CovenantClient {
       .accounts({
         admin: params.admin.publicKey,
         config: configPda,
+        program: this.programId,
+        programData,
         systemProgram: SystemProgram.programId,
       })
       .signers([params.admin])

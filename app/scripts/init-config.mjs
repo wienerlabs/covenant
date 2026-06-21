@@ -94,6 +94,20 @@ async function main() {
     PROGRAM_ID,
   );
   console.log(`▶ Config PDA: ${configPda.toBase58()}`);
+
+  // init_config is gated on the program's upgrade authority, so the call
+  // must include the program + its ProgramData account (canonical PDA
+  // [programId] under the BPF upgradeable loader). The DEPLOYER_KEYPAIR must
+  // be the program's upgrade authority for this to succeed.
+  const BPF_UPGRADEABLE_LOADER = new PublicKey(
+    "BPFLoaderUpgradeab1e11111111111111111111111",
+  );
+  const [programData] = PublicKey.findProgramAddressSync(
+    [PROGRAM_ID.toBuffer()],
+    BPF_UPGRADEABLE_LOADER,
+  );
+  console.log(`▶ ProgramData PDA: ${programData.toBase58()}`);
+
   const existing = await conn.getAccountInfo(configPda);
   if (existing) {
     console.log("✓ ProtocolConfig already initialized — nothing to do.");
@@ -131,8 +145,10 @@ async function main() {
       minBondAbsAtomic,
     )
     .accounts({
-      authority: deployerKp.publicKey,
+      admin: deployerKp.publicKey,
       config: configPda,
+      program: PROGRAM_ID,
+      programData,
       systemProgram: SystemProgram.programId,
     })
     .rpc({ commitment: "confirmed" });
