@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateReferralCode } from "@/lib/referral";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 /**
  * POST /api/referral/claim
@@ -11,7 +12,11 @@ import { generateReferralCode } from "@/lib/referral";
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const raw = await req.text();
+    const auth = await requireAuth(req, { rawBody: raw });
+    if (!auth.ok)
+      return NextResponse.json({ error: auth.reason }, { status: auth.status });
+    const body = raw ? JSON.parse(raw) : {};
     const { referredWallet, referrerWallet } = body as {
       referredWallet?: string;
       referrerWallet?: string;
@@ -23,6 +28,12 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Bind to the signer: only the referred wallet's owner may create its
+    // referral edge (prevents farming edges for arbitrary wallets).
+    const guard = requireWalletMatch(auth, referredWallet);
+    if (!guard.ok)
+      return NextResponse.json({ error: guard.reason }, { status: guard.status });
 
     // Self-referral check
     if (referredWallet === referrerWallet) {

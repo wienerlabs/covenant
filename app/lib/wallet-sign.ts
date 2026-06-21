@@ -143,6 +143,53 @@ export async function signAndSendTransaction(
 }
 
 /**
+ * Sign an arbitrary UTF-8 message with the connected wallet and return the
+ * base58 Ed25519 signature. Used by the auth-session login flow
+ * (`/api/auth/login`) — the same wallet-standard feature path as transaction
+ * signing, with a `window.solana` fallback for injected providers.
+ */
+export async function signMessageWithWallet(
+  selectedWallet: AnyWallet,
+  account: string,
+  message: string,
+): Promise<string> {
+  const messageBytes = new TextEncoder().encode(message);
+
+  // --- Path 1: wallet-standard solana:signMessage ---
+  const feature = selectedWallet?.features?.["solana:signMessage"];
+  if (feature && typeof feature.signMessage === "function") {
+    const accountObj =
+      selectedWallet.accounts?.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (a: any) => a.address === account,
+      ) ?? selectedWallet.accounts?.[0];
+    if (!accountObj) throw new Error("Wallet has no accounts to sign with");
+    const result = await feature.signMessage({
+      account: accountObj,
+      message: messageBytes,
+    });
+    const first = Array.isArray(result) ? result[0] : result;
+    const sigBytes = first?.signature ?? first?.signedMessage;
+    if (!sigBytes) throw new Error("Wallet returned no signature");
+    return toBase58(new Uint8Array(sigBytes));
+  }
+
+  // --- Path 2: window.solana (Phantom injected provider fallback) ---
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const injected = (window as any).solana;
+    if (injected?.signMessage) {
+      const res = await injected.signMessage(messageBytes, "utf8");
+      const sigBytes = res?.signature ?? res;
+      if (!sigBytes) throw new Error("Wallet returned no signature");
+      return toBase58(new Uint8Array(sigBytes));
+    }
+  }
+
+  throw new Error("Connected wallet does not support message signing");
+}
+
+/**
  * Deserialize a base64-encoded transaction (as returned by
  * /api/escrow/build) into a Transaction object ready for signing.
  */

@@ -6,6 +6,7 @@ import {
   verifyTxInvokedCovenant,
 } from "@/lib/credit-server";
 import { PublicKey } from "@solana/web3.js";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 /**
  * POST /api/claims/[id]/cancel
@@ -25,7 +26,11 @@ export async function POST(
     const { id } = await params;
     const limited = await enforceIpLimit(req, "cancel_claim");
     if (limited) return limited;
-    const body = await req.json();
+    const raw = await req.text();
+    const auth = await requireAuth(req, { rawBody: raw });
+    if (!auth.ok)
+      return NextResponse.json({ error: auth.reason }, { status: auth.status });
+    const body = raw ? JSON.parse(raw) : {};
     const { sellerWallet, txSignature } = body as {
       sellerWallet?: string;
       txSignature?: string;
@@ -36,6 +41,11 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    // IDOR bind: the signer must control the seller wallet they cancel as.
+    const guard = requireWalletMatch(auth, sellerWallet);
+    if (!guard.ok)
+      return NextResponse.json({ error: guard.reason }, { status: guard.status });
 
     const claim = await prisma.claimListing.findUnique({ where: { id } });
     if (!claim) {

@@ -9,7 +9,7 @@ import {
 } from "@/lib/program-server";
 import { PublicKey } from "@solana/web3.js";
 import crypto from "crypto";
-import { requireAuth } from "@/lib/require-auth";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 import { log } from "@/lib/logger";
 
 /**
@@ -35,13 +35,15 @@ export async function POST(
   if (blocked) return blocked;
 
   const reqLog = log.forRequest(request); // C-110: correlate this request
-  const __auth = await requireAuth(request); // C-091: verified signature or API key
+  // Read the raw body once so the signature binds to it (C-091).
+  const __raw = await request.text();
+  const __auth = await requireAuth(request, { rawBody: __raw });
   if (!__auth.ok)
     return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
 
   try {
     const { id } = await params;
-    const body = await request.json();
+    const body = __raw ? JSON.parse(__raw) : {};
     const {
       takerWallet,
       text,
@@ -64,6 +66,11 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    // IDOR bind: the signer must control the taker wallet they submit under.
+    const __guard = requireWalletMatch(__auth, takerWallet);
+    if (!__guard.ok)
+      return NextResponse.json({ error: __guard.reason }, { status: __guard.status });
     if (!text || typeof text !== "string") {
       return NextResponse.json({ error: "text is required" }, { status: 400 });
     }

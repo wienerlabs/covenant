@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 /**
  * POST /api/reviews — submit a rating for a finalized/resolved job
@@ -8,7 +9,11 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const raw = await req.text();
+    const auth = await requireAuth(req, { rawBody: raw });
+    if (!auth.ok)
+      return NextResponse.json({ error: auth.reason }, { status: auth.status });
+    const body = raw ? JSON.parse(raw) : {};
     const { jobId, posterWallet, takerWallet, rating, comment } = body as {
       jobId?: string;
       posterWallet?: string;
@@ -23,6 +28,12 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Bind to the signer: only the poster may write the review (the
+    // job.posterWallet check below is otherwise spoofable once enforced).
+    const guard = requireWalletMatch(auth, posterWallet);
+    if (!guard.ok)
+      return NextResponse.json({ error: guard.reason }, { status: guard.status });
     if (!rating || rating < 1 || rating > 5) {
       return NextResponse.json(
         { error: "rating must be 1-5" },

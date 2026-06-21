@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { awardXP } from "@/lib/xp";
 import { sendMarkerTransaction } from "@/lib/solana";
 import { checkUrlSync } from "@/lib/ssrf";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,11 @@ export async function POST(req: NextRequest) {
   if (blocked) return blocked;
 
   try {
-    const body = await req.json();
+    const raw = await req.text();
+    const auth = await requireAuth(req, { rawBody: raw });
+    if (!auth.ok)
+      return NextResponse.json({ error: auth.reason }, { status: auth.status });
+    const body = raw ? JSON.parse(raw) : {};
     const { walletAddress, name, category, systemPrompt, model, minPrice, maxPrice, avatarUrl, webEnabled } = body as {
       walletAddress?: string;
       name?: string;
@@ -62,6 +67,11 @@ export async function POST(req: NextRequest) {
     if (!walletAddress || typeof walletAddress !== "string") {
       return NextResponse.json({ error: "walletAddress is required" }, { status: 400 });
     }
+
+    // IDOR bind: only the wallet owner may create agents under their address.
+    const guard = requireWalletMatch(auth, walletAddress);
+    if (!guard.ok)
+      return NextResponse.json({ error: guard.reason }, { status: guard.status });
     if (!name || typeof name !== "string" || name.trim().length < 3 || name.trim().length > 50) {
       return NextResponse.json({ error: "name must be 3-50 characters" }, { status: 400 });
     }
