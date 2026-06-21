@@ -21,9 +21,68 @@
 import crypto from "node:crypto";
 import { verifyWalletSignature } from "./wallet-auth";
 
-/** Whether mutating-endpoint auth is enforced. Off by default (non-breaking). */
+/**
+ * Whether mutating-endpoint auth is enforced.
+ *
+ * SECURITY: this is a phased-rollout flag. While it is unset every mutating
+ * route is effectively unauthenticated. It MUST be flipped to "true" in
+ * production once the frontend + SDK sign requests (see docs/SECURITY_AUDIT.md,
+ * "auth enforcement"). When `NODE_ENV==="production"` and the flag is not
+ * explicitly "true", we emit a loud one-time warning so the gap can't ship
+ * silently.
+ */
+let warnedAuthOff = false;
 export function authEnforced(): boolean {
-  return process.env.AUTH_ENFORCED === "true";
+  const on = process.env.AUTH_ENFORCED === "true";
+  if (!on && process.env.NODE_ENV === "production" && !warnedAuthOff) {
+    warnedAuthOff = true;
+    console.error(
+      "[security] AUTH_ENFORCED is not 'true' in production: mutating endpoints " +
+        "accept unauthenticated requests. Enable wallet signing then set AUTH_ENFORCED=true.",
+    );
+  }
+  return on;
+}
+
+/**
+ * Bind an authenticated request to the wallet it claims to act on.
+ *
+ * `requireAuth` proves the caller controls the wallet in `x-wallet`, but it
+ * does NOT check that this equals the wallet the request mutates (the `wallet`
+ * field in the body / path). Without this binding a caller can sign as their
+ * own wallet and act on someone else's — a systemic IDOR. Every mutating route
+ * that takes a wallet from the body/path must call this with the prior
+ * `requireAuth` result and the wallet it is about to act on.
+ *
+ *   const auth = await requireAuth(req, { rawBody: raw });
+ *   if (!auth.ok) return Response.json({ error: auth.reason }, { status: auth.status });
+ *   const guard = requireWalletMatch(auth, body.wallet);
+ *   if (!guard.ok) return Response.json({ error: guard.reason }, { status: guard.status });
+ *
+ * Semantics:
+ *   - mode "disabled" (flag off): no-op pass, so the binding is correct the
+ *     instant AUTH_ENFORCED is flipped on without breaking the pre-signing UI.
+ *   - mode "api_key": trusted automation, allowed to act on any wallet.
+ *   - mode "signature": REQUIRE proven wallet === acting wallet.
+ */
+export function requireWalletMatch(
+  auth: AuthResult,
+  actingWallet: string | null | undefined,
+): { ok: true } | { ok: false; status: number; reason: string } {
+  if (!auth.ok) return { ok: false, status: auth.status, reason: auth.reason };
+  if (auth.mode === "disabled" || auth.mode === "api_key") return { ok: true };
+  // signature mode
+  if (!actingWallet) {
+    return { ok: false, status: 400, reason: "missing acting wallet" };
+  }
+  if (!auth.wallet || !timingSafeEqual(auth.wallet, actingWallet)) {
+    return {
+      ok: false,
+      status: 403,
+      reason: "signer does not control the target wallet",
+    };
+  }
+  return { ok: true };
 }
 
 /** SHA-256 hex of a (possibly empty) request body. */

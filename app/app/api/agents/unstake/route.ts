@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { enforceIpLimit } from "@/lib/rateLimit";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 /**
  * POST /api/agents/unstake
@@ -19,7 +20,11 @@ export async function POST(req: NextRequest) {
     const limited = await enforceIpLimit(req, "unstake");
     if (limited) return limited;
 
-    const body = await req.json();
+    const __raw = await req.text();
+    const __auth = await requireAuth(req, { rawBody: __raw });
+    if (!__auth.ok)
+      return NextResponse.json({ error: __auth.reason }, { status: __auth.status });
+    const body = __raw ? JSON.parse(__raw) : {};
     const { walletAddress } = body as { walletAddress?: string };
 
     if (!walletAddress || typeof walletAddress !== "string") {
@@ -28,6 +33,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // IDOR guard: unstake/slash/bonus only affects the owner's own stake.
+    const __guard = requireWalletMatch(__auth, walletAddress);
+    if (!__guard.ok)
+      return NextResponse.json({ error: __guard.reason }, { status: __guard.status });
 
     // Check active stake
     const stake = await prisma.agentStake.findUnique({

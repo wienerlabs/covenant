@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { enforceIpLimit } from "@/lib/rateLimit";
 
 /**
  * POST /api/delivery/upload
@@ -15,6 +16,10 @@ import crypto from "crypto";
  * Requires: BLOB_READ_WRITE_TOKEN env var.
  */
 export async function POST(req: NextRequest) {
+  // Throttle: each call writes to Vercel Blob (storage + cost). Cap abuse.
+  const limited = await enforceIpLimit(req, "delivery_upload");
+  if (limited) return limited;
+
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) {
     return NextResponse.json(

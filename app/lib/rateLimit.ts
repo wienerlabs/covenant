@@ -181,13 +181,34 @@ export function rateLimited429(result: RateLimitResult): Response {
   );
 }
 
-/** Best-effort client IP from proxy headers. */
+/**
+ * Trusted client IP from proxy headers.
+ *
+ * SECURITY: a client can send an arbitrary `X-Forwarded-For` header, so the
+ * LEFTMOST XFF entry is attacker-controlled and must NOT be used for rate
+ * limiting (an attacker rotates it to a fresh fake IP per request and the
+ * per-IP limit never trips). On Vercel, `x-real-ip` and `x-vercel-forwarded-for`
+ * are set by the platform to the true client IP and overwrite anything the
+ * client sent, so we trust those first, then the RIGHTMOST XFF entry (appended
+ * by the closest trusted proxy) — never the spoofable leftmost value.
+ */
 export function ipFromRequest(req: Request): string {
-  return (
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "unknown"
-  );
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
+
+  const vercelFwd = req.headers.get("x-vercel-forwarded-for");
+  if (vercelFwd) {
+    const parts = vercelFwd.split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length) return parts[parts.length - 1];
+  }
+
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length) return parts[parts.length - 1];
+  }
+
+  return "unknown";
 }
 
 /**

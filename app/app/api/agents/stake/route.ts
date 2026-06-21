@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { enforceIpLimit } from "@/lib/rateLimit";
-import { requireAuth } from "@/lib/require-auth";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
 
 /**
  * POST /api/agents/stake
@@ -30,6 +30,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // IDOR guard: only the wallet owner may stake under their address.
+    const __guard = requireWalletMatch(__auth, walletAddress);
+    if (!__guard.ok)
+      return NextResponse.json({ error: __guard.reason }, { status: __guard.status });
 
     if (typeof amount !== "number" || amount < 10) {
       return NextResponse.json(

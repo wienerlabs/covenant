@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, requireWalletMatch } from "@/lib/require-auth";
+import { enforceIpLimit } from "@/lib/rateLimit";
 
 const AGENT_ALPHA_WALLET = process.env.AGENT_ALPHA_WALLET || "";
 const AGENT_OMEGA_WALLET = process.env.AGENT_OMEGA_WALLET || "";
 const MAX_SIZE_BYTES = 500 * 1024; // 500KB
+
+// Raster image types only. SVG (data:image/svg+xml) is intentionally excluded:
+// SVG is an active document that can carry <script>/onload handlers, so storing
+// an attacker-supplied SVG as an avatar is a stored-XSS vector if it is ever
+// rendered outside an <img> sandbox.
+const ALLOWED_IMAGE_PREFIXES = [
+  "data:image/png;",
+  "data:image/jpeg;",
+  "data:image/jpg;",
+  "data:image/webp;",
+  "data:image/gif;",
+];
 
 export async function POST(
   request: NextRequest,
@@ -11,6 +25,22 @@ export async function POST(
 ) {
   try {
     const { wallet } = await params;
+
+    // Throttle: this writes a 500KB blob to the DB; cap abuse per IP.
+    const limited = await enforceIpLimit(request, "profile_avatar");
+    if (limited) return limited;
+
+    // Read the raw body once so the auth check can hash it, then parse.
+    const raw = await request.text();
+    const auth = await requireAuth(request, { rawBody: raw });
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.reason }, { status: auth.status });
+    }
+    // IDOR guard: the signer must control the wallet whose avatar is being set.
+    const guard = requireWalletMatch(auth, wallet);
+    if (!guard.ok) {
+      return NextResponse.json({ error: guard.reason }, { status: guard.status });
+    }
 
     // Block agent wallets from uploading avatars
     if (
@@ -23,8 +53,13 @@ export async function POST(
       );
     }
 
-    const body = await request.json();
-    const { imageData } = body as { imageData?: string };
+    let body: { imageData?: string };
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { imageData } = body;
 
     if (!imageData || typeof imageData !== "string") {
       return NextResponse.json(
@@ -33,10 +68,10 @@ export async function POST(
       );
     }
 
-    // Validate it's a real image data URL
-    if (!imageData.startsWith("data:image/")) {
+    // Validate it's a real RASTER image data URL (no SVG — stored-XSS vector).
+    if (!ALLOWED_IMAGE_PREFIXES.some((p) => imageData.startsWith(p))) {
       return NextResponse.json(
-        { error: "imageData must be a valid image data URL (data:image/...)" },
+        { error: "imageData must be a base64 data URL of type png, jpeg, webp, or gif" },
         { status: 400 }
       );
     }
