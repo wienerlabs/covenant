@@ -22,6 +22,8 @@ import { lookup } from "node:dns/promises";
 export interface UrlCheck {
   ok: boolean;
   reason?: string;
+  /** On success for a hostname target, the validated resolved addresses. */
+  addresses?: string[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -211,7 +213,9 @@ export async function assertPublicUrl(
   const host = hostnameOf(url);
 
   // Already an IP literal or numeric IPv4: the sync screen verified it.
-  if (isIP(host) || parseLooseIPv4(host)) return { ok: true };
+  if (isIP(host)) return { ok: true, addresses: [host] };
+  const loose = parseLooseIPv4(host);
+  if (loose) return { ok: true, addresses: [loose] };
 
   let addresses: string[];
   try {
@@ -227,5 +231,54 @@ export async function assertPublicUrl(
       return { ok: false, reason: `host resolves to blocked address ${addr}` };
     }
   }
-  return { ok: true };
+  return { ok: true, addresses };
+}
+
+/**
+ * Fetch a user-supplied URL while DEFEATING DNS-rebinding / TOCTOU.
+ *
+ * `assertPublicUrl` validates the addresses a hostname resolves to, but a
+ * plain `fetch(url)` re-resolves DNS at connect time — an attacker who controls
+ * the authoritative DNS can return a public IP during validation and a private
+ * one (127.0.0.1, 169.254.169.254, ...) for the real request. This pins the
+ * connection to the already-validated address via an undici dispatcher whose
+ * lookup ignores the network and returns the vetted IP, so the bytes go exactly
+ * where we screened.
+ *
+ *   const guard = await assertPublicUrl(url);
+ *   if (!guard.ok) return reject;
+ *   const res = await safeFetch(url, init, guard.addresses);
+ */
+export async function safeFetch(
+  rawUrl: string,
+  init: RequestInit,
+  addresses?: string[],
+): Promise<Response> {
+  // No validated addresses (IP-literal path handled by sync screen, or caller
+  // omitted them): re-screen and fall back to a plain fetch.
+  if (!addresses || addresses.length === 0) {
+    const guard = await assertPublicUrl(rawUrl);
+    if (!guard.ok) throw new Error(`SSRF screen failed: ${guard.reason}`);
+    addresses = guard.addresses;
+  }
+  const pinned = addresses && addresses[0];
+  if (!pinned) {
+    return fetch(rawUrl, init);
+  }
+  const { Agent } = await import("undici");
+  const family = isIP(pinned);
+  const dispatcher = new Agent({
+    connect: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      lookup: (_hostname: string, _opts: unknown, cb: any) => {
+        cb(null, [{ address: pinned, family: family === 6 ? 6 : 4 }]);
+      },
+    },
+  });
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return await fetch(rawUrl, { ...init, dispatcher } as any);
+  } finally {
+    void dispatcher.close().catch(() => {});
+  }
 }

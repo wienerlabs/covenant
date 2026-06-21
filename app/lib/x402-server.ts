@@ -531,6 +531,32 @@ export async function verifyPayment(
         reason: fres.invalidReason ?? "facilitator rejected the payment",
       };
     }
+    // Defense-in-depth: even though the facilitator asserts validity, if it
+    // echoes the paid amount we re-check it covers the requirement here, so a
+    // misconfigured/compromised facilitator cannot approve an underpayment.
+    if (fres.amountAtomic !== undefined && fres.amountAtomic !== null) {
+      let paid: bigint;
+      let need: bigint;
+      try {
+        paid = BigInt(fres.amountAtomic);
+        need = BigInt(accept.amount);
+      } catch {
+        return {
+          valid: false,
+          txHash: parsed.txSignature,
+          payer: "",
+          reason: "facilitator returned an unparseable amount",
+        };
+      }
+      if (paid < need) {
+        return {
+          valid: false,
+          txHash: parsed.txSignature,
+          payer: "",
+          reason: `underpaid: facilitator reports ${paid} < required ${need}`,
+        };
+      }
+    }
     return {
       valid: true,
       txHash: parsed.txSignature,
