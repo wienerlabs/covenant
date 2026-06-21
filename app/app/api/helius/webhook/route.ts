@@ -147,6 +147,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
   }
 
+  // Bound the batch: each element triggers DB round-trips, so an oversized
+  // array (real Helius batches are small) is a cheap amplification vector.
+  const MAX_WEBHOOK_BATCH = 1000;
+  if (payload.length > MAX_WEBHOOK_BATCH) {
+    return NextResponse.json(
+      { error: `Webhook batch too large (${payload.length} > ${MAX_WEBHOOK_BATCH})` },
+      { status: 413 },
+    );
+  }
+
   let processed = 0;
   let skipped = 0;
   const errors: string[] = [];

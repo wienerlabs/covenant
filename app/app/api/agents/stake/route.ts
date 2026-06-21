@@ -36,9 +36,21 @@ export async function POST(req: NextRequest) {
     if (!__guard.ok)
       return NextResponse.json({ error: __guard.reason }, { status: __guard.status });
 
-    if (typeof amount !== "number" || amount < 10) {
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 10) {
       return NextResponse.json(
         { error: "Minimum stake is 10 USDC" },
+        { status: 400 },
+      );
+    }
+
+    // Upper sanity bound — stake is recorded off-chain and not yet verified
+    // against an on-chain transfer, so cap what can be written (matches the
+    // job-amount ceiling in lib/validate.ts). The finiteness check above also
+    // rejects Infinity / NaN, which are both typeof "number".
+    const MAX_STAKE_USDC = 1_000_000;
+    if (amount > MAX_STAKE_USDC) {
+      return NextResponse.json(
+        { error: `Maximum stake is ${MAX_STAKE_USDC} USDC` },
         { status: 400 },
       );
     }
