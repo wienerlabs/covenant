@@ -42,8 +42,13 @@ pub struct FinalizePayment<'info> {
     )]
     pub poster: AccountInfo<'info>,
 
+    /// Pinned to the canonical escrow PDA `[b"escrow_token", job_escrow]`
+    /// that `create_job` derives, so no attacker-supplied decoy token
+    /// account can be substituted for the real escrow.
     #[account(
         mut,
+        seeds = [b"escrow_token", job_escrow.key().as_ref()],
+        bump,
         constraint = escrow_token_account.owner == job_escrow.key(),
         constraint = escrow_token_account.mint == job_escrow.token_mint @ CovError::MintMismatch,
     )]
@@ -151,14 +156,15 @@ pub fn handler(ctx: Context<FinalizePayment>) -> Result<()> {
     );
     token::transfer(transfer_ctx, amount)?;
 
-    // 2. Close escrow token account; SPL rent refund always to the taker
-    //    (a few lamports; routing to buyer would add complexity with
-    //    marginal benefit).
+    // 2. Close escrow token account; SPL rent refund to the poster, who
+    //    funded the account's rent in create_job (init, payer = poster).
+    //    This matches cancel_job and resolve_dispute, which also refund the
+    //    escrow-account rent to the poster.
     let close_ctx = CpiContext::new_with_signer(
         ctx.accounts.token_program.to_account_info(),
         CloseAccount {
             account: ctx.accounts.escrow_token_account.to_account_info(),
-            destination: ctx.accounts.taker.to_account_info(),
+            destination: ctx.accounts.poster.to_account_info(),
             authority: ctx.accounts.job_escrow.to_account_info(),
         },
         signer_seeds,
