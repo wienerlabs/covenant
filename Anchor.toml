@@ -14,6 +14,13 @@ covenant = "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT"
 [programs.localnet]
 covenant = "5hstj5grBUL1BeSaPLYpgkD6n3ALasmbseRvKRFfCVNT"
 
+# Mainnet program ID. Generate a fresh keypair for the mainnet deploy
+# (`solana-keygen new -o target/deploy/covenant-mainnet.json`), put its pubkey
+# in BOTH this line and `declare_id!` in programs/covenant/src/lib.rs, then
+# rebuild before deploying. See docs/MAINNET.md. Uncomment to activate.
+# [programs.mainnet]
+# covenant = "REPLACE_WITH_MAINNET_PROGRAM_ID"
+
 [registry]
 url = "https://api.apr.dev"
 
