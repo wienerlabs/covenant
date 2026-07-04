@@ -10,9 +10,18 @@ import {
 } from "@/lib/rateLimit";
 import { requireAuth } from "@/lib/require-auth";
 import { log } from "@/lib/logger";
+import { FAUCET_ENABLED, getClusterLabel } from "@/lib/network";
 
 export async function POST(request: NextRequest) {
-  // Devnet-only deployment — faucet is always live.
+  // The faucet mints test USDC and is devnet-only. On mainnet there is no
+  // test mint to hand out, so refuse rather than attempt a mint that would
+  // fail against the canonical USDC mint.
+  if (!FAUCET_ENABLED) {
+    return NextResponse.json(
+      { error: `Faucet is disabled on ${getClusterLabel()}.` },
+      { status: 403 },
+    );
+  }
   try {
     const __raw = await request.text();
     const __auth = await requireAuth(request, { rawBody: __raw });
