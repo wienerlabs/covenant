@@ -1,0 +1,49 @@
+# wienerlabs/covenant reposuna kopyalanacak dosya:
+#   .github/workflows/telegram-notify.yml
+#
+# Yaninda su klasor de kopyalanmali (bu depodaki `notify/` klasoru):
+#   .github/notify/{main,config,normalize,format,telegram}.mjs
+#
+# Secret'lar: repo -> Settings -> Secrets and variables -> Actions:
+#   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+#
+# Secret tanimli degilse job hata vermez, sessizce atlar.
+
+name: Telegram Push Notify
+
+on:
+  push:
+    branches: ['**']
+
+# Ayni branch'e arka arkaya push gelirse mesajlar sirayla gitsin.
+concurrency:
+  group: telegram-notify-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Node 20 kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Telegram'a bildir
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TIMEZONE: Europe/Istanbul
+          LOCALE: en-US
+          MAX_COMMITS_SHOWN: '10'
+          # "View changes" linki. Repoya gidilmesini istemiyorsaniz false birakin.
+          SHOW_CHANGES_LINK: 'false'
+        run: node .github/notify/main.mjs
